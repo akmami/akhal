@@ -52,7 +52,18 @@ The statistics include:
 - **Minimum out degree**: Minimum number of outgoing links.
 - **Maximum out degree**: Maximum number of outgoing links.
 
-#### 3. `gaf2sam`
+#### 3. `extract`
+Extract information from the r/GFA file.
+
+**Usage:**
+```sh
+./akhal gaf2sam extract [OPTION] <r/GFA file> <OUTPUT file>
+```
+
+Options:
+- **fa**: Reference genome. Output file should end with `.fa` or `.fasta`
+
+#### 4. `gaf2sam`
 Converts a GAF file to a SAM file.
 
 **Usage:**
@@ -61,7 +72,7 @@ Converts a GAF file to a SAM file.
 ```
 
 ## License
-is released under the BSD 3-Clause License, which allows for redistribution and use in source and binary forms, with or without modification, under certain conditions. For more detailed terms, please refer to the [license file](https://github.com/akmami/akhal/blob/main/LICENSE).
+is released under the BSD 3-Clause License, which allows for redistribution and use in source and binary forms, with or without modification, under certain conditions. For more detailed terms, please refer to the [license file](https://github.com/akmami/akhal/blob/main/LICENCE).
 
 ## Author
 Developed by Akmuhammet Ashyralyyev.
