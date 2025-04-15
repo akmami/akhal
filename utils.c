@@ -16,6 +16,17 @@ void print_segments(segment *segments, int segment_count) {
     }
 }
 
+void free_ref_seq(struct ref_seq *seqs) {
+	if (seqs->size) {
+		for (int i=0; i<seqs->size; i++) {
+			free(seqs->chrs[i].seq_name);
+			free(seqs->chrs[i].seq);
+		}
+		free(seqs->chrs);
+		seqs->size = 0;
+	}
+}
+
 void print_ref(segment *segments, int segment_count) {
     for (int i = 0; i < segment_count; i++) {
         if (segments[i].next != NULL) {
@@ -25,7 +36,7 @@ void print_ref(segment *segments, int segment_count) {
     }
 }
 
-void write_sam_hdr(FILE *file, char **paths, int path_size, uint64_t *lens) {
+void write_sam_hdr(FILE *file, char **paths, int path_size, uint64_t *lens, char **rg_headers, int rg_headers_size) {
 
     fprintf(file, "@HD\tVN:1.6\tSO:unsorted\tGO:query\n");
 
@@ -36,6 +47,10 @@ void write_sam_hdr(FILE *file, char **paths, int path_size, uint64_t *lens) {
     fprintf(file, "@PG\tID:LCPan\tPN:LCPan\tNV:1.0\n");
     fprintf(file, "@PG\tID:GraphAligner\tPN:GraphAligner\n");
 
+    for (int i = 0; i < rg_headers_size; i++) {
+        fprintf(file, "@RG\tID:%s.%d\tPL:%s\tPU:%s\tSM:%s\n", "akhal", i, "PACBIO", rg_headers[i], "sample");
+    }
+    
     // fprintf(file, "@SQ\tSN:%s\tLN:%d\tAH:%s:%d-%d\n", id, len, chr, start, end); // for large ins or alt
 }
 
@@ -102,4 +117,70 @@ void find_out_degrees(segment *segments, int segment_count, int *min_degree, int
 
     *min_degree = min;
     *max_degree = max;
+}
+
+int parse_cigar(char *cigar, char *ops, int max_ops, int rev) {
+    int i = 0, j = 0, num = 0;
+    while (cigar[i]) {
+        if ('0' <= cigar[i] && cigar[i] <= '9') {
+            num = num * 10 + (cigar[i] - '0');
+        } else {
+            if (j + num >= max_ops) return -1; // out of range
+            for (int k = 0; k < num; k++) {
+                ops[j++] = cigar[i];
+            }
+            num = 0;
+        }
+        i++;
+    }
+    
+    if (rev) {
+        int k=0;
+        while (k < j/2) {
+            char temp = ops[k];
+            ops[k] = ops[j-k-1];
+            ops[j-k-1] = temp;
+            k++;
+        }
+    }
+    return j;  // number of ops
+}
+
+void reverseComplement(char *sequence, int length) {
+    if (length == 0) {
+        sequence[0] = '\0';
+        return;
+    }
+    int i = 0;
+    while (i < length / 2) {
+        char temp1 = sequence[i];
+        char temp2 = sequence[length-i-1];
+        sequence[i] = complement(temp2);
+        sequence[length-i-1] = complement(temp1);
+        i++;
+    }
+
+    if (length % 2 == 1) {
+        sequence[length / 2] = complement(sequence[length / 2]);
+    }
+}
+
+char *parse_rg_prefix(const char *header) {
+    if (header[0] == '@' || header[0] == '>') header++;
+
+    const char *dot = strchr(header, '.');
+    const char *slash = strchr(header, '/');
+    const char *end = NULL;
+    if (dot && slash) end = dot < slash ? dot : slash;
+    else if (dot) end = dot;
+    else if (slash) end = slash;
+    else end = header + strlen(header); // no delimiter found, use full string
+
+    size_t len = end - header;
+    char *prefix = (char *)malloc(len + 1);
+    if (!prefix) return NULL;
+
+    strncpy(prefix, header, len);
+    prefix[len] = '\0';
+    return prefix;
 }

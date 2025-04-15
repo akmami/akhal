@@ -5,6 +5,11 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+#define MAX_LINE 1048576
+#define MAX_CIGAR 131072
+#define MAX_SEQ 1048576
+#define MAX_CHROM_SIZE 128
+
 //                                Consumes     query   reference   Op
 #define CIGAR_ALIGNMENT_MATCH       'M'    //  yes     yes         M
 #define CIGAR_INSERTION             'I'    //  yes     no          I
@@ -43,6 +48,7 @@ typedef struct alignment {
     float divergence; // dv:f:0.00153685 The divergence score, which quantifies how different the alignment is by calculating a ratio of mismatches, deletions, and insertions relative to the total alignment length.
     float identity; // id:f:0.998463 The identity score, which is the ratio of matches to the total alignment length (matches, mismatches, deletions, and insertions).
     char *cigar; //  cg:Z:3=1I (optional)
+    char *read;
 } alignment;
 
 typedef struct segment {
@@ -56,5 +62,16 @@ typedef struct segment {
     int out_degree;
     int in_degree;
 } segment;
+
+struct chr {
+    char *seq_name;            /** Chromosome name */
+    int seq_size;              /** Chromosome size */
+    char *seq;                 /** Chromosome Sequence */
+};
+
+struct ref_seq {
+	int size;         /** Number of chromosomes. */
+	struct chr *chrs; /** Array of chromosomes */
+};
 
 #endif

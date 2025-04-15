@@ -1,7 +1,8 @@
-#include "validate.h"
-#include "analyze.h"
+#include "parse.h"
+#include "stats.h"
 #include "extract.h"
 #include "gaf2sam.h"
+#include "sampoke.h"
 
 void printUsage() {
     fprintf(stderr, "[ERROR] Usage: ./akhal PROGRAM ...\n");
@@ -10,6 +11,7 @@ void printUsage() {
     fprintf(stderr, "\tstats\tStatistics about r/GFA.\n");
     fprintf(stderr, "\textract\tExtract reference genome.\n");
     fprintf(stderr, "\tgaf2sam\tGAF to SAM conversion.\n");
+    fprintf(stderr, "\tsampoke\tSAM output file validator (CIGAR and pos).\n");
 }
 
 int main(int argc, char* argv[]) {
@@ -19,13 +21,15 @@ int main(int argc, char* argv[]) {
     }
 
     if (strcmp(argv[1], "parse") == 0) {
-        validate(argc, argv);
+        parse(argc, argv);
     } else if (strcmp(argv[1], "stats") == 0) {
-        analyze(argc, argv);
+        stats(argc, argv);
     } else if (strcmp(argv[1], "extract") == 0) {
         extract(argc, argv);
     } else if (strcmp(argv[1], "gaf2sam") == 0) {
         gaf2sam(argc, argv);
+    } else if (strcmp(argv[1], "sampoke") == 0) {
+        sampoke(argc, argv);
     } else {
         printUsage();
         return -1;

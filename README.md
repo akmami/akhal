@@ -2,7 +2,7 @@
 
 ## Overview
 
-`akhal` is a command-line tool designed to process and analyze r/GFA (Graphical Fragment Assembly) files. It provides functionality for validating, analyzing statistics, and converting GAF (Graphical Alignment Format) to SAM (Sequence Alignment Map).
+`akhal` is a command-line tool designed to process and analyze r/GFA (Graphical Fragment Assembly) files. It provides functionality for validating, analyzing statistics, and converting GAF (Graph Alignment Format) to SAM (Sequence Alignment Map).
 
 ## Installation 
 
@@ -68,8 +68,20 @@ Converts a GAF file to a SAM file.
 
 **Usage:**
 ```sh
-./akhal gaf2sam <FAI file> <r/GFA file> <GAF file> <OUTPUT file>
+./akhal gaf2sam <r/GFA file> <GAF file>  <FASTA file> <OUTPUT file>
 ```
+
+Note: The reads should be stored in FASTA format and provided to the program. GAF file does not store sequences, hence, reads are needed when converting to SAM.
+
+#### 5. `sampoke`
+Validate SAM file (converted from gaf). It takes reference file and SAM to process CIGAR strings. Optionally, it can print the filtered SAM file that contains valid lines.
+
+**Usage:**
+```sh
+./akhal sampoke <FASTA file> <GAF file> <OUTPUT file>
+```
+
+Note: Output file here is optional.
 
 ## License
 is released under the BSD 3-Clause License, which allows for redistribution and use in source and binary forms, with or without modification, under certain conditions. For more detailed terms, please refer to the [license file](https://github.com/akmami/akhal/blob/main/LICENCE).

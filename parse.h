@@ -1,5 +1,5 @@
-#ifndef __EXTRACT_H__
-#define __EXTRACT_H__
+#ifndef __PARSE_H__
+#define __PARSE_H__
 
 #include "khashl.h"
 #include "struct_def.h"
@@ -11,6 +11,6 @@
 #include <string.h>
 
 
-int extract(int argc, char* argv[]);
+int parse(int argc, char* argv[]);
 
 #endif

@@ -1,10 +1,10 @@
-#include "validate.h"
+#include "extract.h"
 
 KHASHL_MAP_INIT(KH_LOCAL, ext_map32_t, map32, uint64_t, uint32_t, kh_hash_uint64, kh_eq_generic)
 
 int extract_parse_gfa(const char* file_path, const char *fa_out, segment **segments, int *size, ext_map32_t *h) {
 
-    size_t line_cap = 1048576;
+    size_t line_cap = MAX_LINE;
     char *line = NULL;
     FILE *file = io_open(file_path, &line, line_cap);
     int line_len = 0;

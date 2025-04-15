@@ -1,10 +1,10 @@
-#include "validate.h"
+#include "parse.h"
 
 KHASHL_MAP_INIT(KH_LOCAL, val_map32_t, map32, uint64_t, uint32_t, kh_hash_uint64, kh_eq_generic)
 
 int validate_parse_gfa(const char* file_path, segment **segments, int *size, int rGFA, val_map32_t *h) {
 
-    size_t line_cap = 1048576;
+    size_t line_cap = MAX_LINE;
     char *line = NULL;
     FILE *file = io_open(file_path, &line, line_cap);
     int line_len = 0;
@@ -195,7 +195,7 @@ int validate_parse_gfa(const char* file_path, segment **segments, int *size, int
     return 1;
 }
 
-int validate(int argc, char* argv[]) {
+int parse(int argc, char* argv[]) {
 
     if (argc < 3) {
         fprintf(stderr, "[ERROR] Usage: ./akhal parse [r/GFA]\n");
