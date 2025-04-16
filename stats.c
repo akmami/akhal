@@ -153,6 +153,11 @@ int stats(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
 
+    if (!ends_with(argv[2], ".gfa") && !ends_with(argv[2], ".rgfa")) {
+        printf("[ERROR] Usage: ./akhal analize [r/GFA]\n");
+        return -1;
+    }
+
     stat_map32_t *h = map32_init();
     segment *segments;
     int size = 0;

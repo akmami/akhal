@@ -202,6 +202,11 @@ int parse(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
 
+    if (!ends_with(argv[2], ".gfa") && !ends_with(argv[2], ".rgfa")) {
+        printf("[ERROR] Usage: ./akhal parse [r/GFA]\n");
+        return -1;
+    }
+
     val_map32_t *h = map32_init();
     segment *segments;
     int size = 0;

@@ -153,6 +153,21 @@ int sampoke(int argc, char *argv[]) {
         return -1;
     }
 
+    if (!ends_with(argv[2], ".fa") && !ends_with(argv[2], ".fasta")) {
+        printf("[ERROR] Usage: ./akhal sampoke [FASTA FILE] [SAM FILE] [OUT SAM]\n");
+        return -1;
+    }
+
+    if (!ends_with(argv[3], ".sam")) {
+        printf("[ERROR] Usage: ./akhal sampoke [FASTA FILE] [SAM FILE] [OUT SAM]\n");
+        return -1;
+    }
+
+    if (argc == 5 && !ends_with(argv[4], ".sam")) {
+        printf("[ERROR] Usage: ./akhal sampoke [FASTA FILE] [SAM FILE] [OUT SAM]\n");
+        return -1;
+    }
+
     char *out_file = NULL;
     if (argc == 5) out_file = argv[4];
 

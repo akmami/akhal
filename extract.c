@@ -134,6 +134,11 @@ int extract(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
 
+    if (strcmp(argv[2], "fa") != 0) {
+        fprintf(stderr, "[ERROR] Usage: ./akhal extract fa [r/GFA] [Output FA]\n");
+        exit(EXIT_FAILURE);
+    }
+
     if (!ends_with(argv[3], ".gfa") && !ends_with(argv[3], ".rgfa")) {
         fprintf(stderr, "[ERROR] Usage: ./akhal extract fa [r/GFA] [Output FA]\n");
         exit(EXIT_FAILURE);

@@ -11,6 +11,6 @@
 FILE *io_open(const char* file_path, char **line, int cap);
 void io_close(FILE *file, char **str);
 int io_read(FILE *file, char **str, size_t *cap);
-void write_sam_record(FILE *out_sam, alignment *aln, char *ops, int c_size, const char *rname, int pos, char **rg_headers, int rg_headers_size);
+void write_sam_record(FILE *out_sam, alignment *aln, char *ops, int c_size, const char *rname, int pos, char **rg_headers, int rg_headers_size, int simplify);
 
 #endif

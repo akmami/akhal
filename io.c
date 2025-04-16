@@ -49,7 +49,7 @@ int io_read(FILE *file, char **str, size_t *cap) {
     return 0;
 }
 
-void write_sam_record(FILE *out_sam, alignment *aln, char *ops, int c_size, const char *rname, int pos, char **rg_headers, int rg_headers_size) {
+void write_sam_record(FILE *out_sam, alignment *aln, char *ops, int c_size, const char *rname, int pos, char **rg_headers, int rg_headers_size, int simplify) {
     int flag = 0;
     if (aln->strand == '-') flag |= 0x10;  // reverse complemented
 
@@ -68,6 +68,15 @@ void write_sam_record(FILE *out_sam, alignment *aln, char *ops, int c_size, cons
         int j = c_size - 1;
         while (j >= 0 && (ops[j] == CIGAR_INSERTION || ops[j] == CIGAR_SEQUENCE_MISMATCH)) {
             ops[j--] = CIGAR_SOFT_CLIP;
+        }
+
+        if (simplify) {
+            int k = 0; 
+            while (k < c_size) {
+                if (ops[k] == CIGAR_SEQUENCE_MATCH || ops[k] == CIGAR_SEQUENCE_MISMATCH)
+                    ops[k] = CIGAR_ALIGNMENT_MATCH;
+                k++;
+            }
         }
 
         int count = 1;

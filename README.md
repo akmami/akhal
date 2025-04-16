@@ -68,10 +68,12 @@ Converts a GAF file to a SAM file.
 
 **Usage:**
 ```sh
-./akhal gaf2sam <r/GFA file> <GAF file>  <FASTA file> <OUTPUT file>
+./akhal gaf2sam <r/GFA file> <GAF file>  <FASTA file> <OUTPUT file>  [--simple]
 ```
 
 Note: The reads should be stored in FASTA format and provided to the program. GAF file does not store sequences, hence, reads are needed when converting to SAM.
+
+Note: `simple` option is optional. If provided, CIGAR string matches `(=)` and mismatches `(X)` will be replaced with sequence match `(M)`.
 
 #### 5. `sampoke`
 Validate SAM file (converted from gaf). It takes reference file and SAM to process CIGAR strings. Optionally, it can print the filtered SAM file that contains valid lines.

@@ -19,7 +19,7 @@ inline static int next_node(const char *path, uint64_t *id, char *strand) {
     return 0;
 }
 
-int gaf2sam_parse_gaf(const char* file_path, segment *segments, map32_t *h1, strmap_t *h2, int read_count, char **rg_headers, int rg_headers_size, FILE *out_sam) {
+int gaf2sam_parse_gaf(const char* file_path, segment *segments, map32_t *h1, strmap_t *h2, int read_count, char **rg_headers, int rg_headers_size, int simplify, FILE *out_sam) {
 
     int invalid_count = 0;
 
@@ -271,7 +271,7 @@ int gaf2sam_parse_gaf(const char* file_path, segment *segments, map32_t *h1, str
         }
         if (cigar_query_count != aln.readLen) fprintf(stderr, "[ERROR] CIGAR (query) mismatch in length. %d %d\n", cigar_query_count, aln.readLen);
 
-        write_sam_record(out_sam, &aln, ops, op_index, ref_name, reference_start, rg_headers, rg_headers_size);
+        write_sam_record(out_sam, &aln, ops, op_index, ref_name, reference_start, rg_headers, rg_headers_size, simplify);
         
         // Cleanup
         if (aln.readName) free(aln.readName);
@@ -478,17 +478,15 @@ int gaf2sam_parse_fa(const char *file_path, strmap_t *h2, int *read_count, char 
                     for (int i=0; i<rg_headers_size; i++) {
                         if (strcmp(prefix, temp_rg_headers[i]) == 0) {
                             exist = 1;
+                            break;
                         }
                     }
                     if (!exist) {
                         if (rg_headers_size == rg_headers_capacity) {
                             rg_headers_capacity *= 2;
-                            char **temp = realloc(temp_rg_headers, rg_headers_capacity);
-                            if (temp == NULL) free(prefix);
-                            else {
-                                temp_rg_headers = temp;
-                                temp_rg_headers[rg_headers_size++] = prefix;
-                            }
+                            char **temp = realloc(temp_rg_headers, rg_headers_capacity * sizeof(char *));
+                            temp_rg_headers = temp;
+                            temp_rg_headers[rg_headers_size++] = prefix;
                         }   
                         else temp_rg_headers[rg_headers_size++] = prefix;
                     } else {
@@ -546,6 +544,17 @@ int gaf2sam(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
     }
 
+    int simplify = 0;
+
+    if (argc == 7) {
+        if (strcmp(argv[6], "--simple") == 0) {
+            simplify = 1;
+        } else {
+            printf("[ERROR] Usage: ./akhal gam2sam [r/GFA file] [GAF file] [FASTA FILE] [OUTPUT file] [--simple]\n");
+            return -1;
+        }
+    }
+
     int isGFA = ends_with(argv[2], ".gfa");
 
     map32_t *h1 = map32_init();
@@ -566,7 +575,7 @@ int gaf2sam(int argc, char* argv[]) {
     printf("[INFO] Processed FA\n");
     if (gaf2sam_parse_gfa(argv[2], &segments, &size, h1, sam, &paths, &path_size, &path_lens, rg_headers, rg_headers_size)) {
         printf("[INFO] Processed %s\n", isGFA ? "GFA" : "rGFA");
-        int invalid_count = gaf2sam_parse_gaf(argv[3], segments, h1, h2, read_count, rg_headers, rg_headers_size, sam);
+        int invalid_count = gaf2sam_parse_gaf(argv[3], segments, h1, h2, read_count, rg_headers, rg_headers_size, simplify, sam);
         printf("[INFO] Processed GAF.\n");
         printf("[INFO] Invalid line (no read/mixed strand/qual=0) in GAF: %d\n", invalid_count);
     }

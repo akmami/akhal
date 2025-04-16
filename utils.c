@@ -170,10 +170,12 @@ char *parse_rg_prefix(const char *header) {
 
     const char *dot = strchr(header, '.');
     const char *slash = strchr(header, '/');
+    const char *uline = strchr(header, '_');
     const char *end = NULL;
     if (dot && slash) end = dot < slash ? dot : slash;
     else if (dot) end = dot;
     else if (slash) end = slash;
+    else if (uline) end = uline;
     else end = header + strlen(header); // no delimiter found, use full string
 
     size_t len = end - header;
