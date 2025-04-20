@@ -55,6 +55,48 @@ void read_fasta(const char *fasta_path, struct ref_seq *seqs) {
     io_close(file, &line);
 }
 
+int get_rg_headers(const char *file_path, char ***rg_headers) {
+    
+    int rg_headers_size = 0, rg_headers_capacity = 128;
+    char **temp_rg_headers = (char **)malloc(sizeof(char *) * rg_headers_capacity);
+    size_t line_cap = MAX_LINE;
+    char *line = NULL;
+    FILE *file = io_open(file_path, &line, line_cap);
+    int line_len = 0;
+
+    while ((line_len = io_read(file, &line, &line_cap))) {
+        if (line[0] != '@') {
+            char *prefix = parse_rg_prefix(line);
+            if (prefix != NULL) {
+                int exist = 0;
+                for (int i=0; i<rg_headers_size; i++) {
+                    if (strcmp(prefix, temp_rg_headers[i]) == 0) {
+                        exist = 1;
+                        break;
+                    }
+                }
+                if (!exist) {
+                    if (rg_headers_size == rg_headers_capacity) {
+                        rg_headers_capacity *= 2;
+                        char **temp = realloc(temp_rg_headers, rg_headers_capacity * sizeof(char *));
+                        temp_rg_headers = temp;
+                        temp_rg_headers[rg_headers_size++] = prefix;
+                    }   
+                    else temp_rg_headers[rg_headers_size++] = prefix;
+                } else {
+                    free(prefix);
+                }
+            }
+        } else if (line[1] == 'R' && line[2] == 'G') {
+            break; // no need to find RG tags, already exist
+        }
+    }
+
+    *rg_headers = temp_rg_headers;
+    io_close(file, &line);
+    return rg_headers_size;
+}
+
 int validate_alignment(const char *read, const char *ref, int pos, char *cigar) {
 
     char ops[MAX_CIGAR];
@@ -91,7 +133,7 @@ int validate_alignment(const char *read, const char *ref, int pos, char *cigar) 
     return 1;
 }
 
-void check_sam(const char *sam_file, const char *out_file, const struct ref_seq *seqs) {
+void check_sam(const char *sam_file, const char *out_file, const struct ref_seq *seqs, char **rg_headers, int rg_headers_size) {
     FILE *file = fopen(sam_file, "r");
     if (!file) {
         fprintf(stderr, "[ERROR] SAM open failed- %s\n", sam_file);
@@ -111,9 +153,26 @@ void check_sam(const char *sam_file, const char *out_file, const struct ref_seq 
     char line[MAX_LINE];
     int line_no = 0;
     int invalid_count = 0, correct_count = 0;
+    int print_rg = 1;
     while (fgets(line, sizeof(line), file)) {
         line_no++;
-        if (line[0] == '@') { if (outfile != NULL) fputs(line, outfile); continue; }
+        if (line[0] == '@') { 
+            if (outfile != NULL) {
+                if (line[1] == 'P' && line[2] == 'G' && rg_headers_size && print_rg) {
+                    for (int i = 0; i < rg_headers_size; i++) {
+                        fprintf(outfile, "@RG\tID:%s.%d\tPL:%s\tPU:%s\tSM:%s\n", "akhal", i, "PACBIO", rg_headers[i], "sample");
+                    }
+                    print_rg = 0;
+                }
+                fputs(line, outfile); 
+            }
+            continue; 
+        } else if (outfile != NULL && rg_headers_size && print_rg) {
+            for (int i = 0; i < rg_headers_size; i++) {
+                fprintf(outfile, "@RG\tID:%s.%d\tPL:%s\tPU:%s\tSM:%s\n", "akhal", i, "PACBIO", rg_headers[i], "sample");
+            }
+            print_rg = 0;
+        }
 
         char qname[100], rname[100], cigar[131072], seq[MAX_LINE];
         int flag, pos, mapq, pnext, tlen;
@@ -123,8 +182,14 @@ void check_sam(const char *sam_file, const char *out_file, const struct ref_seq 
                             rnext, &pnext, &tlen, seq, qual);
         
         if (fields < 11) {
-            fprintf(stderr, "Line %d: Malformed SAM line\n", line_no);
+            fprintf(stderr, "Line %d, id: %s: Malformed SAM line\n", line_no, qname);
+            invalid_count++;
             continue;
+        }
+
+        if (strcmp(rname, "*") == 0) {
+            if (outfile != NULL) fputs(line, outfile); 
+            continue; // unmapped read
         }
 
         int chrom_index = -1;
@@ -132,12 +197,29 @@ void check_sam(const char *sam_file, const char *out_file, const struct ref_seq 
             if (strcmp(rname, seqs->chrs[i].seq_name) == 0) { chrom_index = i; break; }
         }
         if (chrom_index == -1) {
-            fprintf(stderr, "Line %d: Reference not found: %s\n", line_no, rname);
+            fprintf(stderr, "Line %d, id: %s: Reference not found: %s\n", line_no, qname, rname);
+            invalid_count++;
             continue;
         }
 
-        if (!validate_alignment(seq, seqs->chrs[chrom_index].seq, pos, cigar)) invalid_count++;
-        else { correct_count++; if (outfile != NULL) fputs(line, outfile); }
+        if (!validate_alignment(seq, seqs->chrs[chrom_index].seq, pos, cigar)) {
+            invalid_count++;
+        } else { 
+            correct_count++; 
+            if (rg_headers_size) {
+                char *prefix = parse_rg_prefix(line);
+                if (prefix != NULL) {
+                    for (int i=0; i<rg_headers_size; i++) {
+                        if (strcmp(prefix, rg_headers[i]) == 0) {
+                            snprintf(line + strlen(line), 100, "\tRG:Z:akhal.%d\n", i);
+                            break;
+                        }
+                    }
+                }
+            }
+            if (outfile != NULL) 
+                fputs(line, outfile); 
+        }
     }
 
     printf("[INFO] correct: %d, incorrect: %d\n", correct_count, invalid_count);
@@ -171,10 +253,16 @@ int sampoke(int argc, char *argv[]) {
     char *out_file = NULL;
     if (argc == 5) out_file = argv[4];
 
+    char **rg_headers;
+    int rg_headers_size = get_rg_headers(argv[3], &rg_headers);
+
     struct ref_seq seqs;
     read_fasta(argv[2], &seqs);
-    check_sam(argv[3], out_file, &seqs);
+    check_sam(argv[3], out_file, &seqs, rg_headers, rg_headers_size);
 
     free_ref_seq(&seqs);
+    for (int i = 0; i < rg_headers_size; i++) free(rg_headers[i]);
+    free(rg_headers);
+
     return 0;
 }

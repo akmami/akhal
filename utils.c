@@ -186,3 +186,18 @@ char *parse_rg_prefix(const char *header) {
     prefix[len] = '\0';
     return prefix;
 }
+
+int next_node(const char *path, uint64_t *id, char *strand) {
+    if (*path != '\0') {
+        *strand = *path;
+        path++;
+        int index = 1; uint64_t i = 0;
+        while (*path >= '0' && *path <= '9') {
+            i = i * 10 + (*path - '0');
+            path++; index++;
+        }
+        *id = i;
+        return index;
+    }
+    return 0;
+}

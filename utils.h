@@ -13,6 +13,8 @@
                           (base & 0xDF) == 'C' ? 'G' : \
                           (base & 0xDF) == 'G' ? 'C' : 'N')
 
+#define abs(a) (a < 0 ? -a : a)
+
 void free_segments(segment **segments, int segment_size);
 void print_segments(segment *segments, int segment_count);
 void free_ref_seq(struct ref_seq *seqs);
@@ -26,5 +28,6 @@ void find_out_degrees(segment *segments, int segment_count, int *min_degree, int
 int parse_cigar(char *cigar, char *ops, int max_ops, int rev);
 void reverseComplement(char *sequence, int length);
 char *parse_rg_prefix(const char *header);
+int next_node(const char *path, uint64_t *id, char *strand);
 
 #endif

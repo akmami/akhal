@@ -4,21 +4,6 @@
 KHASHL_MAP_INIT(KH_LOCAL, map32_t, map32, uint64_t, uint32_t, kh_hash_uint64, kh_eq_generic)
 KHASHL_MAP_INIT(KH_LOCAL, strmap_t, strmap, const char*, char*, kh_hash_str, kh_eq_str)
 
-inline static int next_node(const char *path, uint64_t *id, char *strand) {
-    if (*path != '\0') {
-        *strand = *path;
-        path++;
-        int index = 1; uint64_t i = 0;
-        while (*path >= '0' && *path <= '9') {
-            i = i * 10 + (*path - '0');
-            path++; index++;
-        }
-        *id = i;
-        return index;
-    }
-    return 0;
-}
-
 int gaf2sam_parse_gaf(const char* file_path, segment *segments, map32_t *h1, strmap_t *h2, int read_count, char **rg_headers, int rg_headers_size, int simplify, FILE *out_sam) {
 
     int invalid_count = 0;
