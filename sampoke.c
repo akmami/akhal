@@ -134,11 +134,11 @@ int validate_alignment(const char *read, const char *ref, int pos, char *cigar) 
 }
 
 void check_sam(const char *sam_file, const char *out_file, const struct ref_seq *seqs, char **rg_headers, int rg_headers_size) {
-    FILE *file = fopen(sam_file, "r");
-    if (!file) {
-        fprintf(stderr, "[ERROR] SAM open failed- %s\n", sam_file);
-        exit(1);
-    }
+    
+    size_t line_cap = MAX_LINE;
+    char *line = NULL;
+    FILE *file = io_open(sam_file, &line, line_cap);
+    int line_len = 0;
 
     FILE *outfile = NULL;
     if (out_file != NULL) {
@@ -150,11 +150,10 @@ void check_sam(const char *sam_file, const char *out_file, const struct ref_seq 
         }
     }
 
-    char line[MAX_LINE];
     int line_no = 0;
     int invalid_count = 0, correct_count = 0;
     int print_rg = 1;
-    while (fgets(line, sizeof(line), file)) {
+    while ((line_len = io_read(file, &line, &line_cap))) {
         line_no++;
         if (line[0] == '@') { 
             if (outfile != NULL) {
@@ -164,7 +163,7 @@ void check_sam(const char *sam_file, const char *out_file, const struct ref_seq 
                     }
                     print_rg = 0;
                 }
-                fputs(line, outfile); 
+                fprintf(outfile, "%s\n", line);
             }
             continue; 
         } else if (outfile != NULL && rg_headers_size && print_rg) {
@@ -188,7 +187,7 @@ void check_sam(const char *sam_file, const char *out_file, const struct ref_seq 
         }
 
         if (strcmp(rname, "*") == 0) {
-            if (outfile != NULL) fputs(line, outfile); 
+            if (outfile != NULL) fprintf(outfile, "%s\n", line);
             continue; // unmapped read
         }
 
@@ -211,19 +210,21 @@ void check_sam(const char *sam_file, const char *out_file, const struct ref_seq 
                 if (prefix != NULL) {
                     for (int i=0; i<rg_headers_size; i++) {
                         if (strcmp(prefix, rg_headers[i]) == 0) {
-                            snprintf(line + strlen(line), 100, "\tRG:Z:akhal.%d\n", i);
-                            break;
+                            fprintf(outfile, "%s\tRG:Z:akhal.%d\n", line, i);
                         }
                     }
+                } else {
+                    fprintf(outfile, "%s\n", line);
                 }
+                continue;
             }
             if (outfile != NULL) 
-                fputs(line, outfile); 
+                fprintf(outfile, "%s\n", line);
         }
     }
 
     printf("[INFO] correct: %d, incorrect: %d\n", correct_count, invalid_count);
-    fclose(file);
+    io_close(file, &line);
 
     if (outfile != NULL) fclose(outfile);
 }
