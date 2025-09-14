@@ -4,9 +4,9 @@
 KHASHL_MAP_INIT(KH_LOCAL, map32_t, map32, uint64_t, uint32_t, kh_hash_uint64, kh_eq_generic)
 KHASHL_MAP_INIT(KH_LOCAL, strmap_t, strmap, const char*, char*, kh_hash_str, kh_eq_str)
 
-int gaf2sam_parse_gaf(const char* file_path, segment *segments, map32_t *h1, strmap_t *h2, int read_count, char **rg_headers, int rg_headers_size, int simplify, FILE *out_sam) {
+void gaf2sam_parse_gaf(const char* file_path, segment *segments, map32_t *h1, strmap_t *h2, int read_count, char **rg_headers, int rg_headers_size, int simplify, FILE *out_sam) {
 
-    int invalid_count = 0;
+    int invalid_no_read = 0, invalid_segment = 0, invalid_mixed_strand = 0, invalid_rank = 0, invalid_no_qual = 0, invalid_other = 0;
 
     size_t line_cap = MAX_LINE;
     char *line = NULL;
@@ -53,7 +53,7 @@ int gaf2sam_parse_gaf(const char* file_path, segment *segments, map32_t *h1, str
 
         // Discard reads that has no quality
         if (aln.qual == 0) {
-            invalid_count++;
+            invalid_no_qual++;
             if (aln.readName) free(aln.readName);
             if (aln.path) free(aln.path);
             if (aln.cigar) free(aln.cigar);
@@ -64,7 +64,7 @@ int gaf2sam_parse_gaf(const char* file_path, segment *segments, map32_t *h1, str
         khint_t k = strmap_get(h2, aln.readName);
         if (k == kh_end(h2)) {
             fprintf(stderr, "[ERROR] Read %s does not exists\n", aln.readName);
-            invalid_count++;
+            invalid_no_read++;
             if (aln.readName) free(aln.readName);
             if (aln.path) free(aln.path);
             if (aln.cigar) free(aln.cigar);
@@ -84,7 +84,7 @@ int gaf2sam_parse_gaf(const char* file_path, segment *segments, map32_t *h1, str
             k = map32_get(h1, id);
             if (k == kh_end(h1)) {
                 fprintf(stderr, "[ERROR] Segment %lu in read %s not found.\n", id, aln.readName); 
-                invalid_count++;
+                invalid_segment++;
                 if (aln.readName) free(aln.readName);
                 if (aln.path) free(aln.path);
                 if (aln.cigar) free(aln.cigar);
@@ -108,7 +108,7 @@ int gaf2sam_parse_gaf(const char* file_path, segment *segments, map32_t *h1, str
         // Validation of valid strands
         if (fwd_strand_count && rev_strand_count) {
             fprintf(stderr, "[ERROR] Read %s aligned in mixed strands. %d %d\n", aln.readName, fwd_strand_count, rev_strand_count);
-            invalid_count++;
+            invalid_mixed_strand++;
             if (aln.readName) free(aln.readName);
             if (aln.path) free(aln.path);
             if (aln.cigar) free(aln.cigar);
@@ -122,7 +122,7 @@ int gaf2sam_parse_gaf(const char* file_path, segment *segments, map32_t *h1, str
         else {
             rank_inv_aln_count++;
             fprintf(stderr, "[ERROR] Read %s contains invalid/none ranks.\n", aln.readName);
-            invalid_count++;
+            invalid_rank++;
             if (aln.readName) free(aln.readName);
             if (aln.path) free(aln.path);
             if (aln.cigar) free(aln.cigar);
@@ -155,7 +155,7 @@ int gaf2sam_parse_gaf(const char* file_path, segment *segments, map32_t *h1, str
             int pathLen = aln.pathLen - pathPreLen - pathPostLen;
             if (pathLen + pathPreLen + pathPostLen != aln.pathLen) {
                 fprintf(stderr, "[ERROR] Read %s (path) has indices mismatch.\n", aln.readName);
-                invalid_count++;
+                invalid_other++;
                 if (aln.readName) free(aln.readName);
                 if (aln.path) free(aln.path);
                 if (aln.cigar) free(aln.cigar);
@@ -169,7 +169,7 @@ int gaf2sam_parse_gaf(const char* file_path, segment *segments, map32_t *h1, str
             int readLen = aln.readLen - readPreLen - readPostLen;
             if (readLen + readPreLen + readPostLen != aln.readLen) {
                 fprintf(stderr, "[ERROR] Read %s (read) has indices mismatch.\n", aln.readName);
-                invalid_count++;
+                invalid_other++;
                 if (aln.readName) free(aln.readName);
                 if (aln.path) free(aln.path);
                 if (aln.cigar) free(aln.cigar);
@@ -199,7 +199,7 @@ int gaf2sam_parse_gaf(const char* file_path, segment *segments, map32_t *h1, str
         int n_ops = parse_cigar(aln.cigar, cigar_ops, MAX_CIGAR, rev_strand_count);
         if (n_ops < 0) {
             fprintf(stderr, "[ERROR] Unable to parse CIGAR %s in read %s\n", aln.cigar, aln.readName);
-            invalid_count++;
+            invalid_other++;
             if (aln.readName) free(aln.readName);
             if (aln.path) free(aln.path);
             if (aln.cigar) free(aln.cigar);
@@ -279,7 +279,7 @@ int gaf2sam_parse_gaf(const char* file_path, segment *segments, map32_t *h1, str
     printf("[INFO] # of alignments that mapped to segments with ranks 0 and 1: %d\n", rank_both_aln_count);
     printf("[INFO] # of alignments that mapped to segments with ranks 1<: %d\n", rank_inv_aln_count);
 
-    return invalid_count;
+    printf("[INFO] Stats: read/segment/strand/rank/qual/other: %d/%d/%d/%d/%d/%d\n", invalid_no_read, invalid_segment, invalid_mixed_strand, invalid_rank, invalid_no_qual, invalid_other);
 }
 
 int gaf2sam_parse_gfa(const char* file_path, segment **segments, int *size, map32_t *h1, FILE *sam_out, char ***paths_ptr, int *path_size_ptr, uint64_t **path_lens_ptr, char **rg_headers, int rg_headers_size) {
@@ -560,9 +560,8 @@ int gaf2sam(int argc, char* argv[]) {
     printf("[INFO] Processed FA\n");
     if (gaf2sam_parse_gfa(argv[2], &segments, &size, h1, sam, &paths, &path_size, &path_lens, rg_headers, rg_headers_size)) {
         printf("[INFO] Processed %s\n", isGFA ? "GFA" : "rGFA");
-        int invalid_count = gaf2sam_parse_gaf(argv[3], segments, h1, h2, read_count, rg_headers, rg_headers_size, simplify, sam);
+        gaf2sam_parse_gaf(argv[3], segments, h1, h2, read_count, rg_headers, rg_headers_size, simplify, sam);
         printf("[INFO] Processed GAF.\n");
-        printf("[INFO] Invalid line (no read/mixed strand/qual=0) in GAF: %d\n", invalid_count);
     }
 
     free_segments(&segments, size);

@@ -2,57 +2,82 @@
 
 void read_fasta(const char *fasta_path, struct ref_seq *seqs) {
 
-    // Initialize chromosome array
-    int chrom_count_cap = MAX_CHROM_SIZE;
-    seqs->size = 0;
-    seqs->chrs = (struct chr*)malloc(chrom_count_cap * sizeof(struct chr));
-    int chrom_size_cap = MAX_LINE;
+    char *fai_path = malloc(strlen(fasta_path)+5);
+    if (fai_path == NULL) {
+        fprintf(stderr, "[ERROR] Memory allocation failed\n");
+        exit(EXIT_FAILURE);
+    }
+    sprintf(fai_path, "%s.fai", fasta_path);
 
     size_t line_cap = MAX_LINE;
     char *line = NULL;
-    FILE *file = io_open(fasta_path, &line, line_cap);
+    FILE *fasta_fai_file = io_open(fai_path, &line, line_cap);
     int line_len = 0;
-    int exist = 0;
+    int chrom_index = 0;
 
-    while ((line_len = io_read(file, &line, &line_cap))) {
+    while ((line_len = io_read(fasta_fai_file, &line, &line_cap))) {
+        chrom_index++;
+    }
+
+    if (chrom_index == 0) {
+        fprintf(stderr, "[ERROR] Index file is empty.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    seqs->size = chrom_index;
+    seqs->chrs = (struct chr *)malloc(chrom_index*sizeof(struct chr));
+    if (seqs->chrs == NULL) {
+        fprintf(stderr, "[ERROR] Couldn't allocate memory to ref sequences\n");
+        exit(EXIT_FAILURE);
+    }
+
+    rewind(fasta_fai_file);
+    chrom_index = 0;
+
+    while ((line_len = io_read(fasta_fai_file, &line, &line_cap))) {
+        char *name, *length;
+
+        // assign name
+        char *saveptr;
+        name = strtok_r(line, "\t", &saveptr);
+        uint64_t name_len = strlen(name);
+        seqs->chrs[chrom_index].seq_name = (char *)malloc(name_len+1);
+        memcpy(seqs->chrs[chrom_index].seq_name, name, name_len);
+        seqs->chrs[chrom_index].seq_name[name_len] = '\0';
+
+        // assign size and allocate in memory
+        length = strtok_r(NULL, "\t", &saveptr);
+        seqs->chrs[chrom_index].seq_size = strtol(length, NULL, 10);
+
+        seqs->chrs[chrom_index].seq = (char *)malloc(seqs->chrs[chrom_index].seq_size+1);
+        if (seqs->chrs[chrom_index].seq == NULL) {
+            fprintf(stderr, "[ERROR] Couldn't allocate memory to chromosome string.\n");
+            exit(EXIT_FAILURE);
+        }
+        seqs->chrs[chrom_index].seq[seqs->chrs[chrom_index].seq_size] = '\0';
+        chrom_index++;
+    }
+
+    io_close(fasta_fai_file, &line);
+
+    // Initialize chromosome array
+    FILE *fasta_file = io_open(fasta_path, &line, line_cap);
+    chrom_index = 0;
+    uint64_t seq_size = 0;
+
+    while ((line_len = io_read(fasta_file, &line, &line_cap))) {
         if (line[0] == '>') {
-            if (seqs->size && seqs->chrs[seqs->size].seq_size != 0) {
-                seqs->size++;
-                if (seqs->size == chrom_count_cap) {
-                    chrom_count_cap *= 2;
-                    struct chr *temp_chr = (struct chr*)realloc(seqs->chrs, chrom_count_cap);
-                    if (temp_chr == NULL) {
-                        fprintf(stderr, "[ERROR] Reallocation of chromosome array failed.\n");
-                        exit(EXIT_FAILURE);
-                    }
-                    seqs->chrs = temp_chr; 
-                }
+            if (seq_size != 0) {
+                seq_size = 0;
+                chrom_index++;
             }
-            seqs->chrs[seqs->size].seq_name = strdup(line+1);
-            chrom_size_cap = MAX_LINE;
-            seqs->chrs[seqs->size].seq_size = 0;
-            seqs->chrs[seqs->size].seq = malloc(chrom_size_cap);
-            exist = 1;
         } else {
-            if (seqs->chrs[seqs->size].seq_size + line_len >= chrom_size_cap) {
-                chrom_size_cap *= 2;
-                char *temp_seq = realloc(seqs->chrs[seqs->size].seq, chrom_size_cap);
-                if (temp_seq == NULL) {
-                    fprintf(stderr, "[ERROR] Reallocation of chromosome sequence failed.\n");
-                    exit(EXIT_FAILURE);
-                }
-                seqs->chrs[seqs->size].seq = temp_seq;
-            }
-            memcpy(seqs->chrs[seqs->size].seq + seqs->chrs[seqs->size].seq_size, line, line_len);
-            seqs->chrs[seqs->size].seq_size += line_len;
+            memcpy(seqs->chrs[chrom_index].seq + seq_size, line, line_len);
+            seq_size += line_len;
         }
     }
-    // process reference file
-    if (exist) {
-        seqs->size++;
-    }
 
-    io_close(file, &line);
+    io_close(fasta_file, &line);
 }
 
 int get_rg_headers(const char *file_path, char ***rg_headers) {
