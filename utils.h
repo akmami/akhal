@@ -4,6 +4,7 @@
 #include "struct_def.h"
 #include <math.h>
 #include <string.h>
+#include <ctype.h>
 
 
 #define ends_with(str, suffix) ((strlen(str) < strlen(suffix)) ? 0 : (strcmp(str+strlen(str)-strlen(suffix), suffix) == 0))
@@ -19,7 +20,7 @@ void free_segments(segment **segments, int segment_size);
 void print_segments(segment *segments, int segment_count);
 void free_ref_seq(struct ref_seq *seqs);
 void print_ref(segment *segments, int segment_count);
-void write_sam_hdr(FILE *file, char **paths, int path_size, uint64_t *lens, char **rg_headers, int rg_headers_size);
+void write_sam_hdr(FILE *file, char **paths, int path_size, uint64_t *lens);
 double calculate_mean(size_t *arr, size_t s);
 double calculate_variance(size_t *arr, size_t s, double mean);
 double calculate_std_dev(double variance);

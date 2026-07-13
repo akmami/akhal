@@ -49,23 +49,29 @@ int io_read(FILE *file, char **str, size_t *cap) {
     return 0;
 }
 
-void write_sam_record(FILE *out_sam, alignment *aln, char *ops, int c_size, const char *rname, int pos, char **rg_headers, int rg_headers_size, int simplify) {
+void write_sam_record(FILE *out_sam, alignment *aln, char *ops, int c_size, const char *rname, int pos, int simplify) {
     int flag = 0;
     if (aln->strand == '-') flag |= 0x10;  // reverse complemented
 
     // Compose the CIGAR string from `ops`
-    char cigar_string[65536];
+    char cigar_string[MAX_CIGAR];
     int cigar_pos = 0;
 
     if (c_size == 0) {
         strcpy(cigar_string, "*");
     } else {
         int i = 0;
+        while (i < c_size && ops[i] == CIGAR_SOFT_CLIP) {
+            i++;
+        }
         while (i < c_size && (ops[i] == CIGAR_INSERTION || ops[i] == CIGAR_SEQUENCE_MISMATCH)) {
             ops[i++] = CIGAR_SOFT_CLIP;
         }
 
         int j = c_size - 1;
+        while (j >= 0 && ops[i] == CIGAR_SOFT_CLIP) {
+            j--;
+        }
         while (j >= 0 && (ops[j] == CIGAR_INSERTION || ops[j] == CIGAR_SEQUENCE_MISMATCH)) {
             ops[j--] = CIGAR_SOFT_CLIP;
         }
@@ -102,21 +108,6 @@ void write_sam_record(FILE *out_sam, alignment *aln, char *ops, int c_size, cons
     // POS is 1-based in SAM, so add 1
     int mapq = aln->qual;  // mapping quality (can be 255)
 
-    char *prefix = parse_rg_prefix(aln->readName);
-    int rg_header_index = -1;
-    for (int i = 0; i < rg_headers_size; i++) {
-        if (strcmp(rg_headers[i], prefix) == 0) {
-            rg_header_index = i;
-            break;
-        }
-    }
-
-    if (rg_header_index == -1) {
-        fprintf(stderr, "[ERROR] RG ID not found.\n");
-        free(prefix);
-        return;
-    }
-
     fprintf(out_sam,
             "%s\t%d\t%s\t%d\t%d\t%s\t%s\t%d\t%d\t%s\t%s\t"
             "NM:i:%d\tAS:f:%.2f\tdv:f:%.6f\tid:f:%.6f\tRG:Z:%s.%d\n",
@@ -136,8 +127,6 @@ void write_sam_record(FILE *out_sam, alignment *aln, char *ops, int c_size, cons
             aln->divergence,
             aln->identity,
             "akhal",
-            rg_header_index
+            0
     );
-
-    free(prefix);
 }

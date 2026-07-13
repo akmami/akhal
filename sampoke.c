@@ -198,9 +198,9 @@ void check_sam(const char *sam_file, const char *out_file, const struct ref_seq 
             print_rg = 0;
         }
 
-        char qname[100], rname[100], cigar[131072], seq[MAX_LINE];
+        char qname[128], rname[128], cigar[MAX_CIGAR], seq[MAX_LINE];
         int flag, pos, mapq, pnext, tlen;
-        char rnext[100], qual[MAX_LINE];
+        char rnext[128], qual[MAX_LINE];
         int fields = sscanf(line, "%s\t%d\t%s\t%d\t%d\t%s\t%s\t%d\t%d\t%s\t%s",
                             qname, &flag, rname, &pos, &mapq, cigar,
                             rnext, &pnext, &tlen, seq, qual);

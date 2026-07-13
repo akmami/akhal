@@ -9,14 +9,14 @@ int analize_parse_gfa(const char* file_path, segment **segments, int *size, stat
     FILE *file = io_open(file_path, &line, line_cap);
     int line_len = 0;
     
-    int segment_size = 0, segment_capacity = 1000000;
+    uint64_t segment_size = 0, segment_capacity = 1000000;
     segment *temp_segments = (segment *)malloc(segment_capacity * sizeof(segment));
     size_t *segment_sizes = (size_t *)malloc(segment_capacity*sizeof(size_t));
 
-    int overlap_size = 0, overlap_capacity = 1000000;
+    uint64_t overlap_size = 0, overlap_capacity = 1000000;
     size_t *overlap_sizes = (size_t *)malloc(overlap_capacity*sizeof(size_t));
 
-    int main_segment_count = 0;
+    uint64_t main_segment_count = 0;
 
     while ((line_len = io_read(file, &line, &line_cap))) {
         if (line[0] == 'S') {
@@ -104,12 +104,12 @@ int analize_parse_gfa(const char* file_path, segment **segments, int *size, stat
 
     size_t min_segment_len = segment_sizes[0];
 
-    for (int i = 1; i < segment_size; i++) {
+    for (uint64_t i = 1; i < segment_size; i++) {
         min_segment_len = min_segment_len < strlen(temp_segments[i].seq) ? min_segment_len : strlen(temp_segments[i].seq);
     }
 
     size_t max_segment_len = segment_sizes[0];
-    for (int i = 1; i < segment_size; i++) {
+    for (uint64_t i = 1; i < segment_size; i++) {
         max_segment_len = max_segment_len > strlen(temp_segments[i].seq) ? max_segment_len : strlen(temp_segments[i].seq);
     }
 
@@ -122,14 +122,14 @@ int analize_parse_gfa(const char* file_path, segment **segments, int *size, stat
     int min_out_degree, max_out_degree;
     find_out_degrees(temp_segments, segment_size, &min_out_degree, &max_out_degree);
 
-    printf("Segment count: %d\n", segment_size);
-    printf("Rank 0 segment count: %d\n", main_segment_count);
-    printf("Rank 0< segment count: %d\n", segment_size-main_segment_count);
+    printf("Segment count: %ld\n", segment_size);
+    printf("Rank 0 segment count: %ld\n", main_segment_count);
+    printf("Rank 0< segment count: %ld\n", segment_size-main_segment_count);
     printf("Segment avg length: %f\n", segment_mean);
     printf("Segment std length: %f\n", segment_std_dev);
     printf("Segment min. length %lu\n", min_segment_len);
     printf("Segment max. length %lu\n", max_segment_len);
-    printf("Link count: %d\n", overlap_size);
+    printf("Link count: %ld\n", overlap_size);
     printf("Link overlapping avg length: %f\n", overlap_mean);
     printf("Link overlapping std length: %f\n", overlap_std_dev);
     printf("Minimum in degree: %d\n", min_in_degree);

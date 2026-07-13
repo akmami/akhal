@@ -6,7 +6,8 @@
 #include <stdlib.h>
 
 #define MAX_LINE 1048576
-#define MAX_CIGAR 131072
+#define MAX_CIGAR 1048576
+#define MAX_NODE 32768
 #define MAX_SEQ 1048576
 #define MAX_CHROM_SIZE 128
 

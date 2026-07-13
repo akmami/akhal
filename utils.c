@@ -36,20 +36,57 @@ void print_ref(segment *segments, int segment_count) {
     }
 }
 
-void write_sam_hdr(FILE *file, char **paths, int path_size, uint64_t *lens, char **rg_headers, int rg_headers_size) {
+int chrom_rank(const char *chr) {
+    if (strncmp(chr, "chr", 3) == 0) {
+        chr += 3;
+    }
+
+    if (isdigit(chr[0])) {
+        int n = atoi(chr);
+        if (n >= 1 && n <= 22) return n;
+    }
+
+    if (strcmp(chr, "X") == 0) return 23;
+    if (strcmp(chr, "Y") == 0) return 24;
+    if (strcmp(chr, "M") == 0 || strcmp(chr, "MT") == 0) return 25;
+
+    return 1000;  // non-canonical contigs go last
+}
+
+void write_sam_hdr(FILE *file, char **paths, int path_size, uint64_t *lens) {
 
     fprintf(file, "@HD\tVN:1.6\tSO:unsorted\tGO:query\n");
 
-    for (int i=0; i<path_size; i++) {
-        fprintf(file, "@SQ\tSN:%s\tLN:%lu\n", paths[i], lens[i]);
+    int *is_printed = calloc(path_size, sizeof(int));
+
+    for (int printed = 0; printed < path_size; printed++) {
+
+        int min_i = -1, min_rank = 0;
+
+        for (int i = 0; i < path_size; i++) {
+            if (is_printed[i]) continue;
+
+            int r = chrom_rank(paths[i]);
+
+            if (min_i == -1 || r < min_rank || (r == min_rank && strcmp(paths[i], paths[min_i]) < 0)) {
+                min_i = i;
+                min_rank = r;
+            }
+        }
+
+        if (min_i == -1)
+            break;
+
+        fprintf(file, "@SQ\tSN:%s\tLN:%lu\n", paths[min_i], lens[min_i]);
+
+        is_printed[min_i] = 1;
     }
+
+    free(is_printed);
 
     fprintf(file, "@PG\tID:LCPan\tPN:LCPan\tNV:1.0\n");
     fprintf(file, "@PG\tID:GraphAligner\tPN:GraphAligner\n");
-
-    for (int i = 0; i < rg_headers_size; i++) {
-        fprintf(file, "@RG\tID:%s.%d\tPL:%s\tPU:%s\tSM:%s\n", "akhal", i, "PACBIO", rg_headers[i], "sample");
-    }
+    fprintf(file, "@RG\tID:%s.%d\tPL:%s\tPU:%s\tSM:%s\n", "akhal", 0, "UNKNOWN", "UNKNOWN", "UNKNOWN");
     
     // fprintf(file, "@SQ\tSN:%s\tLN:%d\tAH:%s:%d-%d\n", id, len, chr, start, end); // for large ins or alt
 }
@@ -133,6 +170,8 @@ int parse_cigar(char *cigar, char *ops, int max_ops, int rev) {
         }
         i++;
     }
+
+    if (j > max_ops) return -1;
     
     if (rev) {
         int k=0;
