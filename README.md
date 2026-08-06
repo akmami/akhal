@@ -2,15 +2,20 @@
 
 ## Overview
 
-`akhal` is a command-line tool designed to process and analyze r/GFA (Graphical Fragment Assembly) files. It provides functionality for validating, analyzing statistics, and converting GAF (Graph Alignment Format) to SAM (Sequence Alignment Map).
+`akhal` is a toolkit for processing and analyzing r/GFA (Graphical Fragment Assembly) files. 
+It validates graphs, reports statistics, and converts GAF (Graph Alignment Format) to SAM (Sequence Alignment Map).
 
-## Installation 
+It is structured like `htslib` + `samtools`: a reusable library (`libakhal`) that owns the file formats and data structures, and a thin command-line tool (`akhal`) built on top of it. 
 
-You can build this tool by running:
+## Installation
+
+Build the library and the CLI with:
 
 ```sh
 make
 ```
+
+This produces `libakhal.a` and the `akhal` executable.
 
 ## Usage
 
@@ -71,12 +76,15 @@ Converts a GAF file to a SAM file.
 ./akhal gaf2sam <r/GFA file> <GAF file>  <FASTA file> <OUTPUT file>  [--simple]
 ```
 
-Note: The reads should be stored in FASTA format and provided to the program. GAF file does not store sequences, hence, reads are needed when converting to SAM.
+Note: The reads should be stored in FASTA format and provided to the program. 
+GAF file does not store sequences, hence, reads are needed when converting to SAM.
 
-Note: `simple` option is optional. If provided, CIGAR string matches `(=)` and mismatches `(X)` will be replaced with sequence match `(M)`.
+Note: `simple` option is optional. 
+If provided, CIGAR string matches `(=)` and mismatches `(X)` will be replaced with sequence match `(M)`.
 
 #### 5. `sampoke`
-Validate SAM file (converted from gaf). It takes reference file and SAM to process CIGAR strings. Optionally, it can print the filtered SAM file that contains valid lines.
+Validate SAM file (converted from gaf). It takes reference file and SAM to process CIGAR strings. 
+Optionally, it can print the filtered SAM file that contains valid lines.
 
 **Usage:**
 ```sh
@@ -86,11 +94,13 @@ Validate SAM file (converted from gaf). It takes reference file and SAM to proce
 Note: Output file here is optional.
 
 ## License
-is released under the BSD 3-Clause License, which allows for redistribution and use in source and binary forms, with or without modification, under certain conditions. For more detailed terms, please refer to the [license file](https://github.com/akmami/akhal/blob/main/LICENCE).
+is released under the BSD 3-Clause License, which allows for redistribution and use in source and binary forms, with or without modification, under certain conditions. 
+For more detailed terms, please refer to the [license file](https://github.com/akmami/akhal/blob/main/LICENCE).
 
 ## Author
 Developed by Akmuhammet Ashyralyyev.
 
 **Note from the author**:
 
-This tool is named after one of the most elegant horses, the [Akhal-Teke](https://en.wikipedia.org/wiki/Akhal-Teke). This breed is one of the oldest domesticated animals and is considered one of the most beautiful and intelligent horses in the world.
+This tool is named after one of the most elegant horses, the [Akhal-Teke](https://en.wikipedia.org/wiki/Akhal-Teke). 
+This breed is one of the oldest domesticated animals and is considered one of the most beautiful and intelligent horses in the world.
