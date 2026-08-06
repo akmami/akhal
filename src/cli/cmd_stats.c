@@ -1,5 +1,5 @@
 /**
- * `akhal stats` — summary statistics for an (r)GFA graph.
+ * `akhal stats` - summary statistics for an (r)GFA graph.
  *
  * The reference example of a command built on libakhal: it does no parsing of
  * its own. It asks gfa_read() for the graph (with links + paths), then reads

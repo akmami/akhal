@@ -17,6 +17,8 @@ make
 
 This produces `libakhal.a` and the `akhal` executable.
 
+Requirements: a C compiler and `zlib` (`-lz`, used by `vg2gfa` to decompress `.vg` files). No protobuf or other external libraries are needed.
+
 ## Usage
 
 `akhal` provides three main commands:
@@ -68,7 +70,17 @@ Extract information from the r/GFA file.
 Options:
 - **fa**: Reference genome. Output file should end with `.fa` or `.fasta`
 
-#### 4. `gaf2sam`
+#### 4. `vg2gfa`
+Converts vg's native `.vg` format (gzip/BGZF-compressed Protobuf) to GFA. The `.vg` parser is hand-written pure C - no protobuf or libvgio needed, only zlib.
+
+**Usage:**
+```sh
+./akhal vg2gfa <input .vg file> [output .gfa file]
+```
+
+Note: If no output file is given, the GFA is written to standard output.
+
+#### 5. `gaf2sam`
 Converts a GAF file to a SAM file.
 
 **Usage:**
@@ -82,7 +94,7 @@ GAF file does not store sequences, hence, reads are needed when converting to SA
 Note: `simple` option is optional. 
 If provided, CIGAR string matches `(=)` and mismatches `(X)` will be replaced with sequence match `(M)`.
 
-#### 5. `sampoke`
+#### 6. `sampoke`
 Validate SAM file (converted from gaf). It takes reference file and SAM to process CIGAR strings. 
 Optionally, it can print the filtered SAM file that contains valid lines.
 

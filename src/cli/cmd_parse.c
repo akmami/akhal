@@ -1,5 +1,5 @@
 /**
- * `akhal parse <r/GFA>` — validate a graph.
+ * `akhal parse <r/GFA>` - validate a graph.
  *
  * gfa_read(GFA_VALIDATE) already checks link overlap consistency and
  * referential integrity while reading (issues are logged). This command adds

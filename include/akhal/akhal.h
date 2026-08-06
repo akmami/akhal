@@ -17,6 +17,7 @@
  *   akhal/gaf.h     GAF alignment records, streaming + batch readers
  *   akhal/fasta.h   FASTA loaded into a name-indexed store
  *   akhal/sam.h     SAM output + CIGAR utilities
+ *   akhal/vg.h      vg native (.vg protobuf) graph reader
  */
 
 #include "akhal/version.h"
@@ -28,5 +29,6 @@
 #include "akhal/gaf.h"
 #include "akhal/fasta.h"
 #include "akhal/sam.h"
+#include "akhal/vg.h"
 
 #endif  // AKHAL_H

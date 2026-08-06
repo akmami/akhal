@@ -11,7 +11,7 @@
  */
 
 /**
- * `stats` — print summary statistics for an r/GFA graph.
+ * `stats` - print summary statistics for an r/GFA graph.
  * @param argc Argument count.
  * @param argv Arguments; argv[2] is the graph path.
  * @return 0 on success, non-zero on failure.
@@ -19,7 +19,7 @@
 int cmd_stats(int argc, char **argv);
 
 /**
- * `extract` — write each path's sequence as FASTA.
+ * `extract` - write each path's sequence as FASTA.
  * @param argc Argument count.
  * @param argv Arguments; expects "fa", the graph path, and an output path.
  * @return 0 on success, non-zero on failure.
@@ -27,7 +27,7 @@ int cmd_stats(int argc, char **argv);
 int cmd_extract(int argc, char **argv);
 
 /**
- * `parse` — validate an r/GFA graph.
+ * `parse` - validate an r/GFA graph.
  * @param argc Argument count.
  * @param argv Arguments; argv[2] is the graph path.
  * @return 0 if valid, non-zero if issues were found or on error.
@@ -35,7 +35,15 @@ int cmd_extract(int argc, char **argv);
 int cmd_parse(int argc, char **argv);
 
 /**
- * `gaf2sam` — convert GAF alignments to SAM.
+ * `vg2gfa` - convert vg's native .vg format to GFA.
+ * @param argc Argument count.
+ * @param argv Arguments; input .vg and optional output .gfa.
+ * @return 0 on success, non-zero on failure.
+ */
+int cmd_vg2gfa(int argc, char **argv);
+
+/**
+ * `gaf2sam` - convert GAF alignments to SAM.
  * @param argc Argument count.
  * @param argv Arguments; graph, GAF, reads FASTA, output SAM, optional --simple.
  * @return 0 on success, non-zero on failure.
@@ -43,7 +51,7 @@ int cmd_parse(int argc, char **argv);
 int cmd_gaf2sam(int argc, char **argv);
 
 /**
- * `sampoke` — validate SAM CIGAR/positions against a reference.
+ * `sampoke` - validate SAM CIGAR/positions against a reference.
  * @param argc Argument count.
  * @param argv Arguments; reference FASTA, input SAM, optional output SAM.
  * @return 0 on success, non-zero on failure.

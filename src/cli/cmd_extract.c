@@ -1,5 +1,5 @@
 /**
- * `akhal extract fa <r/GFA> <out.fa>` — write each path's sequence as FASTA.
+ * `akhal extract fa <r/GFA> <out.fa>` - write each path's sequence as FASTA.
  *
  * Ported onto libakhal: the graph and its path membership come from gfa_read,
  * and the command only walks each path's segment slice and streams the bases

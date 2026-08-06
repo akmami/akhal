@@ -27,6 +27,7 @@ static const command_t commands[] = {
     { "stats",   cmd_stats,   "graph", "summary statistics for an r/GFA graph"      },
     { "parse",   cmd_parse,   "graph", "validate an r/GFA graph"                    },
     { "extract", cmd_extract, "graph", "extract the reference FASTA from an r/GFA"  },
+    { "vg2gfa",  cmd_vg2gfa,  "graph", "convert vg (protobuf .vg) to GFA"           },
     { "gaf2sam", cmd_gaf2sam, "align", "convert GAF alignments to SAM"              },
     { "sampoke", cmd_sampoke, "align", "validate SAM CIGAR/positions against a ref" },
     { NULL, NULL, NULL, NULL }
@@ -34,7 +35,7 @@ static const command_t commands[] = {
 
 /** Print the top-level usage / command list. */
 static void usage(FILE *out) {
-    fprintf(out, "akhal %s — assembly graph analysis toolkit\n\n", AKHAL_VERSION_STR);
+    fprintf(out, "akhal %s - assembly graph analysis toolkit\n\n", AKHAL_VERSION_STR);
     fprintf(out, "Usage: akhal <command> [options]\n\n");
 
     const char *group = NULL;

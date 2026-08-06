@@ -1,4 +1,4 @@
-# akhal — assembly graph analysis toolkit
+# akhal - assembly graph analysis toolkit
 #
 # Two build products, mirroring the htslib + samtools split:
 #   libakhal.a   the reusable library  (src/lib/*.c, public headers in include/)
@@ -7,7 +7,7 @@
 
 CC      := gcc
 CFLAGS  := -O3 -Wall -Wextra -Wpedantic -Iinclude -Isrc/cli
-LDLIBS  := -lm
+LDLIBS  := -lm -lz
 AR      := ar
 
 TARGET  := akhal
@@ -22,6 +22,7 @@ CLI_SRC := src/cli/main.c \
 		   src/cli/cmd_stats.c \
 		   src/cli/cmd_extract.c \
 		   src/cli/cmd_parse.c \
+		   src/cli/cmd_vg2gfa.c \
 		   src/cli/cmd_gaf2sam.c \
 		   src/cli/cmd_sampoke.c
 CLI_OBJ := $(CLI_SRC:.c=.o)
