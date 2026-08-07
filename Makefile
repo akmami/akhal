@@ -22,6 +22,7 @@ CLI_SRC := src/cli/main.c \
 		   src/cli/cmd_stats.c \
 		   src/cli/cmd_extract.c \
 		   src/cli/cmd_parse.c \
+		   src/cli/cmd_sort.c \
 		   src/cli/cmd_vg2gfa.c \
 		   src/cli/cmd_gaf2sam.c \
 		   src/cli/cmd_sampoke.c

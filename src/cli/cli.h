@@ -35,6 +35,14 @@ int cmd_extract(int argc, char **argv);
 int cmd_parse(int argc, char **argv);
 
 /**
+ * `sort` - topologically sort a graph and renumber nodes 1..N.
+ * @param argc Argument count.
+ * @param argv Arguments; input .gfa and optional output .gfa.
+ * @return 0 on success, non-zero on failure.
+ */
+int cmd_sort(int argc, char **argv);
+
+/**
  * `vg2gfa` - convert vg's native .vg format to GFA.
  * @param argc Argument count.
  * @param argv Arguments; input .vg and optional output .gfa.

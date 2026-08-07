@@ -70,7 +70,17 @@ Extract information from the r/GFA file.
 Options:
 - **fa**: Reference genome. Output file should end with `.fa` or `.fasta`
 
-#### 4. `vg2gfa`
+#### 4. `sort`
+Topologically sorts a graph and renumbers its nodes `1..N` in the sorted order. Ordering uses Kahn's algorithm; ties in the ready set (the "hops") are broken alphabetically by node **sequence content**, so the result is independent of the input's node numbering — two graphs identical in topology and content sort the same way. Nodes in cycles, if any, are appended after the acyclic prefix. The sorted graph is re-emitted with the new ids (S/L/P lines remapped, link orientation and overlap preserved).
+
+**Usage:**
+```sh
+./akhal sort <input .gfa file> [output .gfa file]
+```
+
+Note: If no output file is given, the sorted GFA is written to standard output.
+
+#### 5. `vg2gfa`
 Converts vg's native `.vg` format (gzip/BGZF-compressed Protobuf) to GFA. The `.vg` parser is hand-written pure C - no protobuf or libvgio needed, only zlib.
 
 **Usage:**
@@ -80,7 +90,7 @@ Converts vg's native `.vg` format (gzip/BGZF-compressed Protobuf) to GFA. The `.
 
 Note: If no output file is given, the GFA is written to standard output.
 
-#### 5. `gaf2sam`
+#### 6. `gaf2sam`
 Converts a GAF file to a SAM file.
 
 **Usage:**
@@ -94,7 +104,7 @@ GAF file does not store sequences, hence, reads are needed when converting to SA
 Note: `simple` option is optional. 
 If provided, CIGAR string matches `(=)` and mismatches `(X)` will be replaced with sequence match `(M)`.
 
-#### 6. `sampoke`
+#### 7. `sampoke`
 Validate SAM file (converted from gaf). It takes reference file and SAM to process CIGAR strings. 
 Optionally, it can print the filtered SAM file that contains valid lines.
 

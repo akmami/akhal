@@ -27,6 +27,7 @@ static const command_t commands[] = {
     { "stats",   cmd_stats,   "graph", "summary statistics for an r/GFA graph"      },
     { "parse",   cmd_parse,   "graph", "validate an r/GFA graph"                    },
     { "extract", cmd_extract, "graph", "extract the reference FASTA from an r/GFA"  },
+    { "sort",    cmd_sort,    "graph", "topologically sort and renumber a graph"    },
     { "vg2gfa",  cmd_vg2gfa,  "graph", "convert vg (protobuf .vg) to GFA"           },
     { "gaf2sam", cmd_gaf2sam, "align", "convert GAF alignments to SAM"              },
     { "sampoke", cmd_sampoke, "align", "validate SAM CIGAR/positions against a ref" },

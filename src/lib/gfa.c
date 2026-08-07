@@ -191,6 +191,8 @@ static int handle_L(gfa_t *g, char *line, idxmap_t *h, int flags) {
     g->link[g->n_link].v = v;
     g->link[g->n_link].w = w;
     g->link[g->n_link].overlap = (uint32_t)overlap;
+    g->link[g->n_link].from_orient = (st1 == '-') ? '-' : '+';
+    g->link[g->n_link].to_orient   = (st2 == '-') ? '-' : '+';
     g->n_link++;
 
     g->seg[v].out_degree++;
@@ -332,6 +334,7 @@ gfa_t *gfa_read(const char *fn, int flags) {
         return NULL;
     }
     g->idx = h;
+    g->flags = flags;
 
     kstring_t ks = KS_INIT;
     int rc = AK_OK;
@@ -425,4 +428,91 @@ int gfa_path_segs(const gfa_t *g, int32_t k, const uint32_t **segs) {
     int32_t beg = g->path_off[k], end = g->path_off[k + 1];
     *segs = g->path_seg + beg;
     return (int)(end - beg);
+}
+
+// topological sort
+
+/**
+ * @return 1 if segment a's sequence sorts before b's, alphabetically.
+ * Ordering by sequence content (rather than id) makes the result independent
+ * of the input's node numbering: two graphs identical in topology and content
+ * sort the same way. A NULL/empty sequence sorts first.
+ */
+static int seq_lt(const gfa_t *g, int32_t a, int32_t b) {
+    const char *sa = g->seg[a].seq ? g->seg[a].seq : "";
+    const char *sb = g->seg[b].seq ? g->seg[b].seq : "";
+    return strcmp(sa, sb) < 0;
+}
+
+/** Sift the last heap element up to restore the min-heap order. */
+static void heap_push(const gfa_t *g, int32_t *heap, int *hn, int32_t v) {
+    int i = (*hn)++;
+    heap[i] = v;
+    while (i > 0) {
+        int p = (i - 1) / 2;
+        if (!seq_lt(g, heap[i], heap[p])) break;
+        int32_t t = heap[i]; heap[i] = heap[p]; heap[p] = t;
+        i = p;
+    }
+}
+
+/** Pop and return the alphabetically-smallest node from the heap. */
+static int32_t heap_pop(const gfa_t *g, int32_t *heap, int *hn) {
+    int32_t top = heap[0];
+    int n = --(*hn);
+    heap[0] = heap[n];
+    int i = 0;
+    for (;;) {
+        int l = 2 * i + 1, r = 2 * i + 2, m = i;
+        if (l < n && seq_lt(g, heap[l], heap[m])) m = l;
+        if (r < n && seq_lt(g, heap[r], heap[m])) m = r;
+        if (m == i) break;
+        int32_t t = heap[i]; heap[i] = heap[m]; heap[m] = t;
+        i = m;
+    }
+    return top;
+}
+
+/** Topological order with alphabetical id tie-break; see akhal/gfa.h. */
+int gfa_toposort(const gfa_t *g, int32_t *order) {
+    int32_t n = g->n_seg;
+    if (n == 0) return 0;
+    if (!(g->flags & GFA_LINKS)) {
+        ak_log(AK_LOG_ERROR, "gfa", "toposort requires the graph to be read with GFA_LINKS");
+        return AK_EINVAL;
+    }
+
+    int32_t *indeg = (int32_t *)malloc((size_t)n * sizeof(int32_t));
+    int32_t *heap  = (int32_t *)malloc((size_t)n * sizeof(int32_t));
+    if (!indeg || !heap) { free(indeg); free(heap); return AK_ENOMEM; }
+
+    for (int32_t i = 0; i < n; i++) indeg[i] = g->seg[i].in_degree;
+
+    int hn = 0;
+    for (int32_t i = 0; i < n; i++)
+        if (indeg[i] == 0) heap_push(g, heap, &hn, i);
+
+    int32_t placed = 0;
+    while (hn > 0) {
+        int32_t u = heap_pop(g, heap, &hn);
+        order[placed++] = u;
+        const uint32_t *arcs;
+        int na = gfa_arcs(g, u, &arcs);
+        for (int k = 0; k < na; k++) {
+            uint32_t w = g->link[arcs[k]].w;
+            if (--indeg[w] == 0) heap_push(g, heap, &hn, (int32_t)w);
+        }
+    }
+
+    int32_t acyclic = placed;
+    if (placed < n) {
+        // Remaining nodes are inside cycles; append them alphabetically.
+        for (int32_t i = 0; i < n; i++)
+            if (indeg[i] > 0) heap_push(g, heap, &hn, i);
+        while (hn > 0) order[placed++] = heap_pop(g, heap, &hn);
+    }
+
+    free(indeg);
+    free(heap);
+    return acyclic;
 }

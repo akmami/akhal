@@ -49,6 +49,8 @@ typedef struct {
     uint32_t v;              // source segment index
     uint32_t w;              // destination segment index
     uint32_t overlap;        // overlap length in bp (the leading M count)
+    char     from_orient;    // orientation of v on the L line ('+' or '-')
+    char     to_orient;      // orientation of w on the L line ('+' or '-')
 } gfa_link_t;
 
 // ---- Graph ----
@@ -83,6 +85,7 @@ typedef struct {
     uint64_t    n_path_seg;  // total segment occurrences across all paths
 
     void       *idx;         // opaque id -> index hash table
+    int         flags;       // the GFA_* flags this graph was read with
 } gfa_t;
 
 // ---- Read flags ----
@@ -168,6 +171,25 @@ int gfa_has_arc(const gfa_t *g, int32_t v, int32_t w);
  * @return Number of segments in the path, or 0 if none / paths not built.
  */
 int gfa_path_segs(const gfa_t *g, int32_t k, const uint32_t **segs);
+
+// ---- Ordering ----
+
+/**
+ * Topologically order the segments (Kahn's algorithm on the directed graph
+ * given by the links). Ties in the ready set are broken by node sequence
+ * content, alphabetically, so the ordering does not depend on the input's node
+ * numbering (a NULL/empty sequence sorts first). Any nodes that remain inside
+ * cycles are appended after the acyclic prefix, also by sequence, so `order`
+ * is always a full permutation of 0..n_seg-1.
+ *
+ * Requires the graph was read with GFA_LINKS.
+ * @param g Graph to order.
+ * @param order Caller-allocated array of length n_seg; filled with segment
+ *              indices in topological order.
+ * @return The number of nodes placed before any cycle (n_seg if the graph is
+ *         acyclic), or a negative AK_E* code on error.
+ */
+int gfa_toposort(const gfa_t *g, int32_t *order);
 
 #ifdef __cplusplus
 }
