@@ -3,7 +3,9 @@
 #include <math.h>
 #include <string.h>
 
-/** Case-insensitive complement of one DNA base; unknown maps to 'N'. */
+/** 
+ * @brief Case-insensitive complement of one DNA base; unknown maps to 'N'. 
+ */
 char ak_complement(char base) {
 	switch (base & 0xDF) {   // uppercase
 		case 'A': return 'T';
@@ -70,7 +72,9 @@ double ak_variance(const size_t *a, size_t n, double mean) {
 	return acc / (double)n;
 }
 
-/** @return Square root of the given variance. */
+/** 
+ * @return Square root of the given variance. 
+ */
 double ak_stddev(double variance) {
 	return sqrt(variance);
 }

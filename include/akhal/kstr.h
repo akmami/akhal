@@ -18,8 +18,9 @@ extern "C" {
 #endif
 
 typedef struct {
-    size_t l, m;
-    char  *s;
+    size_t l;   // length
+    size_t m;   // capacity
+    char  *s;   // string
 } kstring_t;
 
 #define KS_INIT { 0, 0, NULL }

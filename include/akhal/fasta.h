@@ -24,7 +24,8 @@ typedef struct {
 
 typedef struct {
     fasta_rec_t *rec;
-    int64_t      n, m;
+    int64_t      n;     // size
+    int64_t      m;     // capacity
     void        *idx;   // opaque name -> index hash table
 } fasta_t;
 

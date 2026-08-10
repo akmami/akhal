@@ -5,7 +5,9 @@
 
 static int g_log_level = AK_LOG_INFO;
 
-/** Map an AK_E* code to a static human-readable string. */
+/** 
+ * @brief Map an AK_E* code to a static human-readable string. 
+ */
 const char *ak_strerror(int code) {
     switch (code) {
         case AK_OK:      return "success";
@@ -18,12 +20,16 @@ const char *ak_strerror(int code) {
     }
 }
 
-/** Set the global verbosity threshold. */
+/** 
+ * @brief Set the global verbosity threshold. 
+ */
 void ak_log_set_level(int level) {
     g_log_level = level;
 }
 
-/** @return The current verbosity threshold. */
+/** 
+ * @return The current verbosity threshold. 
+ */
 int  ak_log_level(void) { 
     return g_log_level;
 }

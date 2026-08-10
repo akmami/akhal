@@ -37,7 +37,9 @@ static void degree_range(const gfa_t *g, int in, int *min_out, int *max_out) {
     *max_out = mx;
 }
 
-/** `stats` entry point; see cli.h. */
+/** 
+ * @brief `stats` entry point; see cli.h. 
+ */
 int cmd_stats(int argc, char **argv) {
     if (argc < 3) {
         ak_log(AK_LOG_ERROR, NULL, "usage: akhal stats <r/GFA>");

@@ -372,7 +372,9 @@ gfa_t *gfa_read(const char *fn, int flags) {
     return g;
 }
 
-/** Free a graph and everything it owns; see akhal/gfa.h. */
+/** 
+ * @brief Free a graph and everything it owns; see akhal/gfa.h.
+ */
 void gfa_destroy(gfa_t *g) {
     if (!g) return;
     for (int32_t i = 0; i < g->n_seg; i++) free(g->seg[i].seq);
@@ -392,20 +394,26 @@ void gfa_destroy(gfa_t *g) {
     free(g);
 }
 
-/** Segment index for an id, or -1 if absent. */
+/** 
+ * @brief Segment index for an id, or -1 if absent. 
+ */
 int32_t gfa_idx(const gfa_t *g, uint64_t id) {
     idxmap_t *h = (idxmap_t *)g->idx;
     khint_t k = idxmap_get(h, id);
     return (k < kh_end(h)) ? (int32_t)kh_val(h, k) : -1;
 }
 
-/** Segment for an id, or NULL if absent. */
+/** 
+ * @brief Segment for an id, or NULL if absent. 
+ */
 gfa_seg_t *gfa_get(const gfa_t *g, uint64_t id) {
     int32_t i = gfa_idx(g, id);
     return (i < 0) ? NULL : &g->seg[i];
 }
 
-/** Out-edges of segment v; see akhal/gfa.h. */
+/** 
+ * @brief Out-edges of segment v; see akhal/gfa.h. 
+ */
 int gfa_arcs(const gfa_t *g, int32_t v, const uint32_t **arcs) {
     if (!g->arc_off || v < 0 || v >= g->n_seg) { *arcs = NULL; return 0; }
     int32_t beg = g->arc_off[v], end = g->arc_off[v + 1];
@@ -413,7 +421,9 @@ int gfa_arcs(const gfa_t *g, int32_t v, const uint32_t **arcs) {
     return (int)(end - beg);
 }
 
-/** @return 1 if a link v -> w exists, else 0. */
+/** 
+ * @return 1 if a link v -> w exists, else 0. 
+ */
 int gfa_has_arc(const gfa_t *g, int32_t v, int32_t w) {
     const uint32_t *a;
     int n = gfa_arcs(g, v, &a);
@@ -422,7 +432,9 @@ int gfa_has_arc(const gfa_t *g, int32_t v, int32_t w) {
     return 0;
 }
 
-/** Ordered segments of path k; see akhal/gfa.h. */
+/** 
+ * @brief Ordered segments of path k; see akhal/gfa.h. 
+ */
 int gfa_path_segs(const gfa_t *g, int32_t k, const uint32_t **segs) {
     if (!g->path_off || k < 0 || k >= g->n_path) { *segs = NULL; return 0; }
     int32_t beg = g->path_off[k], end = g->path_off[k + 1];
@@ -444,7 +456,9 @@ static int seq_lt(const gfa_t *g, int32_t a, int32_t b) {
     return strcmp(sa, sb) < 0;
 }
 
-/** Sift the last heap element up to restore the min-heap order. */
+/** 
+ * @brief Sift the last heap element up to restore the min-heap order.
+ */
 static void heap_push(const gfa_t *g, int32_t *heap, int *hn, int32_t v) {
     int i = (*hn)++;
     heap[i] = v;
@@ -456,7 +470,9 @@ static void heap_push(const gfa_t *g, int32_t *heap, int *hn, int32_t v) {
     }
 }
 
-/** Pop and return the alphabetically-smallest node from the heap. */
+/** 
+ * @brief Pop and return the alphabetically-smallest node from the heap. 
+ */
 static int32_t heap_pop(const gfa_t *g, int32_t *heap, int *hn) {
     int32_t top = heap[0];
     int n = --(*hn);
@@ -473,7 +489,9 @@ static int32_t heap_pop(const gfa_t *g, int32_t *heap, int *hn) {
     return top;
 }
 
-/** Topological order with alphabetical id tie-break; see akhal/gfa.h. */
+/** 
+ * @brief Topological order with alphabetical id tie-break; see akhal/gfa.h. 
+ */
 int gfa_toposort(const gfa_t *g, int32_t *order) {
     int32_t n = g->n_seg;
     if (n == 0) return 0;

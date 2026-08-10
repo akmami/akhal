@@ -24,54 +24,204 @@ void gaf_rec_clear(gaf_rec_t *r) {
     memset(r, 0, sizeof(*r));
 }
 
+// line parsing
+
+#if defined(__GNUC__) || defined(__clang__)
+#  define GAF_LIKELY(x)   __builtin_expect(!!(x), 1)
+#  define GAF_UNLIKELY(x) __builtin_expect(!!(x), 0)
+#else
+#  define GAF_LIKELY(x)   (x)
+#  define GAF_UNLIKELY(x) (x)
+#endif
+
+/** 
+ * @brief End of the field starting at p: the next tab, or the NUL terminator. 
+ */
+static inline const char *gaf_field_end(const char *p) {
+    const char *e = strchr(p, '\t');
+    return e ? e : p + strlen(p);
+}
+
+/** 
+ * @brief Copy n bytes into a fresh NUL-terminated string; NULL on failure. 
+ */
+static inline char *gaf_dup(const char *s, size_t n) {
+    char *d = (char *)malloc(n + 1);
+    if (GAF_UNLIKELY(!d)) return NULL;
+    memcpy(d, s, n);
+    d[n] = '\0';
+    return d;
+}
+
+/** 
+ * @brief Scan a decimal integer, leaving *pp on the first non-digit. 
+ */
+static inline int64_t gaf_scan_i64(const char **pp) {
+    const char *p = *pp;
+    unsigned c = (unsigned char)*p;
+    int neg = (c == '-');
+    p += (neg | (c == '+'));
+
+    uint64_t v = 0;
+    unsigned d;
+    while ((d = (unsigned)((unsigned char)*p - '0')) <= 9u) {
+        v = v * 10u + d;
+        p++;
+    }
+    *pp = p;
+    return neg ? -(int64_t)v : (int64_t)v;
+}
+
+// Negative powers of ten, indexed by fractional digit count.
+static const double gaf_p10n[19] = {
+    1e-0,  1e-1,  1e-2,  1e-3,  1e-4,  1e-5,  1e-6,  1e-7,  1e-8, 1e-9,
+    1e-10, 1e-11, 1e-12, 1e-13, 1e-14, 1e-15, 1e-16, 1e-17, 1e-18
+};
+
+/** 
+ * @brief Scan a decimal float. Defers to strtod for exponents or >18 digits. 
+ */
+static inline double gaf_scan_f64(const char *p) {
+    const char *orig = p;
+    unsigned c = (unsigned char)*p;
+    int neg = (c == '-');
+    p += (neg | (c == '+'));
+
+    uint64_t m = 0;
+    unsigned d;
+    int nd = 0, frac = 0;
+
+    while ((d = (unsigned)((unsigned char)*p - '0')) <= 9u) {
+        m = m * 10u + d; p++; nd++;
+    }
+    if (*p == '.') {
+        p++;
+        while ((d = (unsigned)((unsigned char)*p - '0')) <= 9u) {
+            m = m * 10u + d; p++; nd++; frac++;
+        }
+    }
+    if (GAF_UNLIKELY(nd > 18 || *p == 'e' || *p == 'E')) return strtod(orig, NULL);
+
+    double r = (double)m * gaf_p10n[frac];
+    return neg ? -r : r;
+}
+
+// Two-letter tag key, so tag dispatch is one switch instead of a strncmp chain.
+#define GAF_TAG2(a, b) ((unsigned)(((unsigned char)(a) << 8) | (unsigned char)(b)))
+
+// Step over the tab ending the current field; bail out if the line ran short.
+#define GAF_EAT_TAB()                                   \
+    do {                                                \
+        if (GAF_UNLIKELY(*p != '\t')) {                 \
+            while (*p && *p != '\t') p++;               \
+            if (GAF_UNLIKELY(!*p)) goto short_line;     \
+        }                                               \
+        p++;                                            \
+    } while (0)
+
 /**
- * Parse one GAF line into a cleared record.
- * @param line The line (modified in place by tokenizing).
+ * Parse one GAF line into a cleared record. The line is read but not modified.
+ * @param line The line, NUL-terminated (a trailing newline is tolerated).
  * @param rec Destination record (cleared first).
  * @return AK_OK, AK_EFORMAT (too few fields), or AK_ENOMEM.
  */
 static int gaf_parse_line(char *line, gaf_rec_t *rec) {
     gaf_rec_clear(rec);
 
-    char *save;
-    char *tok = strtok_r(line, "\t", &save);
-    int field = 0;
+    const char *p = line;
+    const char *s, *e;
+    size_t len;
 
-    while (tok) {
-        switch (field) {
-            case 0: rec->qname = strdup(tok); if (!rec->qname) return AK_ENOMEM; break;
-            case 1: rec->qlen      = strtoll(tok, NULL, 10); break;
-            case 2: rec->qstart    = strtoll(tok, NULL, 10); break;
-            case 3: rec->qend      = strtoll(tok, NULL, 10); break;
-            case 4: rec->strand    = tok[0]; break;
-            case 5: rec->path = strdup(tok); if (!rec->path) return AK_ENOMEM; break;
-            case 6: rec->plen      = strtoll(tok, NULL, 10); break;
-            case 7: rec->pstart    = strtoll(tok, NULL, 10); break;
-            case 8: rec->pend      = strtoll(tok, NULL, 10); break;
-            case 9: rec->matches   = strtoll(tok, NULL, 10); break;
-            case 10: rec->block_len = strtoll(tok, NULL, 10); break;
-            case 11: rec->mapq     = atoi(tok); break;
-            default:
-                if      (!strncmp(tok, "NM:i:", 5)) { rec->nm = atoi(tok + 5);       rec->has_nm = 1; }
-                else if (!strncmp(tok, "AS:f:", 5)) { rec->as = atof(tok + 5);       rec->has_as = 1; }
-                else if (!strncmp(tok, "dv:f:", 5)) { rec->dv = atof(tok + 5);       rec->has_dv = 1; }
-                else if (!strncmp(tok, "id:f:", 5)) { rec->id = atof(tok + 5);       rec->has_id = 1; }
-                else if (!strncmp(tok, "cg:Z:", 5)) {
-                    rec->cigar = strdup(tok + 5);
-                    if (!rec->cigar) return AK_ENOMEM;
-                }
-                break;
+    // qname
+    e = gaf_field_end(p);
+    if (GAF_UNLIKELY(*e != '\t')) goto short_line;
+    rec->qname = gaf_dup(p, (size_t)(e - p));
+    if (GAF_UNLIKELY(!rec->qname)) return AK_ENOMEM;
+    p = e + 1;
+
+    // qlen, qstart, qend
+    rec->qlen = gaf_scan_i64(&p); GAF_EAT_TAB();
+    rec->qstart = gaf_scan_i64(&p); GAF_EAT_TAB();
+    rec->qend = gaf_scan_i64(&p); GAF_EAT_TAB();
+
+    // strand
+    if (GAF_LIKELY(*p != '\t' && *p != '\0')) { rec->strand = *p; p++; }
+    GAF_EAT_TAB();
+
+    // path
+    e = gaf_field_end(p);
+    if (GAF_UNLIKELY(*e != '\t')) goto short_line;
+    rec->path = gaf_dup(p, (size_t)(e - p));
+    if (GAF_UNLIKELY(!rec->path)) return AK_ENOMEM;
+    p = e + 1;
+
+    // plen, pstart, pend, matches, block_len
+    rec->plen = gaf_scan_i64(&p); GAF_EAT_TAB();
+    rec->pstart = gaf_scan_i64(&p); GAF_EAT_TAB();
+    rec->pend = gaf_scan_i64(&p); GAF_EAT_TAB();
+    rec->matches = gaf_scan_i64(&p); GAF_EAT_TAB();
+    rec->block_len = gaf_scan_i64(&p); GAF_EAT_TAB();
+
+    // mapq, the last mandatory field
+    rec->mapq = (int)gaf_scan_i64(&p);
+    while (*p && *p != '\t') p++;
+    if (!*p) return AK_OK;      // exactly 12 fields, no tags
+    p++;
+
+    // optional tags
+    for (;;) {
+        s = p;
+        p = gaf_field_end(p);
+        len = (size_t)(p - s);
+        while (len && (s[len - 1] == '\n' || s[len - 1] == '\r')) len--;
+
+        if (GAF_LIKELY(len >= 5 && s[2] == ':' && s[4] == ':')) {
+            switch (GAF_TAG2(s[0], s[1])) {
+                case GAF_TAG2('N', 'M'):
+                    if (s[3] == 'i') {
+                        const char *q = s + 5;
+                        rec->nm = (int)gaf_scan_i64(&q);
+                        rec->has_nm = 1;
+                    }
+                    break;
+                case GAF_TAG2('A', 'S'):
+                    // minimap2 and GraphAligner both emit AS:i as well as AS:f
+                    if (s[3] == 'f' || s[3] == 'i') {
+                        rec->as = gaf_scan_f64(s + 5);
+                        rec->has_as = 1;
+                    }
+                    break;
+                case GAF_TAG2('d', 'v'):
+                    if (s[3] == 'f') { rec->dv = gaf_scan_f64(s + 5); rec->has_dv = 1; }
+                    break;
+                case GAF_TAG2('i', 'd'):
+                    if (s[3] == 'f') { rec->id = gaf_scan_f64(s + 5); rec->has_id = 1; }
+                    break;
+                case GAF_TAG2('c', 'g'):
+                    if (s[3] == 'Z') {
+                        rec->cigar = gaf_dup(s + 5, len - 5);
+                        if (GAF_UNLIKELY(!rec->cigar)) return AK_ENOMEM;
+                    }
+                    break;
+                default:
+                    break;
+            }
         }
-        field++;
-        tok = strtok_r(NULL, "\t", &save);
-    }
 
-    if (field < 12) {
-        ak_log(AK_LOG_WARN, "gaf", "line has only %d fields (need >= 12)", field);
-        return AK_EFORMAT;
+        if (!*p) break;
+        p++;
     }
     return AK_OK;
+
+short_line: {
+        int n = (*line != '\0');
+        for (const char *q = line; *q; q++) n += (*q == '\t');
+        ak_log(AK_LOG_WARN, "gaf", "line has only %d fields (need >= 12)", n);
+        return AK_EFORMAT;
+    }
 }
+
+#undef GAF_EAT_TAB
 
 // streaming
 

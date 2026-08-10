@@ -11,7 +11,10 @@
 // name -> record index
 KHASHL_MAP_INIT(KH_LOCAL, fmap_t, fmap, const char *, int64_t, kh_hash_str, kh_eq_str)
 
-/** Ensure room for one more record. @return AK_OK or AK_ENOMEM. */
+/** 
+ * @brief Ensure room for one more record. 
+ * @return AK_OK or AK_ENOMEM.
+ */
 static int reserve_rec(fasta_t *fa) {
     if (fa->n < fa->m) return AK_OK;
     int64_t m = fa->m ? fa->m << 1 : 256;
@@ -81,7 +84,9 @@ static int flush_record(fasta_t *fa, fmap_t *h, char *name, kstring_t *seq) {
     return AK_OK;
 }
 
-/** Load every record from a FASTA file; see akhal/fasta.h. */
+/** 
+ * @brief Load every record from a FASTA file; see akhal/fasta.h. 
+ */
 fasta_t *fasta_read(const char *fn) {
     ak_file *f = ak_open(fn);
     if (!f) return NULL;
@@ -127,14 +132,18 @@ fasta_t *fasta_read(const char *fn) {
     return fa;
 }
 
-/** Look up a record by name, or NULL if absent. */
+/** 
+ * @brief Look up a record by name, or NULL if absent. 
+ */
 const fasta_rec_t *fasta_get(const fasta_t *fa, const char *name) {
     fmap_t *h = (fmap_t *)fa->idx;
     khint_t k = fmap_get(h, name);
     return (k < kh_end(h)) ? &fa->rec[kh_val(h, k)] : NULL;
 }
 
-/** Free a loaded FASTA set. Safe with NULL. */
+/** 
+ * @brief Free a loaded FASTA set. Safe with NULL. 
+ */
 void fasta_destroy(fasta_t *fa) {
     if (!fa) return;
     for (int64_t i = 0; i < fa->n; i++) {

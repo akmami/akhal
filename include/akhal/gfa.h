@@ -29,7 +29,7 @@ extern "C" {
 // Sentinel index for a path entry whose segment id was not found.
 #define GFA_NIL UINT32_MAX
 
-// ---- Nodes (S lines) ----
+// Nodes (S lines)
 
 typedef struct {
     uint64_t id;             // segment id as it appears in the file
@@ -43,7 +43,7 @@ typedef struct {
     const char *ref_name;    // borrowed: an owning path name (NULL if none)
 } gfa_seg_t;
 
-// ---- Edges (L lines) ----
+// Edges (L lines)
 
 typedef struct {
     uint32_t v;              // source segment index
@@ -53,7 +53,7 @@ typedef struct {
     char     to_orient;      // orientation of w on the L line ('+' or '-')
 } gfa_link_t;
 
-// ---- Graph ----
+// Graph
 
 typedef struct {
     // nodes
@@ -88,7 +88,7 @@ typedef struct {
     int         flags;       // the GFA_* flags this graph was read with
 } gfa_t;
 
-// ---- Read flags ----
+// Read flags
 
 #define GFA_LINKS    0x1     // record edges, degrees, and out-adjacency
 #define GFA_PATHS    0x2     // build path membership (CSR) and layout
@@ -111,7 +111,7 @@ gfa_t *gfa_read(const char *fn, int flags);
  */
 void gfa_destroy(gfa_t *g);
 
-// ---- Accessors / traversal ----
+// Accessors / traversal
 
 /**
  * Look up a segment's array index by id. O(1).
@@ -129,20 +129,54 @@ int32_t gfa_idx(const gfa_t *g, uint64_t id);
  */
 gfa_seg_t *gfa_get(const gfa_t *g, uint64_t id);
 
-/** @return Number of segments (nodes) in the graph. */
-static inline int32_t     gfa_n_seg(const gfa_t *g)  { return g->n_seg; }
-/** @return Number of links (edges) in the graph. */
-static inline int32_t     gfa_n_link(const gfa_t *g) { return g->n_link; }
-/** @return Number of paths in the graph. */
-static inline int32_t     gfa_n_path(const gfa_t *g) { return g->n_path; }
-/** @return Segment at array index i. */
-static inline gfa_seg_t  *gfa_seg_at(const gfa_t *g, int32_t i)  { return &g->seg[i]; }
-/** @return Link at array index i. */
-static inline gfa_link_t *gfa_link_at(const gfa_t *g, int32_t i) { return &g->link[i]; }
-/** @return Name of path k (borrowed). */
-static inline const char *gfa_path_name(const gfa_t *g, int32_t k) { return g->path[k]; }
-/** @return Total sequence length of path k. */
-static inline uint64_t    gfa_path_len(const gfa_t *g, int32_t k)  { return g->path_len[k]; }
+/** 
+ * @return Number of segments (nodes) in the graph. 
+ */
+static inline int32_t gfa_n_seg(const gfa_t *g) { 
+    return g->n_seg; 
+}
+
+/** 
+ * @return Number of links (edges) in the graph.
+ */
+static inline int32_t gfa_n_link(const gfa_t *g) { 
+    return g->n_link; 
+}
+
+/** 
+ * @return Number of paths in the graph. 
+ */
+static inline int32_t gfa_n_path(const gfa_t *g) { 
+    return g->n_path; 
+}
+
+/** 
+ * @return Segment at array index i. 
+ */
+static inline gfa_seg_t *gfa_seg_at(const gfa_t *g, int32_t i) { 
+    return &g->seg[i]; 
+}
+
+/** 
+ * @return Link at array index i. 
+ */
+static inline gfa_link_t *gfa_link_at(const gfa_t *g, int32_t i) { 
+    return &g->link[i]; 
+}
+
+/** 
+ * @return Name of path k (borrowed). 
+ */
+static inline const char *gfa_path_name(const gfa_t *g, int32_t k) { 
+    return g->path[k]; 
+}
+
+/** 
+ * @return Total sequence length of path k. 
+ */
+static inline uint64_t gfa_path_len(const gfa_t *g, int32_t k) { 
+    return g->path_len[k]; 
+}
 
 /**
  * Out-edge traversal for a segment.
@@ -172,7 +206,7 @@ int gfa_has_arc(const gfa_t *g, int32_t v, int32_t w);
  */
 int gfa_path_segs(const gfa_t *g, int32_t k, const uint32_t **segs);
 
-// ---- Ordering ----
+// Ordering
 
 /**
  * Topologically order the segments (Kahn's algorithm on the directed graph

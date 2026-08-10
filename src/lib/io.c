@@ -64,7 +64,7 @@ long ak_getline(ak_file *f, kstring_t *ks) {
         ks->l += chunk;
 
         if (ks->l > 0 && ks->s[ks->l - 1] == '\n') break;   // full line read
-        if (chunk + 1 < space) break;                        // EOF, no newline
+        if (chunk + 1 < space) break;                       // EOF, no newline
     }
 
     if (!any && ks->l == 0) return AK_EOF;
@@ -77,14 +77,18 @@ long ak_getline(ak_file *f, kstring_t *ks) {
     return (long)ks->l;
 }
 
-/** Rewind the stream to the beginning. */
+/** 
+ * @brief Rewind the stream to the beginning. 
+ */
 int ak_rewind(ak_file *f) {
     if (!f || !f->fp) return AK_EINVAL;
     rewind(f->fp);
     return AK_OK;
 }
 
-/** Close a handle and free it. Safe with NULL. */
+/** 
+ * @brief Close a handle and free it. Safe with NULL. 
+ */
 void ak_close(ak_file *f) {
     if (!f) return;
     if (f->fp) fclose(f->fp);

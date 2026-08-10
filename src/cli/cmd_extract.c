@@ -35,12 +35,16 @@ static void emit_wrapped(FILE *out, const char *seq, size_t len, int *col) {
     }
 }
 
-/** Print the extract usage line. */
+/** 
+ * @brief Print the extract usage line. 
+ */
 static void usage(void) {
     ak_log(AK_LOG_ERROR, NULL, "usage: akhal extract fa <r/GFA> <out.fa|.fasta>");
 }
 
-/** `extract` entry point; see cli.h. */
+/** 
+ * @brief `extract` entry point; see cli.h. 
+ */
 int cmd_extract(int argc, char **argv) {
     if (argc < 5 || strcmp(argv[2], "fa") != 0) { usage(); return 1; }
 

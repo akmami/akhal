@@ -28,7 +28,9 @@ typedef struct {
     unsigned overlap;
 } lrec_t;
 
-/** Order links by (from, to) so the output is deterministic. */
+/** 
+ * @brief Order links by (from, to) so the output is deterministic. 
+ */
 static int lrec_cmp(const void *A, const void *B) {
     const lrec_t *a = (const lrec_t *)A, *b = (const lrec_t *)B;
     if (a->from != b->from) return a->from < b->from ? -1 : 1;
@@ -36,7 +38,9 @@ static int lrec_cmp(const void *A, const void *B) {
     return 0;
 }
 
-/** `sort` entry point; see cli.h. */
+/** 
+ * @brief `sort` entry point; see cli.h.
+ */
 int cmd_sort(int argc, char **argv) {
     if (argc < 3) {
         ak_log(AK_LOG_ERROR, NULL, "usage: akhal sort <in.gfa> [out.gfa]");

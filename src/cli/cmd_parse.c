@@ -16,7 +16,9 @@
 
 #include <stdio.h>
 
-/** `parse` entry point; see cli.h. */
+/** 
+ * @brief `parse` entry point; see cli.h. 
+ */
 int cmd_parse(int argc, char **argv) {
     if (argc < 3) {
         ak_log(AK_LOG_ERROR, NULL, "usage: akhal parse <r/GFA>");

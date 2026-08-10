@@ -4,7 +4,9 @@
 #include <string.h>
 #include <ctype.h>
 
-/** Expand a CIGAR string into a per-base op array; see akhal/sam.h. */
+/** 
+ * @brief Expand a CIGAR string into a per-base op array; see akhal/sam.h. 
+ */
 int sam_cigar_expand(const char *cigar, char *ops, int max_ops, int rev) {
     int i = 0, j = 0, num = 0;
     while (cigar[i]) {
@@ -48,7 +50,9 @@ static int chrom_rank(const char *chr) {
     return 1000;   // non-canonical contigs go last
 }
 
-/** Write @HD, chromosome-ordered @SQ lines, @PG and @RG; see akhal/sam.h. */
+/** 
+ * @brief Write @HD, chromosome-ordered @SQ lines, @PG and @RG; see akhal/sam.h. 
+ */
 void sam_write_header(FILE *out, char **names, int n,
                       const uint64_t *lens, const char *pg) {
     fprintf(out, "@HD\tVN:1.6\tSO:unsorted\tGO:query\n");
@@ -77,7 +81,9 @@ void sam_write_header(FILE *out, char **names, int n,
     fprintf(out, "@RG\tID:%s.0\tPL:%s\tPU:%s\tSM:%s\n", pg, "UNKNOWN", "UNKNOWN", "UNKNOWN");
 }
 
-/** Render and write one SAM alignment line; see akhal/sam.h. */
+/** 
+ * @brief Render and write one SAM alignment line; see akhal/sam.h. 
+ */
 void sam_write_record(FILE *out, sam_rec_t *r) {
     char cigar_string[SAM_MAX_CIGAR];
     int  cigar_pos = 0;
@@ -94,9 +100,7 @@ void sam_write_record(FILE *out, sam_rec_t *r) {
             ops[i++] = CIGAR_SOFT_CLIP;
 
         int j = c_size - 1;
-        // Fix vs original: test ops[j], not ops[i]. The original read ops[i]
-        // (where i may equal c_size), an out-of-bounds read that also disabled
-        // trailing-clip folding.
+
         while (j >= 0 && ops[j] == CIGAR_SOFT_CLIP) j--;
         while (j >= 0 && (ops[j] == CIGAR_INSERTION || ops[j] == CIGAR_SEQUENCE_MISMATCH))
             ops[j--] = CIGAR_SOFT_CLIP;
@@ -132,7 +136,9 @@ void sam_write_record(FILE *out, sam_rec_t *r) {
             r->nm, r->as, r->dv, r->id, r->rg ? r->rg : "akhal.0");
 }
 
-/** Derive a read-group prefix from a read name/line; see akhal/sam.h. */
+/** 
+ * @brief Derive a read-group prefix from a read name/line; see akhal/sam.h. 
+ */
 char *sam_rg_prefix(const char *name) {
     if (name[0] == '@' || name[0] == '>') name++;
 

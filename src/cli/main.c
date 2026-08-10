@@ -34,7 +34,9 @@ static const command_t commands[] = {
     { NULL, NULL, NULL, NULL }
 };
 
-/** Print the top-level usage / command list. */
+/** 
+ * @brief Print the top-level usage / command list. 
+ */
 static void usage(FILE *out) {
     fprintf(out, "akhal %s - assembly graph analysis toolkit\n\n", AKHAL_VERSION_STR);
     fprintf(out, "Usage: akhal <command> [options]\n\n");
@@ -50,7 +52,10 @@ static void usage(FILE *out) {
     fprintf(out, "\nRun `akhal <command>` with no arguments for command-specific help.\n");
 }
 
-/** Dispatch argv[1] to a subcommand. @return the command's exit status. */
+/** 
+ * @brief Dispatch argv[1] to a subcommand. 
+ * @return the command's exit status. 
+ */
 int main(int argc, char **argv) {
     if (argc < 2) {
         usage(stderr);

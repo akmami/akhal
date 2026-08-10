@@ -105,7 +105,9 @@ static int collect_rg(const char *sam_fn, char ***out) {
     return size;
 }
 
-/** Write one @RG header line per collected read-group prefix. */
+/** 
+ * @brief Write one @RG header line per collected read-group prefix. 
+ */
 static void emit_rg_lines(FILE *out, char **rg, int rg_n) {
     for (int i = 0; i < rg_n; i++)
         fprintf(out, "@RG\tID:akhal.%d\tPL:PACBIO\tPU:%s\tSM:sample\n", i, rg[i]);
@@ -235,7 +237,9 @@ static int check_sam(const char *sam_fn, const char *out_fn,
     return 0;
 }
 
-/** `sampoke` entry point; see cli.h. */
+/** 
+ * @brief `sampoke` entry point; see cli.h. 
+ */
 int cmd_sampoke(int argc, char **argv) {
     if (argc < 4) {
         ak_log(AK_LOG_ERROR, NULL, "usage: akhal sampoke <ref.fa> <in.sam> [out.sam]");
