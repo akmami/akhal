@@ -11,7 +11,7 @@
 // name -> record index
 KHASHL_MAP_INIT(KH_LOCAL, fmap_t, fmap, const char *, int64_t, kh_hash_str, kh_eq_str)
 
-/** Ensure room for one more record. @return AK_OK or AK_ENOMEM. */
+// ensure room for one more record. @return AK_OK or AK_ENOMEM
 static int reserve_rec(fasta_t *fa) {
     if (fa->n < fa->m) return AK_OK;
     int64_t m = fa->m ? fa->m << 1 : 256;
@@ -23,11 +23,11 @@ static int reserve_rec(fasta_t *fa) {
 }
 
 /**
- * Append bytes to a kstring, keeping it NUL-terminated.
- * @param ks Destination buffer.
- * @param s Bytes to append.
- * @param n Number of bytes.
- * @return AK_OK or AK_ENOMEM.
+ * Append bytes to a kstring, keeping it NUL-terminated
+ * @param ks Destination buffer
+ * @param s Bytes to append
+ * @param n Number of bytes
+ * @return AK_OK or AK_ENOMEM
  */
 static int str_append(kstring_t *ks, const char *s, size_t n) {
     if (ks_resize(ks, ks->l + n + 1) != AK_OK) return AK_ENOMEM;
@@ -38,9 +38,9 @@ static int str_append(kstring_t *ks, const char *s, size_t n) {
 }
 
 /**
- * Copy a header (without '>') up to the first whitespace.
- * @param hdr Header text following '>'.
- * @return Newly allocated name (caller frees), or NULL on OOM.
+ * Copy a header (without '>') up to the first whitespace
+ * @param hdr Header text following '>'
+ * @return Newly allocated name (caller frees), or NULL on OOM
  */
 static char *first_token(const char *hdr) {
     size_t i = 0;
@@ -53,12 +53,12 @@ static char *first_token(const char *hdr) {
 }
 
 /**
- * Store the accumulated (name, seq) as a record and index it.
- * @param fa Set being built.
- * @param h The name -> index map.
- * @param name Record name; ownership is taken (freed here on failure).
- * @param seq Accumulated sequence, copied into the record.
- * @return AK_OK (including when name is NULL), or AK_ENOMEM.
+ * Store the accumulated (name, seq) as a record and index it
+ * @param fa Set being built
+ * @param h The name -> index map
+ * @param name Record name; ownership is taken (freed here on failure)
+ * @param seq Accumulated sequence, copied into the record
+ * @return AK_OK (including when name is NULL), or AK_ENOMEM
  */
 static int flush_record(fasta_t *fa, fmap_t *h, char *name, kstring_t *seq) {
     if (!name) return AK_OK;
@@ -81,7 +81,7 @@ static int flush_record(fasta_t *fa, fmap_t *h, char *name, kstring_t *seq) {
     return AK_OK;
 }
 
-/** Load every record from a FASTA file; see akhal/fasta.h. */
+// load every record from a FASTA file; see akhal/fasta.h
 fasta_t *fasta_read(const char *fn) {
     ak_file *f = ak_open(fn);
     if (!f) return NULL;
@@ -127,14 +127,14 @@ fasta_t *fasta_read(const char *fn) {
     return fa;
 }
 
-/** Look up a record by name, or NULL if absent. */
+// look up a record by name, or NULL if absent
 const fasta_rec_t *fasta_get(const fasta_t *fa, const char *name) {
     fmap_t *h = (fmap_t *)fa->idx;
     khint_t k = fmap_get(h, name);
     return (k < kh_end(h)) ? &fa->rec[kh_val(h, k)] : NULL;
 }
 
-/** Free a loaded FASTA set. Safe with NULL. */
+// free a loaded FASTA set. Safe with NULL
 void fasta_destroy(fasta_t *fa) {
     if (!fa) return;
     for (int64_t i = 0; i < fa->n; i++) {

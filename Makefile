@@ -25,7 +25,9 @@ CLI_SRC := src/cli/main.c \
 		   src/cli/cmd_sort.c \
 		   src/cli/cmd_vg2gfa.c \
 		   src/cli/cmd_gaf2sam.c \
-		   src/cli/cmd_sampoke.c
+		   src/cli/cmd_sampoke.c \
+		   src/cli/cmd_annotate.c \
+		   src/cli/cmd_annotget.c
 CLI_OBJ := $(CLI_SRC:.c=.o)
 
 ALL_OBJ := $(CLI_OBJ)

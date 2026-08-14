@@ -11,9 +11,9 @@ struct ak_file {
 };
 
 /**
- * Open a file for reading and wrap it in an ak_file.
- * @param fn Path to open.
- * @return A handle, or NULL on failure (logged).
+ * Open a file for reading and wrap it in an ak_file
+ * @param fn Path to open
+ * @return A handle, or NULL on failure (logged)
  */
 ak_file *ak_open(const char *fn) {
     if (!fn) return NULL;
@@ -36,10 +36,10 @@ ak_file *ak_open(const char *fn) {
 }
 
 /**
- * Read one line into a growable buffer, stripping the trailing newline.
- * @param f Open handle.
- * @param ks Reusable destination buffer (grows as needed).
- * @return Line length (>= 0), or AK_EOF / negative AK_E* code.
+ * Read one line into a growable buffer, stripping the trailing newline
+ * @param f Open handle
+ * @param ks Reusable destination buffer (grows as needed)
+ * @return Line length (>= 0), or AK_EOF / negative AK_E* code
  */
 long ak_getline(ak_file *f, kstring_t *ks) {
     if (!f || !f->fp) return AK_EINVAL;
@@ -64,7 +64,7 @@ long ak_getline(ak_file *f, kstring_t *ks) {
         ks->l += chunk;
 
         if (ks->l > 0 && ks->s[ks->l - 1] == '\n') break;   // full line read
-        if (chunk + 1 < space) break;                        // EOF, no newline
+        if (chunk + 1 < space) break;                       // EOF, no newline
     }
 
     if (!any && ks->l == 0) return AK_EOF;
@@ -77,14 +77,14 @@ long ak_getline(ak_file *f, kstring_t *ks) {
     return (long)ks->l;
 }
 
-/** Rewind the stream to the beginning. */
+// rewind the stream to the beginning
 int ak_rewind(ak_file *f) {
     if (!f || !f->fp) return AK_EINVAL;
     rewind(f->fp);
     return AK_OK;
 }
 
-/** Close a handle and free it. Safe with NULL. */
+// close a handle and free it. Safe with NULL
 void ak_close(ak_file *f) {
     if (!f) return;
     if (f->fp) fclose(f->fp);

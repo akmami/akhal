@@ -47,31 +47,30 @@ extern "C" {
 #define SAM_FSUPPLEMENTARY 0x800
 
 /**
- * Expand a CIGAR string ("3=1I2X") into a per-base op array ("===I=XX...").
- * @param cigar CIGAR string to expand.
- * @param ops Destination buffer for per-base ops.
- * @param max_ops Capacity of ops.
- * @param rev If non-zero, the resulting op array is reversed.
- * @return The number of ops written, or -1 on overflow.
+ * Expand a CIGAR string ("3=1I2X") into a per-base op array ("===I=XX...")
+ * @param cigar CIGAR string to expand
+ * @param ops Destination buffer for per-base ops
+ * @param max_ops Capacity of ops
+ * @param rev If non-zero, the resulting op array is reversed
+ * @return The number of ops written, or -1 on overflow
  */
 int sam_cigar_expand(const char *cigar, char *ops, int max_ops, int rev);
 
 /**
  * Write a SAM header: @HD, one @SQ per reference sequence (in chromosome
- * order), a @PG line, and a default @RG.
- * @param out Destination stream.
- * @param names Reference sequence names (parallel to lens), length n.
- * @param n Number of reference sequences.
- * @param lens Reference sequence lengths (parallel to names).
- * @param pg Program name for the @PG / @RG id.
+ * order), a @PG line, and a default @RG
+ * @param out Destination stream
+ * @param names Reference sequence names (parallel to lens), length n
+ * @param n Number of reference sequences
+ * @param lens Reference sequence lengths (parallel to names)
+ * @param pg Program name for the @PG / @RG id
  */
-void sam_write_header(FILE *out, char **names, int n,
-                      const uint64_t *lens, const char *pg);
+void sam_write_header(FILE *out, char **names, int n, const uint64_t *lens, const char *pg);
 
 /**
  * One alignment record to emit. `ops` is a per-base op array of length n_ops
  * and may be mutated (leading/trailing insert/mismatch runs become soft clips);
- * if simplify is set, '='/'X' are rendered as 'M'.
+ * if simplify is set, '='/'X' are rendered as 'M'
  */
 typedef struct {
     const char *qname;
@@ -91,18 +90,18 @@ typedef struct {
 } sam_rec_t;
 
 /**
- * Render and write a single SAM alignment line.
- * @param out Destination stream.
- * @param r Record to emit (its ops array may be mutated in place).
+ * Render and write a single SAM alignment line
+ * @param out Destination stream
+ * @param r Record to emit (its ops array may be mutated in place)
  */
 void sam_write_record(FILE *out, sam_rec_t *r);
 
 /**
  * Read-group prefix of a read name: the leading component before the first
  * '.', '/', or '_'. Accepts a bare name or a full SAM/FASTA line (a leading
- * '@' or '>' is skipped).
- * @param name Read name or line to derive the prefix from.
- * @return A newly allocated prefix string (caller frees), or NULL on OOM.
+ * '@' or '>' is skipped)
+ * @param name Read name or line to derive the prefix from
+ * @return A newly allocated prefix string (caller frees), or NULL on OOM
  */
 char *sam_rg_prefix(const char *name);
 
@@ -110,4 +109,4 @@ char *sam_rg_prefix(const char *name);
 }
 #endif
 
-#endif  // AKHAL_SAM_H
+#endif

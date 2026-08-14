@@ -1,16 +1,3 @@
-/**
- * `akhal gaf2sam <r/GFA> <GAF> <reads.fa> <out.sam> [--simple]`
- *
- * Convert graph alignments (GAF) into linear SAM against the reference paths
- * of an (r)GFA. The graph, the read store and the GAF records all come from
- * libakhal; this file holds only the conversion algorithm, which projects each
- * graph alignment onto its reference path and builds the corresponding CIGAR.
- *
- * A segment is treated as "reference" when it belongs to a path
- * (ref_name != NULL); bases on non-reference (alt) segments become insertions,
- * and gaps between consecutive reference segments become deletions.
- */
-
 #include "akhal/gfa.h"
 #include "akhal/gaf.h"
 #include "akhal/fasta.h"
@@ -26,7 +13,7 @@
 #define MAX_NODE 32768
 #define OPS_CAP  SAM_MAX_CIGAR
 
-// Per-run counters, kept together for the closing summary.
+// per-run counters, kept together for the closing summary
 typedef struct {
     int reads, segments, strands, ranks, quals, others; // discards by reason
     int fwd, rc;
@@ -34,16 +21,16 @@ typedef struct {
 } stats_t;
 
 /**
- * Convert one GAF record and, on success, write a SAM line.
- * @param g Reference graph (read with GFA_PATHS).
- * @param rec GAF record to convert.
- * @param read The read's sequence, looked up from the FASTA store.
- * @param simplify If non-zero, emit '='/'X' as 'M' in the CIGAR.
- * @param sam Destination SAM stream.
- * @param ops Reusable per-base op scratch (>= OPS_CAP).
- * @param cigar_ops Reusable expanded-CIGAR scratch (>= OPS_CAP).
- * @param nodes Reusable node-index scratch (>= MAX_NODE).
- * @param st Counters, updated with the outcome.
+ * Convert one GAF record and, on success, write a SAM line
+ * @param g Reference graph (read with GFA_PATHS)
+ * @param rec GAF record to convert
+ * @param read The read's sequence, looked up from the FASTA store
+ * @param simplify If non-zero, emit '='/'X' as 'M' in the CIGAR
+ * @param sam Destination SAM stream
+ * @param ops Reusable per-base op scratch (>= OPS_CAP)
+ * @param cigar_ops Reusable expanded-CIGAR scratch (>= OPS_CAP)
+ * @param nodes Reusable node-index scratch (>= MAX_NODE)
+ * @param st Counters, updated with the outcome
  */
 static void convert_one(const gfa_t *g, const gaf_rec_t *rec, const char *read,
                         int simplify, FILE *sam,
@@ -176,13 +163,13 @@ static void convert_one(const gfa_t *g, const gaf_rec_t *rec, const char *read,
     free(read_owned);
 }
 
-/** Print the gaf2sam usage line. @return 1 (a convenient failure code). */
+// print the gaf2sam usage line. @return 1 (a convenient failure code)
 static int usage(void) {
     ak_log(AK_LOG_ERROR, NULL, "usage: akhal gaf2sam <r/GFA> <GAF> <reads.fa> <out.sam> [--simple]");
     return 1;
 }
 
-/** `gaf2sam` entry point; see cli.h. */
+// `gaf2sam` entry point; see cli.h
 int cmd_gaf2sam(int argc, char **argv) {
     if (argc < 6) return usage();
 

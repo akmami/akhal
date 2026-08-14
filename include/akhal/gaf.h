@@ -43,14 +43,14 @@ typedef struct {
 } gaf_rec_t;
 
 /**
- * Zero-initialize a record. Does not allocate.
- * @param r Record to initialize.
+ * Zero-initialize a record. Does not allocate
+ * @param r Record to initialize
  */
 void gaf_rec_init(gaf_rec_t *r);
 
 /**
- * Free any owned strings and reset the record for reuse.
- * @param r Record to clear.
+ * Free any owned strings and reset the record for reuse
+ * @param r Record to clear
  */
 void gaf_rec_clear(gaf_rec_t *r);
 
@@ -59,53 +59,53 @@ void gaf_rec_clear(gaf_rec_t *r);
 typedef struct gaf_reader gaf_reader_t;
 
 /**
- * Open a GAF file for streaming.
- * @param fn Path to the .gaf file.
- * @return A reader, or NULL on failure (logged).
+ * Open a GAF file for streaming
+ * @param fn Path to the .gaf file
+ * @return A reader, or NULL on failure (logged)
  */
 gaf_reader_t *gaf_open(const char *fn);
 
 /**
  * Parse the next record. The record is cleared first, so the same one can be
- * reused across the whole file.
- * @param r Open reader.
- * @param rec Destination record (reused each call).
- * @return 1 on success, 0 at end of file, or a negative AK_E* code on error.
+ * reused across the whole file
+ * @param r Open reader
+ * @param rec Destination record (reused each call)
+ * @return 1 on success, 0 at end of file, or a negative AK_E* code on error
  */
 int gaf_read1(gaf_reader_t *r, gaf_rec_t *rec);
 
 /**
- * Close a reader. Safe with NULL. Does not touch caller-owned records.
- * @param r Reader to close.
+ * Close a reader. Safe with NULL. Does not touch caller-owned records
+ * @param r Reader to close
  */
 void gaf_close(gaf_reader_t *r);
 
 // Batch reader
 
 /**
- * Load an entire GAF file into a newly allocated array.
- * @param fn Path to the .gaf file.
- * @param n Set to the number of records read.
- * @return The record array (release with gaf_free), or NULL on failure.
+ * Load an entire GAF file into a newly allocated array
+ * @param fn Path to the .gaf file
+ * @param n Set to the number of records read
+ * @return The record array (release with gaf_free), or NULL on failure
  */
 gaf_rec_t *gaf_slurp(const char *fn, int64_t *n);
 
 /**
- * Free an array returned by gaf_slurp(); clears each record, then the array.
- * @param recs Array to free.
- * @param n Number of records in the array.
+ * Free an array returned by gaf_slurp(); clears each record, then the array
+ * @param recs Array to free
+ * @param n Number of records in the array
  */
 void gaf_free(gaf_rec_t *recs, int64_t n);
 
 // Path string traversal
 
 /**
- * Parse the next oriented node from a GAF path string such as ">12<7>3".
+ * Parse the next oriented node from a GAF path string such as ">12<7>3"
  * Advance with:  p += gaf_path_next(p, &id, &strand);
- * @param p Pointer into a path string.
- * @param id Set to the node id.
- * @param strand Set to the orientation char ('>' or '<').
- * @return Bytes consumed, or 0 at the end of the string.
+ * @param p Pointer into a path string
+ * @param id Set to the node id
+ * @param strand Set to the orientation char ('>' or '<')
+ * @return Bytes consumed, or 0 at the end of the string
  */
 int gaf_path_next(const char *p, uint64_t *id, char *strand);
 
@@ -113,4 +113,4 @@ int gaf_path_next(const char *p, uint64_t *id, char *strand);
 }
 #endif
 
-#endif  // AKHAL_GAF_H
+#endif

@@ -1,12 +1,3 @@
-/**
- * `akhal vg2gfa <in.vg> [out.gfa]` - convert vg's native format to GFA.
- *
- * The whole graph is read from the .vg (see the vg module: no protobuf runtime
- * required, only zlib) and emitted as GFA1: an H line, one S per node, one L
- * per edge, and one P per path. This mirrors `vg view -g`. If no output path is
- * given, the GFA is written to stdout.
- */
-
 #include "akhal/vg.h"
 #include "akhal/util.h"
 #include "akhal/error.h"
@@ -14,7 +5,7 @@
 
 #include <stdio.h>
 
-/** Emit a graph as GFA1 (H, S, L, P). */
+// emit a graph as GFA1 (H, S, L, P)
 static void write_gfa(FILE *out, const vg_graph_t *g) {
     fprintf(out, "H\tVN:Z:1.0\n");
 
@@ -40,7 +31,7 @@ static void write_gfa(FILE *out, const vg_graph_t *g) {
     }
 }
 
-/** `vg2gfa` entry point; see cli.h. */
+// `vg2gfa` entry point; see cli.h
 int cmd_vg2gfa(int argc, char **argv) {
     if (argc < 3) {
         ak_log(AK_LOG_ERROR, NULL, "usage: akhal vg2gfa <in.vg> [out.gfa]");

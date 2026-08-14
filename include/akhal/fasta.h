@@ -29,31 +29,33 @@ typedef struct {
 } fasta_t;
 
 /**
- * Load every record from a FASTA file.
- * @param fn Path to the FASTA file.
- * @return The loaded set (release with fasta_destroy), or NULL on failure.
+ * Load every record from a FASTA file
+ * @param fn Path to the FASTA file
+ * @return The loaded set (release with fasta_destroy), or NULL on failure
  */
 fasta_t *fasta_read(const char *fn);
 
 /**
- * Look up a record by sequence name.
- * @param fa Loaded FASTA set.
- * @param name Sequence name to find.
- * @return Pointer to the record, or NULL if absent.
+ * Look up a record by sequence name
+ * @param fa Loaded FASTA set
+ * @param name Sequence name to find
+ * @return Pointer to the record, or NULL if absent
  */
 const fasta_rec_t *fasta_get(const fasta_t *fa, const char *name);
 
 /**
- * Release everything. Safe with NULL.
- * @param fa Set to destroy.
+ * Release everything. Safe with NULL
+ * @param fa Set to destroy
  */
 void fasta_destroy(fasta_t *fa);
 
-/** @return Number of records loaded. */
+/** 
+ * @return Number of records loaded
+ */
 static inline int64_t fasta_n(const fasta_t *fa) { return fa->n; }
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif  // AKHAL_FASTA_H
+#endif

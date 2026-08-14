@@ -4,7 +4,7 @@
 #include <string.h>
 #include <ctype.h>
 
-/** Expand a CIGAR string into a per-base op array; see akhal/sam.h. */
+// expand a CIGAR string into a per-base op array; see akhal/sam.h
 int sam_cigar_expand(const char *cigar, char *ops, int max_ops, int rev) {
     int i = 0, j = 0, num = 0;
     while (cigar[i]) {
@@ -32,9 +32,9 @@ int sam_cigar_expand(const char *cigar, char *ops, int max_ops, int rev) {
 }
 
 /**
- * Sort key giving canonical chromosome ordering for header emission.
- * @param chr Reference sequence name (a leading "chr" is ignored).
- * @return 1..22 for autosomes, 23/24/25 for X/Y/M, 1000 otherwise.
+ * Sort key giving canonical chromosome ordering for header emission
+ * @param chr Reference sequence name (a leading "chr" is ignored)
+ * @return 1..22 for autosomes, 23/24/25 for X/Y/M, 1000 otherwise
  */
 static int chrom_rank(const char *chr) {
     if (strncmp(chr, "chr", 3) == 0) chr += 3;
@@ -48,7 +48,7 @@ static int chrom_rank(const char *chr) {
     return 1000;   // non-canonical contigs go last
 }
 
-/** Write @HD, chromosome-ordered @SQ lines, @PG and @RG; see akhal/sam.h. */
+// write @HD, chromosome-ordered @SQ lines, @PG and @RG; see akhal/sam.h
 void sam_write_header(FILE *out, char **names, int n,
                       const uint64_t *lens, const char *pg) {
     fprintf(out, "@HD\tVN:1.6\tSO:unsorted\tGO:query\n");
@@ -77,7 +77,7 @@ void sam_write_header(FILE *out, char **names, int n,
     fprintf(out, "@RG\tID:%s.0\tPL:%s\tPU:%s\tSM:%s\n", pg, "UNKNOWN", "UNKNOWN", "UNKNOWN");
 }
 
-/** Render and write one SAM alignment line; see akhal/sam.h. */
+// render and write one SAM alignment line; see akhal/sam.h
 void sam_write_record(FILE *out, sam_rec_t *r) {
     char cigar_string[SAM_MAX_CIGAR];
     int  cigar_pos = 0;
@@ -87,16 +87,15 @@ void sam_write_record(FILE *out, sam_rec_t *r) {
     if (c_size == 0) {
         strcpy(cigar_string, "*");
     } else {
-        // Fold leading/trailing insertion & mismatch runs into soft clips.
+        // fold leading/trailing insertion & mismatch runs into soft clips
         int i = 0;
         while (i < c_size && ops[i] == CIGAR_SOFT_CLIP) i++;
         while (i < c_size && (ops[i] == CIGAR_INSERTION || ops[i] == CIGAR_SEQUENCE_MISMATCH))
             ops[i++] = CIGAR_SOFT_CLIP;
 
         int j = c_size - 1;
-        // Fix vs original: test ops[j], not ops[i]. The original read ops[i]
-        // (where i may equal c_size), an out-of-bounds read that also disabled
-        // trailing-clip folding.
+        // fix vs original: test ops[j], not ops[i]. The original read ops[i] (where i may 
+        // equal c_size), an out-of-bounds read that also disabled trailing-clip folding
         while (j >= 0 && ops[j] == CIGAR_SOFT_CLIP) j--;
         while (j >= 0 && (ops[j] == CIGAR_INSERTION || ops[j] == CIGAR_SEQUENCE_MISMATCH))
             ops[j--] = CIGAR_SOFT_CLIP;
@@ -132,7 +131,7 @@ void sam_write_record(FILE *out, sam_rec_t *r) {
             r->nm, r->as, r->dv, r->id, r->rg ? r->rg : "akhal.0");
 }
 
-/** Derive a read-group prefix from a read name/line; see akhal/sam.h. */
+// derive a read-group prefix from a read name/line; see akhal/sam.h
 char *sam_rg_prefix(const char *name) {
     if (name[0] == '@' || name[0] == '>') name++;
 

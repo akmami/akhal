@@ -1,12 +1,3 @@
-/**
- * akhal command-line front end.
- *
- * This file is deliberately thin: it maps a subcommand name to a function and
- * hands off. All real work lives in the per-command files and in libakhal. To
- * add a command, implement `int cmd_x(int, char**)`, declare it in cli.h, and
- * add one row to the table below.
- */
-
 #include "akhal/version.h"
 #include "akhal/error.h"
 #include "cli.h"
@@ -31,10 +22,12 @@ static const command_t commands[] = {
     { "vg2gfa",  cmd_vg2gfa,  "graph", "convert vg (protobuf .vg) to GFA"           },
     { "gaf2sam", cmd_gaf2sam, "align", "convert GAF alignments to SAM"              },
     { "sampoke", cmd_sampoke, "align", "validate SAM CIGAR/positions against a ref" },
+    { "annotate", cmd_annotate, "annot", "trace node origins (VCF/FASTA) to a .annot file" },
+    { "annotget", cmd_annotget, "annot", "look up node annotations in a .annot file" },
     { NULL, NULL, NULL, NULL }
 };
 
-/** Print the top-level usage / command list. */
+// print the top-level usage / command list
 static void usage(FILE *out) {
     fprintf(out, "akhal %s - assembly graph analysis toolkit\n\n", AKHAL_VERSION_STR);
     fprintf(out, "Usage: akhal <command> [options]\n\n");
@@ -50,7 +43,7 @@ static void usage(FILE *out) {
     fprintf(out, "\nRun `akhal <command>` with no arguments for command-specific help.\n");
 }
 
-/** Dispatch argv[1] to a subcommand. @return the command's exit status. */
+// dispatch argv[1] to a subcommand. @return the command's exit status
 int main(int argc, char **argv) {
     if (argc < 2) {
         usage(stderr);

@@ -12,7 +12,10 @@
 
 // growable graph 
 
-/** Ensure room for one more node. @return AK_OK or AK_ENOMEM. */
+/** 
+ * Ensure room for one more node
+ * @return AK_OK or AK_ENOMEM
+ */
 static int reserve_node(vg_graph_t *g) {
     if (g->n_node < g->m_node) return AK_OK;
     int32_t m = g->m_node ? g->m_node << 1 : 4096;
@@ -22,7 +25,10 @@ static int reserve_node(vg_graph_t *g) {
     return AK_OK;
 }
 
-/** Ensure room for one more edge. @return AK_OK or AK_ENOMEM. */
+/**
+ * Ensure room for one more edge
+ * @return AK_OK or AK_ENOMEM
+ */
 static int reserve_edge(vg_graph_t *g) {
     if (g->n_edge < g->m_edge) return AK_OK;
     int32_t m = g->m_edge ? g->m_edge << 1 : 4096;
@@ -32,7 +38,10 @@ static int reserve_edge(vg_graph_t *g) {
     return AK_OK;
 }
 
-/** Ensure room for one more path. @return AK_OK or AK_ENOMEM. */
+/**
+ * Ensure room for one more path
+ * @return AK_OK or AK_ENOMEM
+ */
 static int reserve_path(vg_graph_t *g) {
     if (g->n_path < g->m_path) return AK_OK;
     int32_t m = g->m_path ? g->m_path << 1 : 64;
@@ -42,7 +51,10 @@ static int reserve_path(vg_graph_t *g) {
     return AK_OK;
 }
 
-/** Ensure room for one more step in a path. @return AK_OK or AK_ENOMEM. */
+/** 
+ * Ensure room for one more step in a path
+ * @return AK_OK or AK_ENOMEM
+ */
 static int reserve_step(vg_path_t *pt) {
     if (pt->n_step < pt->m_step) return AK_OK;
     int32_t m = pt->m_step ? pt->m_step << 1 : 16;
@@ -54,9 +66,14 @@ static int reserve_step(vg_path_t *pt) {
 
 // protobuf decoding over an in-memory blob
 
-typedef struct { const unsigned char *p, *end; } pbuf;
+typedef struct { 
+    const unsigned char *p, *end; 
+} pbuf;
 
-/** Decode a base-128 varint. @return 1 on success, 0 if truncated/overlong. */
+/** 
+ * Decode a base-128 varint
+ * @return 1 on success, 0 if truncated/overlong
+ */
 static int pb_varint(pbuf *b, uint64_t *out) {
     uint64_t v = 0; int shift = 0;
     while (b->p < b->end) {
@@ -69,7 +86,10 @@ static int pb_varint(pbuf *b, uint64_t *out) {
     return 0;
 }
 
-/** Read a length-delimited field's span and advance past it. @return 1 or 0. */
+/** 
+ * Read a length-delimited field's span and advance past it
+ * @return 1 or 0
+ * */
 static int pb_bytes(pbuf *b, const unsigned char **start, uint64_t *len) {
     uint64_t l;
     if (!pb_varint(b, &l)) return 0;
@@ -78,7 +98,10 @@ static int pb_bytes(pbuf *b, const unsigned char **start, uint64_t *len) {
     return 1;
 }
 
-/** Skip one field of the given wire type. @return 1 on success, 0 on error. */
+/**
+ * Skip one field of the given wire type
+ * @return 1 on success, 0 on error
+ */
 static int pb_skip(pbuf *b, int wire) {
     uint64_t tmp; const unsigned char *s;
     switch (wire) {
@@ -91,8 +114,7 @@ static int pb_skip(pbuf *b, int wire) {
 }
 
 // Position { int64 node_id = 1; bool is_reverse = 4; ... }
-static void parse_position(const unsigned char *buf, uint64_t len,
-                           int64_t *node_id, int *is_rev) {
+static void parse_position(const unsigned char *buf, uint64_t len, int64_t *node_id, int *is_rev) {
     pbuf b = { buf, buf + len };
     uint64_t tag, v;
     while (b.p < b.end) {
@@ -104,7 +126,7 @@ static void parse_position(const unsigned char *buf, uint64_t len,
     }
 }
 
-// Mapping { Position position = 1; ... } -> append one step to the path.
+// Mapping { Position position = 1; ... } -> append one step to the path
 static int parse_mapping(vg_path_t *pt, const unsigned char *buf, uint64_t len) {
     pbuf b = { buf, buf + len };
     int64_t node_id = 0; int is_rev = 0, have_pos = 0;
@@ -251,14 +273,20 @@ typedef struct {
     int           len, pos;
 } vgin;
 
-/** Refill the input buffer. @return bytes read (>0), 0 at EOF, <0 on error. */
+/**
+ * Refill the input buffer
+ * @return bytes read (>0), 0 at EOF, <0 on error
+ */
 static int vin_fill(vgin *r) {
     r->len = gzread(r->gz, r->buf, (unsigned)sizeof(r->buf));
     r->pos = 0;
     return r->len;
 }
 
-/** Read exactly n bytes. @return 1 on success, 0 if the stream ended short. */
+/**
+ * Read exactly n bytes
+ * @return 1 on success, 0 if the stream ended short
+ */
 static int vin_read(vgin *r, unsigned char *dst, uint64_t n) {
     while (n) {
         if (r->pos >= r->len) { if (vin_fill(r) <= 0) return 0; }
@@ -271,9 +299,8 @@ static int vin_read(vgin *r, unsigned char *dst, uint64_t n) {
 }
 
 /**
- * Read a varint from the compressed stream.
- * @return 1 on success, 0 at a clean end-of-stream boundary, -1 on a truncated
- *         or overlong varint.
+ * Read a varint from the compressed stream
+ * @return 1 on success, 0 at a clean end-of-stream boundary, -1 on a truncated or overlong varint
  */
 static int vin_varint(vgin *r, uint64_t *out) {
     uint64_t v = 0; int shift = 0, first = 1;
@@ -290,7 +317,7 @@ static int vin_varint(vgin *r, uint64_t *out) {
 
 // public API
 
-/** Read a .vg file into an accumulated graph; see akhal/vg.h. */
+// read a .vg file into an accumulated graph; see akhal/vg.h
 vg_graph_t *vg_read(const char *fn) {
     gzFile gz = gzopen(fn, "rb");
     if (!gz) { ak_log(AK_LOG_ERROR, "vg", "could not open %s", fn); return NULL; }
@@ -337,7 +364,7 @@ vg_graph_t *vg_read(const char *fn) {
     return g;
 }
 
-/** Free a vg graph; see akhal/vg.h. */
+// free a vg graph; see akhal/vg.h
 void vg_graph_destroy(vg_graph_t *g) {
     if (!g) return;
     for (int32_t i = 0; i < g->n_node; i++) free(g->node[i].seq);

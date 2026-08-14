@@ -51,15 +51,15 @@ typedef struct {
 } vg_graph_t;
 
 /**
- * Read a .vg file into a single accumulated graph.
- * @param fn Path to the .vg file (gzip/BGZF-compressed or raw).
- * @return The graph (release with vg_graph_destroy), or NULL on error.
+ * Read a .vg file into a single accumulated graph
+ * @param fn Path to the .vg file (gzip/BGZF-compressed or raw)
+ * @return The graph (release with vg_graph_destroy), or NULL on error
  */
 vg_graph_t *vg_read(const char *fn);
 
 /**
- * Release a graph and everything it owns. Safe with NULL.
- * @param g Graph to destroy.
+ * Release a graph and everything it owns. Safe with NULL
+ * @param g Graph to destroy
  */
 void vg_graph_destroy(vg_graph_t *g);
 
@@ -67,4 +67,4 @@ void vg_graph_destroy(vg_graph_t *g);
 }
 #endif
 
-#endif  // AKHAL_VG_H
+#endif

@@ -1,18 +1,3 @@
-/**
- * `akhal sort <in.gfa> [out.gfa]` - topologically sort and renumber a graph.
- *
- * The nodes are ordered with gfa_toposort (Kahn's algorithm; ties broken
- * alphabetically by node sequence content), then renumbered 1..N in that order.
- * Ordering by content keeps the result independent of the input's node
- * numbering. The graph is
- * re-emitted as GFA1 with the new ids: S lines in sorted order, L lines with
- * remapped endpoints (orientation + overlap preserved), and P lines with
- * remapped, oriented steps. If no output path is given, stdout is used.
- *
- * Note: only the SR tag is carried over on S lines; SN/SO are not preserved
- * (the in-memory model does not keep them verbatim).
- */
-
 #include "akhal/gfa.h"
 #include "akhal/util.h"
 #include "akhal/error.h"
@@ -21,14 +6,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-// One remapped L line, used to emit links in a deterministic order.
+// one remapped L line, used to emit links in a deterministic order
 typedef struct {
     long     from, to;
     char     from_orient, to_orient;
     unsigned overlap;
 } lrec_t;
 
-/** Order links by (from, to) so the output is deterministic. */
+// order links by (from, to) so the output is deterministic
 static int lrec_cmp(const void *A, const void *B) {
     const lrec_t *a = (const lrec_t *)A, *b = (const lrec_t *)B;
     if (a->from != b->from) return a->from < b->from ? -1 : 1;
@@ -36,7 +21,7 @@ static int lrec_cmp(const void *A, const void *B) {
     return 0;
 }
 
-/** `sort` entry point; see cli.h. */
+// `sort` entry point; see cli.h
 int cmd_sort(int argc, char **argv) {
     if (argc < 3) {
         ak_log(AK_LOG_ERROR, NULL, "usage: akhal sort <in.gfa> [out.gfa]");
@@ -90,7 +75,7 @@ int cmd_sort(int argc, char **argv) {
 
     fprintf(out, "H\tVN:Z:1.0\n");
 
-    // S lines in sorted order.
+    // S lines in sorted order
     for (int32_t pos = 0; pos < n; pos++) {
         gfa_seg_t *s = gfa_seg_at(g, order[pos]);
         fprintf(out, "S\t%d\t%s", pos + 1, s->seq ? s->seq : "*");
@@ -98,7 +83,7 @@ int cmd_sort(int argc, char **argv) {
         fputc('\n', out);
     }
 
-    // L lines, remapped and sorted by (from, to).
+    // L lines, remapped and sorted by (from, to)
     int32_t n_link = gfa_n_link(g);
     if (n_link > 0) {
         lrec_t *ls = (lrec_t *)malloc((size_t)n_link * sizeof(lrec_t));
@@ -122,7 +107,7 @@ int cmd_sort(int argc, char **argv) {
         free(ls);
     }
 
-    // P lines, remapped and oriented.
+    // P lines, remapped and oriented
     for (int32_t k = 0; k < gfa_n_path(g); k++) {
         fprintf(out, "P\t%s\t", gfa_path_name(g, k));
         const uint32_t *segs;

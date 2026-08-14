@@ -11,12 +11,12 @@ struct gaf_reader {
     kstring_t line;
 };
 
-/** Zero-initialize a record. */
+// zero-initialize a record
 void gaf_rec_init(gaf_rec_t *r) {
     memset(r, 0, sizeof(*r));
 }
 
-/** Free owned strings and reset a record for reuse. */
+// free owned strings and reset a record for reuse
 void gaf_rec_clear(gaf_rec_t *r) {
     free(r->qname);
     free(r->path);
@@ -25,10 +25,10 @@ void gaf_rec_clear(gaf_rec_t *r) {
 }
 
 /**
- * Parse one GAF line into a cleared record.
- * @param line The line (modified in place by tokenizing).
- * @param rec Destination record (cleared first).
- * @return AK_OK, AK_EFORMAT (too few fields), or AK_ENOMEM.
+ * Parse one GAF line into a cleared record
+ * @param line The line (modified in place by tokenizing)
+ * @param rec Destination record (cleared first)
+ * @return AK_OK, AK_EFORMAT (too few fields), or AK_ENOMEM
  */
 static int gaf_parse_line(char *line, gaf_rec_t *rec) {
     gaf_rec_clear(rec);
@@ -75,7 +75,7 @@ static int gaf_parse_line(char *line, gaf_rec_t *rec) {
 
 // streaming
 
-/** Open a GAF file for streaming; see akhal/gaf.h. */
+// open a GAF file for streaming; see akhal/gaf.h
 gaf_reader_t *gaf_open(const char *fn) {
     ak_file *f = ak_open(fn);
     if (!f) return NULL;
@@ -91,10 +91,10 @@ gaf_reader_t *gaf_open(const char *fn) {
 }
 
 /**
- * Read the next well-formed record, skipping malformed lines.
- * @param r Open reader.
- * @param rec Destination record (reused each call).
- * @return 1 on success, 0 at EOF, AK_EINVAL/AK_ENOMEM on error.
+ * Read the next well-formed record, skipping malformed lines
+ * @param r Open reader
+ * @param rec Destination record (reused each call)
+ * @return 1 on success, 0 at EOF, AK_EINVAL/AK_ENOMEM on error
  */
 int gaf_read1(gaf_reader_t *r, gaf_rec_t *rec) {
     if (!r || !rec) return AK_EINVAL;
@@ -110,7 +110,7 @@ int gaf_read1(gaf_reader_t *r, gaf_rec_t *rec) {
     return 0;   // EOF
 }
 
-/** Close a streaming reader. Safe with NULL. */
+// close a streaming reader. Safe with NULL
 void gaf_close(gaf_reader_t *r) {
     if (!r) return;
     ak_close(r->f);
@@ -120,7 +120,7 @@ void gaf_close(gaf_reader_t *r) {
 
 // batch
 
-/** Load an entire GAF file into an array; see akhal/gaf.h. */
+// load an entire GAF file into an array; see akhal/gaf.h
 gaf_rec_t *gaf_slurp(const char *fn, int64_t *n) {
     if (n) *n = 0;
 
@@ -141,8 +141,7 @@ gaf_rec_t *gaf_slurp(const char *fn, int64_t *n) {
             arr = p;
             cap = ncap;
         }
-        // Move ownership of the record's strings into the array, then detach
-        // them from `rec` so the next read does not free them.
+        // move ownership of the record's strings into the array, then detach them from `rec` so the next read does not free them
         arr[cnt++] = rec;
         gaf_rec_init(&rec);
     }
@@ -160,14 +159,14 @@ gaf_rec_t *gaf_slurp(const char *fn, int64_t *n) {
     return arr;
 }
 
-/** Free an array from gaf_slurp(). */
+// free an array from gaf_slurp()
 void gaf_free(gaf_rec_t *recs, int64_t n) {
     if (!recs) return;
     for (int64_t i = 0; i < n; i++) gaf_rec_clear(&recs[i]);
     free(recs);
 }
 
-/** Parse the next oriented node from a GAF path string; see akhal/gaf.h. */
+// parse the next oriented node from a GAF path string; see akhal/gaf.h
 int gaf_path_next(const char *p, uint64_t *id, char *strand) {
     if (*p == '\0') return 0;
     *strand = *p;

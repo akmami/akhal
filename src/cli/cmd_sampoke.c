@@ -1,15 +1,3 @@
-/**
- * `akhal sampoke <ref.fa> <in.sam> [out.sam]`
- *
- * Validate a SAM file (typically produced by `gaf2sam`) against a reference:
- * every '=' CIGAR position must match the reference base. Optionally writes a
- * filtered SAM containing only the lines that validate, annotated with read
- * groups derived from read-name prefixes.
- *
- * The reference is loaded through the FASTA module (no .fai required), and
- * CIGAR handling comes from the SAM module.
- */
-
 #include "akhal/fasta.h"
 #include "akhal/sam.h"
 #include "akhal/io.h"
@@ -23,15 +11,15 @@
 #include <string.h>
 
 /**
- * Check that each '=' in the CIGAR matches the reference base.
- * @param read Query sequence (SAM SEQ field).
- * @param read_len Length of read.
- * @param ref Reference sequence for this alignment's rname.
- * @param ref_len Length of ref.
- * @param pos 1-based reference start position.
- * @param cigar CIGAR string to walk.
- * @param ops Caller-provided scratch buffer of at least SAM_MAX_CIGAR bytes.
- * @return 1 if the alignment is consistent, 0 otherwise.
+ * Check that each '=' in the CIGAR matches the reference base
+ * @param read Query sequence (SAM SEQ field)
+ * @param read_len Length of read
+ * @param ref Reference sequence for this alignment's rname
+ * @param ref_len Length of ref
+ * @param pos 1-based reference start position
+ * @param cigar CIGAR string to walk
+ * @param ops Caller-provided scratch buffer of at least SAM_MAX_CIGAR bytes
+ * @return 1 if the alignment is consistent, 0 otherwise
  */
 static int validate_alignment(const char *read, int64_t read_len,
                               const char *ref, int64_t ref_len,
@@ -61,10 +49,10 @@ static int validate_alignment(const char *read, int64_t read_len,
 }
 
 /**
- * Collect the distinct read-group prefixes seen among alignment lines.
- * @param sam_fn Path to the SAM file to scan.
- * @param out Set to a newly allocated array of owned prefix strings.
- * @return Number of prefixes collected.
+ * Collect the distinct read-group prefixes seen among alignment lines
+ * @param sam_fn Path to the SAM file to scan
+ * @param out Set to a newly allocated array of owned prefix strings
+ * @return Number of prefixes collected
  */
 static int collect_rg(const char *sam_fn, char ***out) {
     *out = NULL;
@@ -105,18 +93,18 @@ static int collect_rg(const char *sam_fn, char ***out) {
     return size;
 }
 
-/** Write one @RG header line per collected read-group prefix. */
+// write one @RG header line per collected read-group prefix
 static void emit_rg_lines(FILE *out, char **rg, int rg_n) {
     for (int i = 0; i < rg_n; i++)
         fprintf(out, "@RG\tID:akhal.%d\tPL:PACBIO\tPU:%s\tSM:sample\n", i, rg[i]);
 }
 
 /**
- * Split a SAM line copy into tab-delimited fields.
- * @param s Line to tokenize in place.
- * @param field Destination array of field pointers.
- * @param max Capacity of field.
- * @return Number of fields found.
+ * Split a SAM line copy into tab-delimited fields
+ * @param s Line to tokenize in place
+ * @param field Destination array of field pointers
+ * @param max Capacity of field
+ * @return Number of fields found
  */
 static int split_fields(char *s, char **field, int max) {
     int n = 0;
@@ -130,13 +118,13 @@ static int split_fields(char *s, char **field, int max) {
 
 /**
  * Validate every alignment in a SAM file against the reference, reporting a
- * correct/incorrect tally and optionally writing a filtered, RG-annotated SAM.
- * @param sam_fn Input SAM path.
- * @param out_fn Output SAM path, or NULL to only report counts.
- * @param ref Reference sequences.
- * @param rg Collected read-group prefixes.
- * @param rg_n Number of prefixes.
- * @return 0 on success, non-zero if a file could not be opened.
+ * correct/incorrect tally and optionally writing a filtered, RG-annotated SAM
+ * @param sam_fn Input SAM path
+ * @param out_fn Output SAM path, or NULL to only report counts
+ * @param ref Reference sequences
+ * @param rg Collected read-group prefixes
+ * @param rg_n Number of prefixes
+ * @return 0 on success, non-zero if a file could not be opened
  */
 static int check_sam(const char *sam_fn, const char *out_fn,
                      const fasta_t *ref, char **rg, int rg_n) {
@@ -235,7 +223,7 @@ static int check_sam(const char *sam_fn, const char *out_fn,
     return 0;
 }
 
-/** `sampoke` entry point; see cli.h. */
+// `sampoke` entry point; see cli.h
 int cmd_sampoke(int argc, char **argv) {
     if (argc < 4) {
         ak_log(AK_LOG_ERROR, NULL, "usage: akhal sampoke <ref.fa> <in.sam> [out.sam]");

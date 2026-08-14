@@ -1,11 +1,3 @@
-/**
- * `akhal extract fa <r/GFA> <out.fa>` - write each path's sequence as FASTA.
- *
- * Ported onto libakhal: the graph and its path membership come from gfa_read,
- * and the command only walks each path's segment slice and streams the bases
- * out, wrapped at a fixed column width.
- */
-
 #include "akhal/gfa.h"
 #include "akhal/util.h"
 #include "akhal/error.h"
@@ -17,11 +9,11 @@
 #define FASTA_WRAP 80
 
 /**
- * Stream a sequence out as FASTA, wrapping at FASTA_WRAP columns.
- * @param out Destination stream.
- * @param seq Bases to write.
- * @param len Number of bases.
- * @param col Current column position, carried across calls (updated in place).
+ * Stream a sequence out as FASTA, wrapping at FASTA_WRAP columns
+ * @param out Destination stream
+ * @param seq Bases to write
+ * @param len Number of bases
+ * @param col Current column position, carried across calls (updated in place)
  */
 static void emit_wrapped(FILE *out, const char *seq, size_t len, int *col) {
     size_t printed = 0;
@@ -35,12 +27,12 @@ static void emit_wrapped(FILE *out, const char *seq, size_t len, int *col) {
     }
 }
 
-/** Print the extract usage line. */
+// print the extract usage line
 static void usage(void) {
     ak_log(AK_LOG_ERROR, NULL, "usage: akhal extract fa <r/GFA> <out.fa|.fasta>");
 }
 
-/** `extract` entry point; see cli.h. */
+// `extract` entry point; see cli.h
 int cmd_extract(int argc, char **argv) {
     if (argc < 5 || strcmp(argv[2], "fa") != 0) { usage(); return 1; }
 

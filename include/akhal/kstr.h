@@ -25,16 +25,16 @@ typedef struct {
 #define KS_INIT { 0, 0, NULL }
 
 /**
- * Ensure the buffer holds at least `size` bytes.
- * @param ks Buffer to grow.
- * @param size Minimum capacity required.
- * @return AK_OK on success, AK_ENOMEM on allocation failure.
+ * Ensure the buffer holds at least `size` bytes
+ * @param ks Buffer to grow
+ * @param size Minimum capacity required
+ * @return AK_OK on success, AK_ENOMEM on allocation failure
  */
 int ks_resize(kstring_t *ks, size_t size);
 
 /**
- * Reset length to 0 without freeing the buffer, so it can be reused.
- * @param ks Buffer to clear.
+ * Reset length to 0 without freeing the buffer, so it can be reused
+ * @param ks Buffer to clear
  */
 static inline void ks_clear(kstring_t *ks) {
     ks->l = 0;
@@ -42,8 +42,8 @@ static inline void ks_clear(kstring_t *ks) {
 }
 
 /**
- * Free the buffer and zero the struct.
- * @param ks Buffer to release.
+ * Free the buffer and zero the struct
+ * @param ks Buffer to release
  */
 static inline void ks_free(kstring_t *ks) {
     free(ks->s);
@@ -52,9 +52,9 @@ static inline void ks_free(kstring_t *ks) {
 }
 
 /**
- * Detach the owned C string, leaving the kstring empty.
- * @param ks Buffer to take ownership from.
- * @return The owned string (caller must free), or NULL if never allocated.
+ * Detach the owned C string, leaving the kstring empty
+ * @param ks Buffer to take ownership from
+ * @return The owned string (caller must free), or NULL if never allocated
  */
 static inline char *ks_release(kstring_t *ks) {
     char *s = ks->s;
@@ -67,4 +67,4 @@ static inline char *ks_release(kstring_t *ks) {
 }
 #endif
 
-#endif  // AKHAL_KSTR_H
+#endif

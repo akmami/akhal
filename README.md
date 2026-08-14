@@ -21,7 +21,7 @@ Requirements: a C compiler and `zlib` (`-lz`, used by `vg2gfa` to decompress `.v
 
 ## Usage
 
-`akhal` provides three main commands:
+`akhal` provides the following commands:
 
 ```sh
 ./akhal <PROGRAM> [...ARGS]
@@ -114,6 +114,39 @@ Optionally, it can print the filtered SAM file that contains valid lines.
 ```
 
 Note: Output file here is optional.
+
+#### 8. `annotate`
+Traces the origin of every graph node and saves the result as a binary `.annot` file. 
+The backbone reference path (a `P` line) is identified first - by `--ref <name>`, or defaulting to the graph's first path - and its nodes are marked `backbone` with their reference coordinates. 
+With `--vcf`, each variant is matched to the alternative side of its bubble: the shared REF/ALT prefix is stripped, the branch point is located on the backbone, and the nodes spelling the alternate allele are annotated like `SNP chr1:12345 A>G rs99`. 
+Pure deletions produce only an edge, so they have nothing to annotate. 
+With `--fasta`, each sequence is walked through the graph (link overlaps honoured) and every visited non-backbone node is annotated `SEQ <name> <offset>` with its origin and position in that sequence. 
+Both inputs are optional; nodes that no input explains are simply left out and later report as `unknown`. 
+A node explained more than once accumulates its annotations separated by `; `.
+
+**Usage:**
+```sh
+./akhal annotate <r/GFA file> <OUTPUT .annot file> [--vcf <VCF file>] [--fasta <FASTA file>] [--ref <path name>]
+```
+
+#### 9. `annotget`
+Looks up node annotations in a `.annot` file - the graph itself is not needed. 
+Each queried node prints one line, `<id> <status> [<info>]`, where status is `backbone`, `annot`, or `unknown`. 
+With no node ids, every record in the file is dumped.
+
+**Usage:**
+```sh
+./akhal annotget <.annot file> [node id ...]
+```
+
+Example:
+```sh
+$ ./akhal annotget graph.annot 4 6 2 999
+4	annot	SNP chr1:5 A>C rs1; SEQ sample1 4
+6	annot	INS chr1:9 C>CTT
+2	backbone	REF chr1 4-5
+999	unknown
+```
 
 ## License
 is released under the BSD 3-Clause License, which allows for redistribution and use in source and binary forms, with or without modification, under certain conditions. 

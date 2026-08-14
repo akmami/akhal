@@ -10,12 +10,14 @@
 #include <stdio.h>
 
 // id -> array index
-KHASHL_MAP_INIT(KH_LOCAL, idxmap_t, idxmap, uint64_t, uint32_t,
-                kh_hash_uint64, kh_eq_generic)
+KHASHL_MAP_INIT(KH_LOCAL, idxmap_t, idxmap, uint64_t, uint32_t, kh_hash_uint64, kh_eq_generic)
 
 // growth helpers
 
-/** Ensure room for one more segment. @return AK_OK or AK_ENOMEM. */
+/** 
+ * Ensure room for one more segment
+ * @return AK_OK or AK_ENOMEM
+ */
 static int reserve_seg(gfa_t *g) {
     if (g->n_seg < g->m_seg) return AK_OK;
     int32_t m = g->m_seg ? g->m_seg << 1 : 1024;
@@ -26,7 +28,9 @@ static int reserve_seg(gfa_t *g) {
     return AK_OK;
 }
 
-/** Ensure room for one more link. @return AK_OK or AK_ENOMEM. */
+/** Ensure room for one more link
+ * @return AK_OK or AK_ENOMEM
+ */ 
 static int reserve_link(gfa_t *g) {
     if (g->n_link < g->m_link) return AK_OK;
     int32_t m = g->m_link ? g->m_link << 1 : 1024;
@@ -37,7 +41,10 @@ static int reserve_link(gfa_t *g) {
     return AK_OK;
 }
 
-/** Ensure room for one more path (name, length, offset). @return AK_OK or AK_ENOMEM. */
+/** 
+ * Ensure room for one more path (name, length, offset)
+ * @return AK_OK or AK_ENOMEM
+ */
 static int reserve_path(gfa_t *g) {
     if (g->n_path < g->m_path) return AK_OK;
     int32_t m = g->m_path ? g->m_path << 1 : 16;
@@ -54,7 +61,10 @@ static int reserve_path(gfa_t *g) {
     return AK_OK;
 }
 
-/** Grow the flat path-membership arrays to hold one more entry. @return AK_OK or AK_ENOMEM. */
+/** 
+ * Grow the flat path-membership arrays to hold one more entry
+ * @return AK_OK or AK_ENOMEM
+ */
 static int reserve_pathseg(gfa_t *g) {
     if ((int64_t)g->n_path_seg < g->m_path_seg) return AK_OK;
     int32_t m = g->m_path_seg ? g->m_path_seg << 1 : 4096;
@@ -71,12 +81,12 @@ static int reserve_pathseg(gfa_t *g) {
 // line handlers
 
 /**
- * Split "TAG:TYPE:VALUE" in place; VALUE keeps any embedded ':'.
- * @param token Token to split (modified in place).
- * @param tag Set to the TAG part.
- * @param type Set to the TYPE part.
- * @param value Set to the VALUE part.
- * @return 1 on success, 0 if the token is not a TAG:TYPE:VALUE triple.
+ * Split "TAG:TYPE:VALUE" in place; VALUE keeps any embedded ':'
+ * @param token Token to split (modified in place)
+ * @param tag Set to the TAG part
+ * @param type Set to the TYPE part
+ * @param value Set to the VALUE part
+ * @return 1 on success, 0 if the token is not a TAG:TYPE:VALUE triple
  */
 static int split_tag(char *token, char **tag, char **type, char **value) {
     char *c1 = strchr(token, ':');
@@ -92,11 +102,11 @@ static int split_tag(char *token, char **tag, char **type, char **value) {
 }
 
 /**
- * Parse one S (segment) line into a new node and index it.
- * @param g Graph being built.
- * @param line The S line (modified in place by tokenizing).
- * @param h The id -> index map.
- * @return AK_OK, AK_EFORMAT, or AK_ENOMEM.
+ * Parse one S (segment) line into a new node and index it
+ * @param g Graph being built
+ * @param line The S line (modified in place by tokenizing)
+ * @param h The id -> index map
+ * @return AK_OK, AK_EFORMAT, or AK_ENOMEM
  */
 static int handle_S(gfa_t *g, char *line, idxmap_t *h) {
     if (reserve_seg(g) != AK_OK) return AK_ENOMEM;
@@ -148,12 +158,12 @@ static int handle_S(gfa_t *g, char *line, idxmap_t *h) {
 }
 
 /**
- * Parse one L (link) line: optional validation, then record the edge.
- * @param g Graph being built.
- * @param line The L line.
- * @param h The id -> index map.
- * @param flags Active GFA_* flags (GFA_LINKS / GFA_VALIDATE).
- * @return AK_OK, AK_EFORMAT, or AK_ENOMEM.
+ * Parse one L (link) line: optional validation, then record the edge
+ * @param g Graph being built
+ * @param line The L line
+ * @param h The id -> index map
+ * @param flags Active GFA_* flags (GFA_LINKS / GFA_VALIDATE)
+ * @return AK_OK, AK_EFORMAT, or AK_ENOMEM
  */
 static int handle_L(gfa_t *g, char *line, idxmap_t *h, int flags) {
     uint64_t id1, id2;
@@ -203,12 +213,12 @@ static int handle_L(gfa_t *g, char *line, idxmap_t *h, int flags) {
 /**
  * Parse one P (path) line: record the ordered, oriented segment membership and
  * lay out reference coordinates. Without GFA_PATHS only n_path_seg (the
- * occurrence count) is maintained.
- * @param g Graph being built.
- * @param line The P line.
- * @param h The id -> index map.
- * @param flags Active GFA_* flags.
- * @return AK_OK, AK_EFORMAT, or AK_ENOMEM.
+ * occurrence count) is maintained
+ * @param g Graph being built
+ * @param line The P line
+ * @param h The id -> index map
+ * @param flags Active GFA_* flags
+ * @return AK_OK, AK_EFORMAT, or AK_ENOMEM
  */
 static int handle_P(gfa_t *g, char *line, idxmap_t *h, int flags) {
     char *save;
@@ -286,9 +296,9 @@ static int handle_P(gfa_t *g, char *line, idxmap_t *h, int flags) {
 // CSR out-adjacency
 
 /**
- * Build the out-adjacency (arc_off / arc) from the link array.
- * @param g Graph whose links have been read.
- * @return AK_OK or AK_ENOMEM.
+ * Build the out-adjacency (arc_off / arc) from the link array
+ * @param g Graph whose links have been read
+ * @return AK_OK or AK_ENOMEM
  */
 static int build_arcs(gfa_t *g) {
     if (g->n_seg <= 0 || g->n_link <= 0) return AK_OK;
@@ -315,7 +325,7 @@ static int build_arcs(gfa_t *g) {
 
 // public API
 
-/** Read an (r)GFA into a graph; see akhal/gfa.h. */
+// read an (r)GFA into a graph; see akhal/gfa.h
 gfa_t *gfa_read(const char *fn, int flags) {
     ak_file *f = ak_open(fn);
     if (!f) return NULL;
@@ -372,7 +382,7 @@ gfa_t *gfa_read(const char *fn, int flags) {
     return g;
 }
 
-/** Free a graph and everything it owns; see akhal/gfa.h. */
+// free a graph and everything it owns; see akhal/gfa.h
 void gfa_destroy(gfa_t *g) {
     if (!g) return;
     for (int32_t i = 0; i < g->n_seg; i++) free(g->seg[i].seq);
@@ -392,20 +402,20 @@ void gfa_destroy(gfa_t *g) {
     free(g);
 }
 
-/** Segment index for an id, or -1 if absent. */
+// segment index for an id, or -1 if absent
 int32_t gfa_idx(const gfa_t *g, uint64_t id) {
     idxmap_t *h = (idxmap_t *)g->idx;
     khint_t k = idxmap_get(h, id);
     return (k < kh_end(h)) ? (int32_t)kh_val(h, k) : -1;
 }
 
-/** Segment for an id, or NULL if absent. */
+// segment for an id, or NULL if absent
 gfa_seg_t *gfa_get(const gfa_t *g, uint64_t id) {
     int32_t i = gfa_idx(g, id);
     return (i < 0) ? NULL : &g->seg[i];
 }
 
-/** Out-edges of segment v; see akhal/gfa.h. */
+// out-edges of segment v; see akhal/gfa.h
 int gfa_arcs(const gfa_t *g, int32_t v, const uint32_t **arcs) {
     if (!g->arc_off || v < 0 || v >= g->n_seg) { *arcs = NULL; return 0; }
     int32_t beg = g->arc_off[v], end = g->arc_off[v + 1];
@@ -413,7 +423,9 @@ int gfa_arcs(const gfa_t *g, int32_t v, const uint32_t **arcs) {
     return (int)(end - beg);
 }
 
-/** @return 1 if a link v -> w exists, else 0. */
+/**
+ * @return 1 if a link v -> w exists, else 0
+ */
 int gfa_has_arc(const gfa_t *g, int32_t v, int32_t w) {
     const uint32_t *a;
     int n = gfa_arcs(g, v, &a);
@@ -422,7 +434,7 @@ int gfa_has_arc(const gfa_t *g, int32_t v, int32_t w) {
     return 0;
 }
 
-/** Ordered segments of path k; see akhal/gfa.h. */
+// ordered segments of path k; see akhal/gfa.h
 int gfa_path_segs(const gfa_t *g, int32_t k, const uint32_t **segs) {
     if (!g->path_off || k < 0 || k >= g->n_path) { *segs = NULL; return 0; }
     int32_t beg = g->path_off[k], end = g->path_off[k + 1];
@@ -444,7 +456,7 @@ static int seq_lt(const gfa_t *g, int32_t a, int32_t b) {
     return strcmp(sa, sb) < 0;
 }
 
-/** Sift the last heap element up to restore the min-heap order. */
+// sift the last heap element up to restore the min-heap order
 static void heap_push(const gfa_t *g, int32_t *heap, int *hn, int32_t v) {
     int i = (*hn)++;
     heap[i] = v;
@@ -456,7 +468,7 @@ static void heap_push(const gfa_t *g, int32_t *heap, int *hn, int32_t v) {
     }
 }
 
-/** Pop and return the alphabetically-smallest node from the heap. */
+// pop and return the alphabetically-smallest node from the heap
 static int32_t heap_pop(const gfa_t *g, int32_t *heap, int *hn) {
     int32_t top = heap[0];
     int n = --(*hn);
@@ -473,7 +485,7 @@ static int32_t heap_pop(const gfa_t *g, int32_t *heap, int *hn) {
     return top;
 }
 
-/** Topological order with alphabetical id tie-break; see akhal/gfa.h. */
+// topological order with alphabetical id tie-break; see akhal/gfa.h
 int gfa_toposort(const gfa_t *g, int32_t *order) {
     int32_t n = g->n_seg;
     if (n == 0) return 0;
@@ -506,7 +518,7 @@ int gfa_toposort(const gfa_t *g, int32_t *order) {
 
     int32_t acyclic = placed;
     if (placed < n) {
-        // Remaining nodes are inside cycles; append them alphabetically.
+        // remaining nodes are inside cycles; append them alphabetically
         for (int32_t i = 0; i < n; i++)
             if (indeg[i] > 0) heap_push(g, heap, &hn, i);
         while (hn > 0) order[placed++] = heap_pop(g, heap, &hn);

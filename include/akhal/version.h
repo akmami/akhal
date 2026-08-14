@@ -8,4 +8,4 @@
 
 #define AKHAL_VERSION_STR "0.2.0"
 
-#endif  // AKHAL_VERSION_H
+#endif

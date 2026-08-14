@@ -2,10 +2,10 @@
 #include "akhal/error.h"
 
 /**
- * Grow a kstring so it holds at least `size` bytes, doubling capacity.
- * @param ks Buffer to grow.
- * @param size Minimum capacity required.
- * @return AK_OK on success, AK_ENOMEM on allocation failure.
+ * Grow a kstring so it holds at least `size` bytes, doubling capacity
+ * @param ks Buffer to grow
+ * @param size Minimum capacity required
+ * @return AK_OK on success, AK_ENOMEM on allocation failure
  */
 int ks_resize(kstring_t *ks, size_t size) {
     if (ks->m >= size) return AK_OK;

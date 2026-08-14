@@ -5,7 +5,7 @@
 
 static int g_log_level = AK_LOG_INFO;
 
-/** Map an AK_E* code to a static human-readable string. */
+// map an AK_E* code to a static human-readable string
 const char *ak_strerror(int code) {
     switch (code) {
         case AK_OK:      return "success";
@@ -14,25 +14,28 @@ const char *ak_strerror(int code) {
         case AK_EFORMAT: return "malformed input";
         case AK_EINVAL:  return "invalid argument";
         case AK_EOF:     return "end of input";
+        case AK_EIO:     return "read/write failure";
         default:         return "unknown error";
     }
 }
 
-/** Set the global verbosity threshold. */
+// set the global verbosity threshold
 void ak_log_set_level(int level) {
     g_log_level = level;
 }
 
-/** @return The current verbosity threshold. */
+/**
+ * @return The current verbosity threshold
+ */
 int  ak_log_level(void) { 
     return g_log_level;
 }
 
 /**
- * Emit a diagnostic to stderr, gated by the verbosity threshold.
- * @param level Severity (AK_LOG_*).
- * @param ctx Optional subsystem tag; may be NULL.
- * @param fmt printf-style format followed by its arguments.
+ * Emit a diagnostic to stderr, gated by the verbosity threshold
+ * @param level Severity (AK_LOG_*)
+ * @param ctx Optional subsystem tag; may be NULL
+ * @param fmt printf-style format followed by its arguments
  */
 void ak_log(int level, const char *ctx, const char *fmt, ...) {
     static const char *tag[] = { "ERROR", "WARN", "INFO", "DEBUG" };

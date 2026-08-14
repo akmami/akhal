@@ -31,4 +31,4 @@
 #include "akhal/sam.h"
 #include "akhal/vg.h"
 
-#endif  // AKHAL_H
+#endif

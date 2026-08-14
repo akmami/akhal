@@ -1,14 +1,3 @@
-/**
- * `akhal parse <r/GFA>` - validate a graph.
- *
- * gfa_read(GFA_VALIDATE) already checks link overlap consistency and
- * referential integrity while reading (issues are logged). This command adds
- * the structural checks that need the assembled model:
- *   - every pair of consecutive segments in a path is joined by a link;
- *   - for rGFA, the number of rank-0 (SR:i:0) segments matches the number of
- *     segment occurrences laid out on paths.
- */
-
 #include "akhal/gfa.h"
 #include "akhal/util.h"
 #include "akhal/error.h"
@@ -16,7 +5,7 @@
 
 #include <stdio.h>
 
-/** `parse` entry point; see cli.h. */
+// `parse` entry point; see cli.h
 int cmd_parse(int argc, char **argv) {
     if (argc < 3) {
         ak_log(AK_LOG_ERROR, NULL, "usage: akhal parse <r/GFA>");
@@ -34,7 +23,7 @@ int cmd_parse(int argc, char **argv) {
 
     long issues = 0;
 
-    // Consecutive path segments must be connected by a link.
+    // consecutive path segments must be connected by a link
     for (int32_t k = 0; k < gfa_n_path(g); k++) {
         const uint32_t *segs;
         int n = gfa_path_segs(g, k, &segs);
@@ -48,7 +37,7 @@ int cmd_parse(int argc, char **argv) {
         }
     }
 
-    // rGFA: rank-0 segment count vs path occurrence count.
+    // rGFA: rank-0 segment count vs path occurrence count
     if (is_rgfa) {
         uint64_t n_ref = 0;
         for (int32_t i = 0; i < gfa_n_seg(g); i++)

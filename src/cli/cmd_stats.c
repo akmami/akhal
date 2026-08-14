@@ -1,11 +1,3 @@
-/**
- * `akhal stats` - summary statistics for an (r)GFA graph.
- *
- * The reference example of a command built on libakhal: it does no parsing of
- * its own. It asks gfa_read() for the graph (with links + paths), then reads
- * everything it needs through the public accessors.
- */
-
 #include "akhal/gfa.h"
 #include "akhal/util.h"
 #include "akhal/error.h"
@@ -16,11 +8,11 @@
 #include <limits.h>
 
 /**
- * Min and max degree over segments with non-zero degree.
- * @param g Graph to scan.
- * @param in Non-zero to inspect in-degree, zero for out-degree.
- * @param min_out Set to the minimum degree (-1 if the graph is empty).
- * @param max_out Set to the maximum degree (-1 if the graph is empty).
+ * Min and max degree over segments with non-zero degree
+ * @param g Graph to scan
+ * @param in Non-zero to inspect in-degree, zero for out-degree
+ * @param min_out Set to the minimum degree (-1 if the graph is empty)
+ * @param max_out Set to the maximum degree (-1 if the graph is empty)
  */
 static void degree_range(const gfa_t *g, int in, int *min_out, int *max_out) {
     if (gfa_n_seg(g) == 0) { *min_out = -1; *max_out = -1; return; }
@@ -37,7 +29,7 @@ static void degree_range(const gfa_t *g, int in, int *min_out, int *max_out) {
     *max_out = mx;
 }
 
-/** `stats` entry point; see cli.h. */
+// `stats` entry point; see cli.h
 int cmd_stats(int argc, char **argv) {
     if (argc < 3) {
         ak_log(AK_LOG_ERROR, NULL, "usage: akhal stats <r/GFA>");
