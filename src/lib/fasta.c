@@ -11,7 +11,10 @@
 // name -> record index
 KHASHL_MAP_INIT(KH_LOCAL, fmap_t, fmap, const char *, int64_t, kh_hash_str, kh_eq_str)
 
-// ensure room for one more record. @return AK_OK or AK_ENOMEM
+/** 
+ * @brief Ensure room for one more record
+ * @return AK_OK or AK_ENOMEM
+ */
 static int reserve_rec(fasta_t *fa) {
     if (fa->n < fa->m) return AK_OK;
     int64_t m = fa->m ? fa->m << 1 : 256;
@@ -81,7 +84,9 @@ static int flush_record(fasta_t *fa, fmap_t *h, char *name, kstring_t *seq) {
     return AK_OK;
 }
 
-// load every record from a FASTA file; see akhal/fasta.h
+/** 
+ * @brief Load every record from a FASTA file; see akhal/fasta.h
+ */
 fasta_t *fasta_read(const char *fn) {
     ak_file *f = ak_open(fn);
     if (!f) return NULL;

@@ -43,7 +43,10 @@ static void usage(FILE *out) {
     fprintf(out, "\nRun `akhal <command>` with no arguments for command-specific help.\n");
 }
 
-// dispatch argv[1] to a subcommand. @return the command's exit status
+/** 
+ * @brief Dispatch argv[1] to a subcommand
+ * @return the command's exit status
+ */
 int main(int argc, char **argv) {
     if (argc < 2) {
         usage(stderr);

@@ -10,8 +10,7 @@ static void write_gfa(FILE *out, const vg_graph_t *g) {
     fprintf(out, "H\tVN:Z:1.0\n");
 
     for (int32_t i = 0; i < g->n_node; i++)
-        fprintf(out, "S\t%lld\t%s\n",
-                (long long)g->node[i].id, g->node[i].seq ? g->node[i].seq : "*");
+        fprintf(out, "S\t%lld\t%s\n", (long long)g->node[i].id, g->node[i].seq ? g->node[i].seq : "*");
 
     for (int32_t i = 0; i < g->n_edge; i++) {
         const vg_edge_t *e = &g->edge[i];
@@ -25,8 +24,7 @@ static void write_gfa(FILE *out, const vg_graph_t *g) {
         const vg_path_t *p = &g->path[i];
         fprintf(out, "P\t%s\t", p->name ? p->name : "");
         for (int32_t s = 0; s < p->n_step; s++)
-            fprintf(out, "%s%lld%c", s ? "," : "",
-                    (long long)p->step[s].node_id, p->step[s].is_reverse ? '-' : '+');
+            fprintf(out, "%s%lld%c", s ? "," : "", (long long)p->step[s].node_id, p->step[s].is_reverse ? '-' : '+');
         fprintf(out, "\t*\n");
     }
 }
@@ -60,8 +58,7 @@ int cmd_vg2gfa(int argc, char **argv) {
 
     write_gfa(out, g);
 
-    ak_log(AK_LOG_INFO, NULL, "converted %s (%d nodes, %d edges, %d paths)",
-           in, g->n_node, g->n_edge, g->n_path);
+    ak_log(AK_LOG_INFO, NULL, "converted %s (%d nodes, %d edges, %d paths)", in, g->n_node, g->n_edge, g->n_path);
 
     vg_graph_destroy(g);
     if (out_fn) fclose(out);

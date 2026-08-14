@@ -163,13 +163,18 @@ static void convert_one(const gfa_t *g, const gaf_rec_t *rec, const char *read,
     free(read_owned);
 }
 
-// print the gaf2sam usage line. @return 1 (a convenient failure code)
+/** 
+ * @brief Print the gaf2sam usage line
+ * @return 1 (a convenient failure code)
+ */
 static int usage(void) {
     ak_log(AK_LOG_ERROR, NULL, "usage: akhal gaf2sam <r/GFA> <GAF> <reads.fa> <out.sam> [--simple]");
     return 1;
 }
 
-// `gaf2sam` entry point; see cli.h
+/** 
+ * @brief `gaf2sam` entry point; see cli.h
+ */
 int cmd_gaf2sam(int argc, char **argv) {
     if (argc < 6) return usage();
 
