@@ -10,105 +10,97 @@
 // stops a non-vg input from triggering a huge allocation off a garbage length.
 #define VG_MAX_MSG (1u << 30)
 
-// growable graph 
+// growable graph
 
-/** 
- * Ensure room for one more node
- * @return AK_OK or AK_ENOMEM
- */
 static int reserve_node(vg_graph_t *g) {
     if (g->n_node < g->m_node) return AK_OK;
     int32_t m = g->m_node ? g->m_node << 1 : 4096;
     vg_node_t *p = (vg_node_t *)realloc(g->node, (size_t)m * sizeof(*p));
     if (!p) return AK_ENOMEM;
-    g->node = p; g->m_node = m;
+    g->node = p;
+    g->m_node = m;
     return AK_OK;
 }
 
-/**
- * Ensure room for one more edge
- * @return AK_OK or AK_ENOMEM
- */
 static int reserve_edge(vg_graph_t *g) {
     if (g->n_edge < g->m_edge) return AK_OK;
     int32_t m = g->m_edge ? g->m_edge << 1 : 4096;
     vg_edge_t *p = (vg_edge_t *)realloc(g->edge, (size_t)m * sizeof(*p));
     if (!p) return AK_ENOMEM;
-    g->edge = p; g->m_edge = m;
+    g->edge = p;
+    g->m_edge = m;
     return AK_OK;
 }
 
-/**
- * Ensure room for one more path
- * @return AK_OK or AK_ENOMEM
- */
 static int reserve_path(vg_graph_t *g) {
     if (g->n_path < g->m_path) return AK_OK;
     int32_t m = g->m_path ? g->m_path << 1 : 64;
     vg_path_t *p = (vg_path_t *)realloc(g->path, (size_t)m * sizeof(*p));
     if (!p) return AK_ENOMEM;
-    g->path = p; g->m_path = m;
+    g->path = p;
+    g->m_path = m;
     return AK_OK;
 }
 
-/** 
- * Ensure room for one more step in a path
- * @return AK_OK or AK_ENOMEM
- */
 static int reserve_step(vg_path_t *pt) {
     if (pt->n_step < pt->m_step) return AK_OK;
     int32_t m = pt->m_step ? pt->m_step << 1 : 16;
     vg_step_t *p = (vg_step_t *)realloc(pt->step, (size_t)m * sizeof(*p));
     if (!p) return AK_ENOMEM;
-    pt->step = p; pt->m_step = m;
+    pt->step = p;
+    pt->m_step = m;
     return AK_OK;
 }
 
 // protobuf decoding over an in-memory blob
 
-typedef struct { 
-    const unsigned char *p, *end; 
+typedef struct {
+    const unsigned char *p, *end;
 } pbuf;
 
-/** 
- * Decode a base-128 varint
- * @return 1 on success, 0 if truncated/overlong
- */
+// base-128 varint: 7 payload bits per byte, high bit means another byte follows
 static int pb_varint(pbuf *b, uint64_t *out) {
-    uint64_t v = 0; int shift = 0;
+    uint64_t v = 0;
+    int shift = 0;
     while (b->p < b->end) {
         unsigned char c = *b->p++;
         v |= (uint64_t)(c & 0x7f) << shift;
-        if (!(c & 0x80)) { *out = v; return 1; }
+        if (!(c & 0x80)) {
+            *out = v;
+            return 1;
+        }
         shift += 7;
         if (shift >= 64) return 0;
     }
     return 0;
 }
 
-/** 
- * Read a length-delimited field's span and advance past it
- * @return 1 or 0
- * */
+// wire type 2: a varint byte count followed by that many bytes
 static int pb_bytes(pbuf *b, const unsigned char **start, uint64_t *len) {
     uint64_t l;
     if (!pb_varint(b, &l)) return 0;
     if ((uint64_t)(b->end - b->p) < l) return 0;
-    *start = b->p; *len = l; b->p += l;
+    *start = b->p;
+    *len = l;
+    b->p += l;
     return 1;
 }
 
-/**
- * Skip one field of the given wire type
- * @return 1 on success, 0 on error
- */
+// wire types: 0 varint, 1 fixed64, 2 length-delimited, 5 fixed32
 static int pb_skip(pbuf *b, int wire) {
-    uint64_t tmp; const unsigned char *s;
+    uint64_t tmp;
+    const unsigned char *s;
     switch (wire) {
         case 0: return pb_varint(b, &tmp);
-        case 1: if (b->end - b->p < 8) return 0; b->p += 8; return 1;
+        case 1:
+            if (b->end - b->p < 8) return 0;
+            b->p += 8;
+            return 1;
         case 2: return pb_bytes(b, &s, &tmp);
-        case 5: if (b->end - b->p < 4) return 0; b->p += 4; return 1;
+        case 5:
+            if (b->end - b->p < 4) return 0;
+            b->p += 4;
+            return 1;
         default: return 0;   // start/end group (3,4) unused; anything else is bad
     }
 }
@@ -120,22 +112,28 @@ static void parse_position(const unsigned char *buf, uint64_t len, int64_t *node
     while (b.p < b.end) {
         if (!pb_varint(&b, &tag)) return;
         int field = (int)(tag >> 3), wire = (int)(tag & 7);
-        if (field == 1 && wire == 0) { if (!pb_varint(&b, &v)) return; *node_id = (int64_t)v; }
-        else if (field == 4 && wire == 0) { if (!pb_varint(&b, &v)) return; *is_rev = (v != 0); }
-        else if (!pb_skip(&b, wire)) return;
+        if (field == 1 && wire == 0) {
+            if (!pb_varint(&b, &v)) return;
+            *node_id = (int64_t)v;
+        } else if (field == 4 && wire == 0) {
+            if (!pb_varint(&b, &v)) return;
+            *is_rev = (v != 0);
+        } else if (!pb_skip(&b, wire)) return;
     }
 }
 
 // Mapping { Position position = 1; ... } -> append one step to the path
 static int parse_mapping(vg_path_t *pt, const unsigned char *buf, uint64_t len) {
     pbuf b = { buf, buf + len };
-    int64_t node_id = 0; int is_rev = 0, have_pos = 0;
+    int64_t node_id = 0;
+    int is_rev = 0, have_pos = 0;
     uint64_t tag;
     while (b.p < b.end) {
         if (!pb_varint(&b, &tag)) break;
         int field = (int)(tag >> 3), wire = (int)(tag & 7);
         if (field == 1 && wire == 2) {
-            const unsigned char *s; uint64_t l;
+            const unsigned char *s;
+            uint64_t l;
             if (!pb_bytes(&b, &s, &l)) break;
             parse_position(s, l, &node_id, &is_rev);
             have_pos = 1;
@@ -162,17 +160,26 @@ static int parse_path(vg_graph_t *g, const unsigned char *buf, uint64_t len) {
         if (!pb_varint(&b, &tag)) break;
         int field = (int)(tag >> 3), wire = (int)(tag & 7);
         if (field == 1 && wire == 2) {
-            const unsigned char *s; uint64_t l;
+            const unsigned char *s;
+            uint64_t l;
             if (!pb_bytes(&b, &s, &l)) break;
             free(pt->name);
             pt->name = (char *)malloc(l + 1);
-            if (!pt->name) { free(pt->step); return AK_ENOMEM; }
+            if (!pt->name) {
+                free(pt->step);
+                return AK_ENOMEM;
+            }
             memcpy(pt->name, s, l);
             pt->name[l] = '\0';
         } else if (field == 2 && wire == 2) {
-            const unsigned char *s; uint64_t l;
+            const unsigned char *s;
+            uint64_t l;
             if (!pb_bytes(&b, &s, &l)) break;
-            if (parse_mapping(pt, s, l) == AK_ENOMEM) { free(pt->name); free(pt->step); return AK_ENOMEM; }
+            if (parse_mapping(pt, s, l) == AK_ENOMEM) {
+                free(pt->name);
+                free(pt->step);
+                return AK_ENOMEM;
+            }
         } else if (field == 3 && wire == 0) {
             if (!pb_varint(&b, &v)) break;
             pt->is_circular = (v != 0);
@@ -180,7 +187,10 @@ static int parse_path(vg_graph_t *g, const unsigned char *buf, uint64_t len) {
     }
     if (!pt->name) {
         pt->name = (char *)malloc(1);
-        if (!pt->name) { free(pt->step); return AK_ENOMEM; }
+        if (!pt->name) {
+            free(pt->step);
+            return AK_ENOMEM;
+        }
         pt->name[0] = '\0';
     }
     g->n_path++;
@@ -199,7 +209,8 @@ static int parse_node(vg_graph_t *g, const unsigned char *buf, uint64_t len) {
         if (!pb_varint(&b, &tag)) break;
         int field = (int)(tag >> 3), wire = (int)(tag & 7);
         if (field == 1 && wire == 2) {
-            const unsigned char *s; uint64_t l;
+            const unsigned char *s;
+            uint64_t l;
             if (!pb_bytes(&b, &s, &l)) break;
             free(n->seq);
             n->seq = (char *)malloc(l + 1);
@@ -251,12 +262,17 @@ static int parse_graph_blob(vg_graph_t *g, const unsigned char *buf, uint64_t le
         if (!pb_varint(&b, &tag)) return AK_OK;   // malformed / tag blob: stop leniently
         int field = (int)(tag >> 3), wire = (int)(tag & 7);
         if (wire == 2) {
-            const unsigned char *s; uint64_t l;
+            const unsigned char *s;
+            uint64_t l;
             if (!pb_bytes(&b, &s, &l)) return AK_OK;
             int rc = AK_OK;
-            if (field == 1)      rc = parse_node(g, s, l);
-            else if (field == 2) rc = parse_edge(g, s, l);
-            else if (field == 3) rc = parse_path(g, s, l);
+            if (field == 1) {
+                rc = parse_node(g, s, l);
+            } else if (field == 2) {
+                rc = parse_edge(g, s, l);
+            } else if (field == 3) {
+                rc = parse_path(g, s, l);
+            }
             if (rc == AK_ENOMEM) return AK_ENOMEM;
         } else if (!pb_skip(&b, wire)) {
             return AK_OK;   // invalid wire type (e.g. a type-tag message): skip blob
@@ -273,43 +289,43 @@ typedef struct {
     int           len, pos;
 } vgin;
 
-/**
- * Refill the input buffer
- * @return bytes read (>0), 0 at EOF, <0 on error
- */
 static int vin_fill(vgin *r) {
     r->len = gzread(r->gz, r->buf, (unsigned)sizeof(r->buf));
     r->pos = 0;
     return r->len;
 }
 
-/**
- * Read exactly n bytes
- * @return 1 on success, 0 if the stream ended short
- */
+// all-or-nothing: 0 if the stream ends before n bytes are available
 static int vin_read(vgin *r, unsigned char *dst, uint64_t n) {
     while (n) {
-        if (r->pos >= r->len) { if (vin_fill(r) <= 0) return 0; }
+        if (r->pos >= r->len) {
+            if (vin_fill(r) <= 0) return 0;
+        }
         uint64_t avail = (uint64_t)(r->len - r->pos);
         uint64_t take = n < avail ? n : avail;
         memcpy(dst, r->buf + r->pos, take);
-        r->pos += (int)take; dst += take; n -= take;
+        r->pos += (int)take;
+        dst += take;
+        n -= take;
     }
     return 1;
 }
 
-/**
- * Read a varint from the compressed stream
- * @return 1 on success, 0 at a clean end-of-stream boundary, -1 on a truncated or overlong varint
- */
+// 0 only at a clean message boundary, -1 on a truncated or overlong varint
 static int vin_varint(vgin *r, uint64_t *out) {
-    uint64_t v = 0; int shift = 0, first = 1;
+    uint64_t v = 0;
+    int shift = 0, first = 1;
     for (;;) {
-        if (r->pos >= r->len) { if (vin_fill(r) <= 0) return first ? 0 : -1; }
+        if (r->pos >= r->len) {
+            if (vin_fill(r) <= 0) return first ? 0 : -1;
+        }
         unsigned char c = r->buf[r->pos++];
         first = 0;
         v |= (uint64_t)(c & 0x7f) << shift;
-        if (!(c & 0x80)) { *out = v; return 1; }
+        if (!(c & 0x80)) {
+            *out = v;
+            return 1;
+        }
         shift += 7;
         if (shift >= 64) return -1;
     }
@@ -320,13 +336,22 @@ static int vin_varint(vgin *r, uint64_t *out) {
 // read a .vg file into an accumulated graph; see akhal/vg.h
 vg_graph_t *vg_read(const char *fn) {
     gzFile gz = gzopen(fn, "rb");
-    if (!gz) { ak_log(AK_LOG_ERROR, "vg", "could not open %s", fn); return NULL; }
+    if (!gz) {
+        ak_log(AK_LOG_ERROR, "vg", "could not open %s", fn);
+        return NULL;
+    }
 
     vg_graph_t *g = (vg_graph_t *)calloc(1, sizeof(vg_graph_t));
-    if (!g) { gzclose(gz); ak_log(AK_LOG_ERROR, "vg", "out of memory"); return NULL; }
+    if (!g) {
+        gzclose(gz);
+        ak_log(AK_LOG_ERROR, "vg", "out of memory");
+        return NULL;
+    }
 
     vgin r;
-    r.gz = gz; r.len = 0; r.pos = 0;
+    r.gz = gz;
+    r.len = 0;
+    r.pos = 0;
 
     unsigned char *msg = NULL;
     uint64_t msgcap = 0;
@@ -335,24 +360,48 @@ vg_graph_t *vg_read(const char *fn) {
     for (;;) {
         uint64_t count;
         int v = vin_varint(&r, &count);
-        if (v == 0) break;                        // clean EOF at a group boundary
-        if (v < 0) { ak_log(AK_LOG_WARN, "vg", "truncated group header"); break; }
+        if (v == 0) break;   // clean EOF at a group boundary
+        if (v < 0) {
+            ak_log(AK_LOG_WARN, "vg", "truncated group header");
+            break;
+        }
 
         int stop = 0;
         for (uint64_t i = 0; i < count && !stop; i++) {
             uint64_t len;
-            if (vin_varint(&r, &len) <= 0) { ak_log(AK_LOG_WARN, "vg", "truncated message length"); stop = 1; break; }
-            if (len > VG_MAX_MSG) { ak_log(AK_LOG_WARN, "vg", "implausible message size; stopping"); stop = 1; break; }
+            if (vin_varint(&r, &len) <= 0) {
+                ak_log(AK_LOG_WARN, "vg", "truncated message length");
+                stop = 1;
+                break;
+            }
+            if (len > VG_MAX_MSG) {
+                ak_log(AK_LOG_WARN, "vg", "implausible message size; stopping");
+                stop = 1;
+                break;
+            }
 
             if (len > msgcap) {
                 uint64_t nc = msgcap ? msgcap : 4096;
                 while (nc < len) nc <<= 1;
                 unsigned char *tmp = (unsigned char *)realloc(msg, nc);
-                if (!tmp) { oom = 1; stop = 1; break; }
-                msg = tmp; msgcap = nc;
+                if (!tmp) {
+                    oom = 1;
+                    stop = 1;
+                    break;
+                }
+                msg = tmp;
+                msgcap = nc;
             }
-            if (!vin_read(&r, msg, len)) { ak_log(AK_LOG_WARN, "vg", "truncated message body"); stop = 1; break; }
-            if (parse_graph_blob(g, msg, len) == AK_ENOMEM) { oom = 1; stop = 1; break; }
+            if (!vin_read(&r, msg, len)) {
+                ak_log(AK_LOG_WARN, "vg", "truncated message body");
+                stop = 1;
+                break;
+            }
+            if (parse_graph_blob(g, msg, len) == AK_ENOMEM) {
+                oom = 1;
+                stop = 1;
+                break;
+            }
         }
         if (stop) break;
     }
@@ -360,7 +409,11 @@ vg_graph_t *vg_read(const char *fn) {
     free(msg);
     gzclose(gz);
 
-    if (oom) { vg_graph_destroy(g); ak_log(AK_LOG_ERROR, "vg", "out of memory"); return NULL; }
+    if (oom) {
+        vg_graph_destroy(g);
+        ak_log(AK_LOG_ERROR, "vg", "out of memory");
+        return NULL;
+    }
     return g;
 }
 

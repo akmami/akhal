@@ -17,8 +17,9 @@ typedef struct {
 static const command_t commands[] = {
     { "stats",   cmd_stats,   "graph", "summary statistics for an r/GFA graph"      },
     { "parse",   cmd_parse,   "graph", "validate an r/GFA graph"                    },
-    { "extract", cmd_extract, "graph", "extract the reference FASTA from an r/GFA"  },
+    { "extract", cmd_extract, "graph", "extract FASTA, merged paths, or a VCF"      },
     { "sort",    cmd_sort,    "graph", "topologically sort and renumber a graph"    },
+    { "rank",    cmd_rank,    "graph", "rewrite SR ranks against the backbone"      },
     { "vg2gfa",  cmd_vg2gfa,  "graph", "convert vg (protobuf .vg) to GFA"           },
     { "gaf2sam", cmd_gaf2sam, "align", "convert GAF alignments to SAM"              },
     { "sampoke", cmd_sampoke, "align", "validate SAM CIGAR/positions against a ref" },
@@ -43,10 +44,7 @@ static void usage(FILE *out) {
     fprintf(out, "\nRun `akhal <command>` with no arguments for command-specific help.\n");
 }
 
-/** 
- * @brief Dispatch argv[1] to a subcommand
- * @return the command's exit status
- */
+// dispatch argv[1] to a subcommand
 int main(int argc, char **argv) {
     if (argc < 2) {
         usage(stderr);
@@ -63,8 +61,7 @@ int main(int argc, char **argv) {
     }
 
     for (const command_t *c = commands; c->name; c++) {
-        if (!strcmp(argv[1], c->name))
-            return c->fn(argc, argv);
+        if (!strcmp(argv[1], c->name)) return c->fn(argc, argv);
     }
 
     ak_log(AK_LOG_ERROR, NULL, "unknown command: %s", argv[1]);

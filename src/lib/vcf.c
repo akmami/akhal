@@ -40,14 +40,12 @@ vcf_reader_t *vcf_open(const char *fn) {
     return r;
 }
 
-/**
- * strdup that treats a lone "." as absent
- * @param tok Field token
- * @param out Set to an owned copy, or NULL for "."
- * @return AK_OK or AK_ENOMEM
- */
+// strdup, except a lone "." yields NULL rather than a copy
 static int dup_field(const char *tok, char **out) {
-    if (tok[0] == '.' && tok[1] == '\0') { *out = NULL; return AK_OK; }
+    if (tok[0] == '.' && tok[1] == '\0') {
+        *out = NULL;
+        return AK_OK;
+    }
     *out = strdup(tok);
     return *out ? AK_OK : AK_ENOMEM;
 }

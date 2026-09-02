@@ -47,18 +47,23 @@ int cmd_sort(int argc, char **argv) {
     int32_t *order = (int32_t *)malloc((size_t)(n > 0 ? n : 1) * sizeof(int32_t));
     int32_t *newid = (int32_t *)malloc((size_t)(n > 0 ? n : 1) * sizeof(int32_t));
     if (!order || !newid) {
-        free(order); free(newid); gfa_destroy(g);
+        free(order);
+        free(newid);
+        gfa_destroy(g);
         ak_log(AK_LOG_ERROR, NULL, "out of memory");
         return 1;
     }
 
     int32_t placed = gfa_toposort(g, order);
     if (placed < 0) {
-        free(order); free(newid); gfa_destroy(g);
+        free(order);
+        free(newid);
+        gfa_destroy(g);
         return 1;
     }
-    if (placed < n)
+    if (placed < n) {
         ak_log(AK_LOG_WARN, "sort", "graph is cyclic; %d node(s) in cycles appended after the acyclic prefix", n - placed);
+    }
 
     // new id (1..N) for each old segment index
     for (int32_t pos = 0; pos < n; pos++) newid[order[pos]] = pos + 1;
@@ -67,7 +72,9 @@ int cmd_sort(int argc, char **argv) {
     if (out_fn) {
         out = fopen(out_fn, "w");
         if (!out) {
-            free(order); free(newid); gfa_destroy(g);
+            free(order);
+            free(newid);
+            gfa_destroy(g);
             ak_log(AK_LOG_ERROR, NULL, "cannot open output %s", out_fn);
             return 1;
         }
@@ -79,7 +86,11 @@ int cmd_sort(int argc, char **argv) {
     for (int32_t pos = 0; pos < n; pos++) {
         gfa_seg_t *s = gfa_seg_at(g, order[pos]);
         fprintf(out, "S\t%d\t%s", pos + 1, s->seq ? s->seq : "*");
-        if (s->rank >= 0) fprintf(out, "\tSR:i:%d", s->rank);
+        // only round-trip ranks the input actually carried; ranks the reader
+        // derived for a plain GFA are not the file's own and are not emitted
+        if (g->has_sr && s->rank >= 0) {
+            fprintf(out, "\tSR:i:%d", s->rank);
+        }
         fputc('\n', out);
     }
 
@@ -88,8 +99,12 @@ int cmd_sort(int argc, char **argv) {
     if (n_link > 0) {
         lrec_t *ls = (lrec_t *)malloc((size_t)n_link * sizeof(lrec_t));
         if (!ls) {
-            if (out_fn) fclose(out);
-            free(order); free(newid); gfa_destroy(g);
+            if (out_fn) {
+                fclose(out);
+            }
+            free(order);
+            free(newid);
+            gfa_destroy(g);
             ak_log(AK_LOG_ERROR, NULL, "out of memory");
             return 1;
         }
@@ -122,7 +137,9 @@ int cmd_sort(int argc, char **argv) {
         fprintf(out, "\t*\n");
     }
 
-    if (out_fn) fclose(out);
+    if (out_fn) {
+        fclose(out);
+    }
     ak_log(AK_LOG_INFO, NULL, "sorted %s (%d nodes, %d links, %d paths)", in, n, n_link, gfa_n_path(g));
 
     free(order);

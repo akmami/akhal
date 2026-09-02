@@ -40,8 +40,11 @@ int cmd_parse(int argc, char **argv) {
     // rGFA: rank-0 segment count vs path occurrence count
     if (is_rgfa) {
         uint64_t n_ref = 0;
-        for (int32_t i = 0; i < gfa_n_seg(g); i++)
-            if (gfa_seg_at(g, i)->rank == 0) n_ref++;
+        for (int32_t i = 0; i < gfa_n_seg(g); i++) {
+            if (gfa_seg_at(g, i)->rank == 0) {
+                n_ref++;
+            }
+        }
         if (n_ref != g->n_path_seg) {
             ak_log(AK_LOG_WARN, "parse", "rank-0 segment count (%lu) != path segment count (%lu)", (unsigned long)n_ref, (unsigned long)g->n_path_seg);
             issues++;

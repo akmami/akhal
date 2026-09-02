@@ -1,6 +1,7 @@
 *.o
 *.a
-akhal
+/akhal
 lib/libakhal.a
 .vscode
 dev
+data

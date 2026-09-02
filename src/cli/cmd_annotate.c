@@ -38,7 +38,10 @@ int cmd_annotate(int argc, char **argv) {
             return 1;
         }
     }
-    if (!gfa_fn || !out_fn) { usage(); return 1; }
+    if (!gfa_fn || !out_fn) {
+        usage();
+        return 1;
+    }
     if (!ak_ends_with(gfa_fn, ".gfa") && !ak_ends_with(gfa_fn, ".rgfa")) {
         ak_log(AK_LOG_ERROR, NULL, "expected a .gfa or .rgfa file: %s", gfa_fn);
         return 1;
@@ -48,7 +51,10 @@ int cmd_annotate(int argc, char **argv) {
     if (!g) return 1;
 
     annot_t *an = annot_init();
-    if (!an) { gfa_destroy(g); return 1; }
+    if (!an) {
+        gfa_destroy(g);
+        return 1;
+    }
     int ret = 1;
 
     // backbone first; without one, VCF matching is impossible and nodes simply stay unknown
@@ -76,8 +82,11 @@ int cmd_annotate(int argc, char **argv) {
 
     int64_t n_bb = 0, n_info = 0;
     for (int64_t i = 0; i < annot_n(an); i++) {
-        if (annot_at(an, i)->kind == ANNOT_BACKBONE) n_bb++;
-        else n_info++;
+        if (annot_at(an, i)->kind == ANNOT_BACKBONE) {
+            n_bb++;
+        } else {
+            n_info++;
+        }
     }
     printf("Nodes: %ld\n", (long)gfa_n_seg(g));
     printf("Backbone: %lld\n", (long long)n_bb);

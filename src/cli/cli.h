@@ -19,9 +19,13 @@
 int cmd_stats(int argc, char **argv);
 
 /**
- * `extract` - write each path's sequence as FASTA
+ * `extract` - pull information out of a graph. The target is argv[2]:
+ * "fa" writes each path's sequence as FASTA, "path" stitches a fragmented
+ * path back together first, and "vcf" reports the graph's variations over
+ * its reference backbone
  * @param argc Argument count
- * @param argv Arguments; expects "fa", the graph path, and an output path
+ * @param argv Arguments; the target, the graph path, an output path, then any
+ *             target-specific arguments
  * @return 0 on success, non-zero on failure
  */
 int cmd_extract(int argc, char **argv);
@@ -41,6 +45,16 @@ int cmd_parse(int argc, char **argv);
  * @return 0 on success, non-zero on failure
  */
 int cmd_sort(int argc, char **argv);
+
+/**
+ * `rank` - rewrite a graph's SR ranks against its backbone, consolidating
+ * fragmented paths or replacing them with a traced reference
+ * @param argc Argument count
+ * @param argv Arguments; input .gfa, optional output .gfa, optional
+ *             --fasta/--ref
+ * @return 0 on success, non-zero on failure
+ */
+int cmd_rank(int argc, char **argv);
 
 /**
  * `vg2gfa` - convert vg's native .vg format to GFA

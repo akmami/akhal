@@ -24,28 +24,26 @@ void ak_log_set_level(int level) {
     g_log_level = level;
 }
 
-/**
- * @return The current verbosity threshold
- */
-int  ak_log_level(void) { 
+int  ak_log_level(void) {
     return g_log_level;
 }
 
-/**
- * Emit a diagnostic to stderr, gated by the verbosity threshold
- * @param level Severity (AK_LOG_*)
- * @param ctx Optional subsystem tag; may be NULL
- * @param fmt printf-style format followed by its arguments
- */
+// emit a diagnostic to stderr, gated by the verbosity threshold
 void ak_log(int level, const char *ctx, const char *fmt, ...) {
     static const char *tag[] = { "ERROR", "WARN", "INFO", "DEBUG" };
 
     if (level > g_log_level) return;
-    if (level < AK_LOG_ERROR) level = AK_LOG_ERROR;
-    if (level > AK_LOG_DEBUG) level = AK_LOG_DEBUG;
+    if (level < AK_LOG_ERROR) {
+        level = AK_LOG_ERROR;
+    }
+    if (level > AK_LOG_DEBUG) {
+        level = AK_LOG_DEBUG;
+    }
 
     fprintf(stderr, "[%s]", tag[level]);
-    if (ctx) fprintf(stderr, " (%s)", ctx);
+    if (ctx) {
+        fprintf(stderr, " (%s)", ctx);
+    }
     fputc(' ', stderr);
 
     va_list ap;

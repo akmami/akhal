@@ -50,17 +50,27 @@ int cmd_vg2gfa(int argc, char **argv) {
     FILE *out = stdout;
     if (out_fn) {
         out = fopen(out_fn, "w");
-        if (!out) { ak_log(AK_LOG_ERROR, NULL, "cannot open output %s", out_fn); return 1; }
+        if (!out) {
+            ak_log(AK_LOG_ERROR, NULL, "cannot open output %s", out_fn);
+            return 1;
+        }
     }
 
     vg_graph_t *g = vg_read(in);
-    if (!g) { if (out_fn) fclose(out); return 1; }
+    if (!g) {
+        if (out_fn) {
+            fclose(out);
+        }
+        return 1;
+    }
 
     write_gfa(out, g);
 
     ak_log(AK_LOG_INFO, NULL, "converted %s (%d nodes, %d edges, %d paths)", in, g->n_node, g->n_edge, g->n_path);
 
     vg_graph_destroy(g);
-    if (out_fn) fclose(out);
+    if (out_fn) {
+        fclose(out);
+    }
     return 0;
 }

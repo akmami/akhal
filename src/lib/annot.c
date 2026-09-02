@@ -18,10 +18,6 @@ static const char ANNOT_MAGIC[8] = "AKANNOT1";
 
 // growth helpers
 
-/**
- * Ensure room for one more record. 
- * @return AK_OK or AK_ENOMEM
- */ 
 static int reserve_rec(annot_t *a) {
     if (a->n < a->m) return AK_OK;
     int64_t m = a->m ? a->m << 1 : 1024;
@@ -32,17 +28,13 @@ static int reserve_rec(annot_t *a) {
     return AK_OK;
 }
 
-/**
- * Append a string to the shared info buffer, NUL-terminated
- * @param a Store whose buffer grows
- * @param s String to copy (may be NULL / empty)
- * @param off Set to the byte offset of the copy
- * @param len Set to the string length (excluding the NUL)
- * @return AK_OK or AK_ENOMEM
- */
 static int buf_put(annot_t *a, const char *s, uint64_t *off, uint32_t *len) {
     size_t l = s ? strlen(s) : 0;
-    if (l == 0) { *off = 0; *len = 0; return AK_OK; }
+    if (l == 0) {
+        *off = 0;
+        *len = 0;
+        return AK_OK;
+    }
     if (a->buf_l + l + 1 > a->buf_m) {
         uint64_t m = a->buf_m ? a->buf_m : 4096;
         while (m < a->buf_l + l + 1) m <<= 1;
@@ -58,19 +50,20 @@ static int buf_put(annot_t *a, const char *s, uint64_t *off, uint32_t *len) {
     return AK_OK;
 }
 
-/**
- * Find a node's record, or create an empty one
- * @param a Store to modify
- * @param id Node id
- * @param created Set to 1 if the record was just created, else 0
- * @return Record index, or a negative AK_E* code
- */
+// returns the record index, creating an empty record if the node has none yet
 static int64_t rec_upsert(annot_t *a, uint64_t id, int *created) {
     annmap_t *h = (annmap_t *)a->idx;
     int absent;
     khint_t k = annmap_put(h, id, &absent);
-    if (!absent) { *created = 0; return (int64_t)kh_val(h, k); }
-    if (reserve_rec(a) != AK_OK) { annmap_del(h, k); return AK_ENOMEM; }
+    if (!absent) {
+        *created = 0;
+        return (int64_t)kh_val(h, k);
+    }
+    if (reserve_rec(a) != AK_OK) {
+        annmap_del(h, k);
+        return AK_ENOMEM;
+    }
+
     kh_val(h, k) = (uint32_t)a->n;
     annot_rec_t *r = &a->rec[a->n];
     r->id = id;
@@ -86,7 +79,10 @@ static int64_t rec_upsert(annot_t *a, uint64_t id, int *created) {
 // allocate an empty store; see akhal/annot.h
 annot_t *annot_init(void) {
     annot_t *a = (annot_t *)calloc(1, sizeof(*a));
-    if (!a) { ak_log(AK_LOG_ERROR, "annot", "out of memory"); return NULL; }
+    if (!a) {
+        ak_log(AK_LOG_ERROR, "annot", "out of memory");
+        return NULL;
+    }
     a->idx = annmap_init();
     if (!a->idx) {
         free(a);
@@ -101,7 +97,9 @@ void annot_destroy(annot_t *a) {
     if (!a) return;
     free(a->rec);
     free(a->buf);
-    if (a->idx) annmap_destroy((annmap_t *)a->idx);
+    if (a->idx) {
+        annmap_destroy((annmap_t *)a->idx);
+    }
     free(a);
 }
 
@@ -124,7 +122,9 @@ int annot_add(annot_t *a, uint64_t id, int kind, const char *info) {
     annot_rec_t *r = &a->rec[i];
     if (created || r->len == 0) {
         if (buf_put(a, info, &r->off, &r->len) != AK_OK) return AK_ENOMEM;
-        if (created) r->kind = (uint8_t)kind;
+        if (created) {
+            r->kind = (uint8_t)kind;
+        }
         return AK_OK;
     }
     if (!info || !*info) return AK_OK;
@@ -143,12 +143,16 @@ int annot_add(annot_t *a, uint64_t id, int kind, const char *info) {
 
 // look up a node's annotation; see akhal/annot.h
 int annot_get(const annot_t *a, uint64_t id, const char **info) {
-    if (info) *info = NULL;
+    if (info) {
+        *info = NULL;
+    }
     annmap_t *h = (annmap_t *)a->idx;
     khint_t k = annmap_get(h, id);
     if (k == kh_end(h)) return ANNOT_UNKNOWN;
     const annot_rec_t *r = &a->rec[kh_val(h, k)];
-    if (info && r->len) *info = a->buf + r->off;
+    if (info && r->len) {
+        *info = a->buf + r->off;
+    }
     return r->kind;
 }
 
@@ -203,12 +207,7 @@ int32_t annot_backbone(annot_t *a, const gfa_t *g, const char *ref_path) {
     return k;
 }
 
-/**
- * Classify a variant from its prefix-stripped core alleles
- * @param rl Length of the remaining REF core
- * @param al Length of the remaining ALT core
- * @return A static type tag such as "SNP"
- */
+// classifies on the lengths left after the shared REF/ALT prefix is stripped
 static const char *variant_type(size_t rl, size_t al) {
     if (rl == 0) return "INS";
     if (al == 0) return "DEL";
@@ -217,18 +216,7 @@ static const char *variant_type(size_t rl, size_t al) {
     return "COMPLEX";
 }
 
-/**
- * Try to match an alternate allele along a non-backbone walk starting at w0.
- * The walk follows the unique non-backbone successor of each node and
- * succeeds only if the concatenated node sequences equal the allele exactly
- * @param g Graph to walk
- * @param bb Backbone membership flags, one per segment index
- * @param w0 First candidate node (a non-backbone successor of the branch)
- * @param ac Alternate allele core (prefix-stripped, not NUL-terminated)
- * @param al Length of ac
- * @param nodes Out: segment indices of the walk, at most ANNOT_MAX_WALK
- * @return Number of nodes in the matched walk, or 0 if it does not match
- */
+// walks the unique non-backbone successor chain; 0 unless it spells the allele exactly
 static int walk_alt(const gfa_t *g, const uint8_t *bb, uint32_t w0, const char *ac, size_t al, uint32_t *nodes) {
     size_t pos = 0;
     int nn = 0;
@@ -276,8 +264,11 @@ int64_t annot_build_vcf(annot_t *a, const gfa_t *g, int32_t ref_path, const char
     annmap_t *cmap = annmap_init();
     uint32_t *walk = (uint32_t *)malloc(ANNOT_MAX_WALK * sizeof(uint32_t));
     if (!bb || !cmap || !walk) {
-        free(bb); free(walk);
-        if (cmap) annmap_destroy(cmap);
+        free(bb);
+        free(walk);
+        if (cmap) {
+            annmap_destroy(cmap);
+        }
         return AK_ENOMEM;
     }
 
@@ -288,12 +279,16 @@ int64_t annot_build_vcf(annot_t *a, const gfa_t *g, int32_t ref_path, const char
         bb[segs[i]] = 1;
         int absent;
         khint_t k = annmap_put(cmap, (uint64_t)g->seg[segs[i]].end, &absent);
-        if (absent) kh_val(cmap, k) = segs[i];
+        if (absent) {
+            kh_val(cmap, k) = segs[i];
+        }
     }
 
     vcf_reader_t *r = vcf_open(vcf_fn);
     if (!r) {
-        free(bb); free(walk); annmap_destroy(cmap);
+        free(bb);
+        free(walk);
+        annmap_destroy(cmap);
         return AK_EOPEN;
     }
 
@@ -362,7 +357,10 @@ int64_t annot_build_vcf(annot_t *a, const gfa_t *g, int32_t ref_path, const char
                           (rec.id ? strlen(rec.id) : 0) + 48;
             if (need > info_m) {
                 char *p = (char *)realloc(info, need);
-                if (!p) { rc = AK_ENOMEM; break; }
+                if (!p) {
+                    rc = AK_ENOMEM;
+                    break;
+                }
                 info = p;
                 info_m = need;
             }
@@ -380,7 +378,9 @@ int64_t annot_build_vcf(annot_t *a, const gfa_t *g, int32_t ref_path, const char
         }
         if (rc != AK_OK) break;
     }
-    if (vrc < 0) rc = vrc;
+    if (vrc < 0) {
+        rc = vrc;
+    }
 
     vcf_rec_clear(&rec);
     vcf_close(r);
@@ -419,10 +419,17 @@ int64_t annot_build_fasta(annot_t *a, const gfa_t *g, const fasta_t *fa) {
             if (!s->seq || s->len == 0) continue;
             size_t cl = (int64_t)s->len < L ? s->len : (size_t)L;
             if (memcmp(s->seq, S, cl) != 0) continue;
-            if (s->in_degree == 0) { start = i; break; }
-            if (fallback < 0) fallback = i;
+            if (s->in_degree == 0) {
+                start = i;
+                break;
+            }
+            if (fallback < 0) {
+                fallback = i;
+            }
         }
-        if (start < 0) start = fallback;
+        if (start < 0) {
+            start = fallback;
+        }
         if (start < 0) {
             ak_log(AK_LOG_WARN, "annot", "no starting node matches sequence '%s'", fr->name);
             continue;
@@ -448,7 +455,10 @@ int64_t annot_build_fasta(annot_t *a, const gfa_t *g, const fasta_t *fa) {
                 }
             }
             pos += novel < L - pos ? novel : L - pos;
-            if (pos >= L) { n_done++; break; }
+            if (pos >= L) {
+                n_done++;
+                break;
+            }
 
             // successor whose sequence continues S at pos (past any overlap)
             const uint32_t *arcs;
@@ -460,7 +470,9 @@ int64_t annot_build_fasta(annot_t *a, const gfa_t *g, const fasta_t *fa) {
                 const gfa_seg_t *w = &g->seg[e->w];
                 if (!w->seq || e->overlap >= w->len) continue;
                 int64_t cl = (int64_t)(w->len - e->overlap);
-                if (cl > L - pos) cl = L - pos;
+                if (cl > L - pos) {
+                    cl = L - pos;
+                }
                 if (memcmp(w->seq + e->overlap, S + pos, (size_t)cl) != 0) continue;
                 next = (int32_t)e->w;
                 next_ov = e->overlap;
@@ -504,10 +516,13 @@ int annot_write(const annot_t *a, const char *fn) {
              fwrite(&r->len,  sizeof(r->len),  1, fp) == 1 &&
              fwrite(&r->kind, sizeof(r->kind), 1, fp) == 1;
     }
-    if (ok && a->buf_l)
+    if (ok && a->buf_l) {
         ok = fwrite(a->buf, 1, a->buf_l, fp) == a->buf_l;
+    }
 
-    if (fclose(fp) != 0) ok = 0;
+    if (fclose(fp) != 0) {
+        ok = 0;
+    }
     if (!ok) {
         ak_log(AK_LOG_ERROR, "annot", "write failed on '%s'", fn);
         return AK_EIO;
@@ -534,7 +549,10 @@ annot_t *annot_read(const char *fn) {
     }
 
     annot_t *a = annot_init();
-    if (!a) { fclose(fp); return NULL; }
+    if (!a) {
+        fclose(fp);
+        return NULL;
+    }
 
     int ok = 1;
     if (n) {
@@ -550,11 +568,15 @@ annot_t *annot_read(const char *fn) {
              fread(&r->len,  sizeof(r->len),  1, fp) == 1 &&
              fread(&r->kind, sizeof(r->kind), 1, fp) == 1;
         // the info string plus its NUL must fit inside the buffer
-        if (ok && r->len && r->off + r->len >= buf_l) ok = 0;
+        if (ok && r->len && r->off + r->len >= buf_l) {
+            ok = 0;
+        }
         if (ok) {
             int absent;
             khint_t k = annmap_put(h, r->id, &absent);
-            if (absent) kh_val(h, k) = (uint32_t)i;
+            if (absent) {
+                kh_val(h, k) = (uint32_t)i;
+            }
         }
     }
     a->n = ok ? (int64_t)n : 0;

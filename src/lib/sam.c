@@ -31,13 +31,11 @@ int sam_cigar_expand(const char *cigar, char *ops, int max_ops, int rev) {
     return j;   // number of ops
 }
 
-/**
- * Sort key giving canonical chromosome ordering for header emission
- * @param chr Reference sequence name (a leading "chr" is ignored)
- * @return 1..22 for autosomes, 23/24/25 for X/Y/M, 1000 otherwise
- */
+// sort key: 1..22 for autosomes, 23/24/25 for X/Y/M, 1000 for anything else
 static int chrom_rank(const char *chr) {
-    if (strncmp(chr, "chr", 3) == 0) chr += 3;
+    if (strncmp(chr, "chr", 3) == 0) {
+        chr += 3;
+    }
     if (isdigit((unsigned char)chr[0])) {
         int n = atoi(chr);
         if (n >= 1 && n <= 22) return n;
@@ -94,16 +92,18 @@ void sam_write_record(FILE *out, sam_rec_t *r) {
             ops[i++] = CIGAR_SOFT_CLIP;
 
         int j = c_size - 1;
-        // fix vs original: test ops[j], not ops[i]. The original read ops[i] (where i may 
+        // fix vs original: test ops[j], not ops[i]. The original read ops[i] (where i may
         // equal c_size), an out-of-bounds read that also disabled trailing-clip folding
         while (j >= 0 && ops[j] == CIGAR_SOFT_CLIP) j--;
         while (j >= 0 && (ops[j] == CIGAR_INSERTION || ops[j] == CIGAR_SEQUENCE_MISMATCH))
             ops[j--] = CIGAR_SOFT_CLIP;
 
         if (r->simplify) {
-            for (int k = 0; k < c_size; k++)
-                if (ops[k] == CIGAR_SEQUENCE_MATCH || ops[k] == CIGAR_SEQUENCE_MISMATCH)
+            for (int k = 0; k < c_size; k++) {
+                if (ops[k] == CIGAR_SEQUENCE_MATCH || ops[k] == CIGAR_SEQUENCE_MISMATCH) {
                     ops[k] = CIGAR_ALIGNMENT_MATCH;
+                }
+            }
         }
 
         int count = 1;
@@ -133,17 +133,25 @@ void sam_write_record(FILE *out, sam_rec_t *r) {
 
 // derive a read-group prefix from a read name/line; see akhal/sam.h
 char *sam_rg_prefix(const char *name) {
-    if (name[0] == '@' || name[0] == '>') name++;
+    if (name[0] == '@' || name[0] == '>') {
+        name++;
+    }
 
     const char *dot   = strchr(name, '.');
     const char *slash = strchr(name, '/');
     const char *uline = strchr(name, '_');
     const char *end   = NULL;
-    if (dot && slash) end = dot < slash ? dot : slash;
-    else if (dot)     end = dot;
-    else if (slash)   end = slash;
-    else if (uline)   end = uline;
-    else              end = name + strlen(name);
+    if (dot && slash) {
+        end = dot < slash ? dot : slash;
+    } else if (dot) {
+        end = dot;
+    } else if (slash) {
+        end = slash;
+    } else if (uline) {
+        end = uline;
+    } else {
+        end = name + strlen(name);
+    }
 
     size_t len = (size_t)(end - name);
     char *prefix = (char *)malloc(len + 1);

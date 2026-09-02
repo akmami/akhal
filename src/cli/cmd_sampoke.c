@@ -10,22 +10,15 @@
 #include <stdlib.h>
 #include <string.h>
 
-/**
- * Check that each '=' in the CIGAR matches the reference base
- * @param read Query sequence (SAM SEQ field)
- * @param read_len Length of read
- * @param ref Reference sequence for this alignment's rname
- * @param ref_len Length of ref
- * @param pos 1-based reference start position
- * @param cigar CIGAR string to walk
- * @param ops Caller-provided scratch buffer of at least SAM_MAX_CIGAR bytes
- * @return 1 if the alignment is consistent, 0 otherwise
- */
+// walk the CIGAR from the 1-based pos, checking each '=' against the reference base
 static int validate_alignment(const char *read, int64_t read_len,
                               const char *ref, int64_t ref_len,
                               int pos, const char *cigar, char *ops) {
     int n = sam_cigar_expand(cigar, ops, SAM_MAX_CIGAR, 0);
-    if (n < 0) { ak_log(AK_LOG_WARN, "sampoke", "CIGAR parse error"); return 0; }
+    if (n < 0) {
+        ak_log(AK_LOG_WARN, "sampoke", "CIGAR parse error");
+        return 0;
+    }
 
     int64_t ref_i = (int64_t)pos - 1, read_i = 0;
     for (int i = 0; i < n; i++) {
@@ -35,7 +28,8 @@ static int validate_alignment(const char *read, int64_t read_len,
             if (ref_i < 0 || ref_i >= ref_len || read_i >= read_len) return 0;
             if (op == CIGAR_SEQUENCE_MATCH && ref[ref_i] != 'N' && ref[ref_i] != read[read_i])
                 return 0;
-            read_i++; ref_i++;
+            read_i++;
+            ref_i++;
         } else if (op == CIGAR_INSERTION) {
             read_i++;
         } else if (op == CIGAR_DELETION) {
@@ -48,12 +42,7 @@ static int validate_alignment(const char *read, int64_t read_len,
     return 1;
 }
 
-/**
- * Collect the distinct read-group prefixes seen among alignment lines
- * @param sam_fn Path to the SAM file to scan
- * @param out Set to a newly allocated array of owned prefix strings
- * @return Number of prefixes collected
- */
+// distinct read-group prefixes across the alignment lines; caller owns them
 static int collect_rg(const char *sam_fn, char ***out) {
     *out = NULL;
     ak_file *f = ak_open(sam_fn);
@@ -75,13 +64,22 @@ static int collect_rg(const char *sam_fn, char ***out) {
 
         int exists = 0;
         for (int i = 0; i < size; i++)
-            if (strcmp(prefix, hdr[i]) == 0) { exists = 1; break; }
-        if (exists) { free(prefix); continue; }
+            if (strcmp(prefix, hdr[i]) == 0) {
+                exists = 1;
+                break;
+            }
+        if (exists) {
+            free(prefix);
+            continue;
+        }
 
         if (size == cap) {
             cap = cap ? cap << 1 : 128;
             char **t = (char **)realloc(hdr, (size_t)cap * sizeof(char *));
-            if (!t) { free(prefix); break; }
+            if (!t) {
+                free(prefix);
+                break;
+            }
             hdr = t;
         }
         hdr[size++] = prefix;
@@ -99,13 +97,6 @@ static void emit_rg_lines(FILE *out, char **rg, int rg_n) {
         fprintf(out, "@RG\tID:akhal.%d\tPL:PACBIO\tPU:%s\tSM:sample\n", i, rg[i]);
 }
 
-/**
- * Split a SAM line copy into tab-delimited fields
- * @param s Line to tokenize in place
- * @param field Destination array of field pointers
- * @param max Capacity of field
- * @return Number of fields found
- */
 static int split_fields(char *s, char **field, int max) {
     int n = 0;
     char *save, *tok = strtok_r(s, "\t", &save);
@@ -116,16 +107,7 @@ static int split_fields(char *s, char **field, int max) {
     return n;
 }
 
-/**
- * Validate every alignment in a SAM file against the reference, reporting a
- * correct/incorrect tally and optionally writing a filtered, RG-annotated SAM
- * @param sam_fn Input SAM path
- * @param out_fn Output SAM path, or NULL to only report counts
- * @param ref Reference sequences
- * @param rg Collected read-group prefixes
- * @param rg_n Number of prefixes
- * @return 0 on success, non-zero if a file could not be opened
- */
+// tally correct/incorrect alignments; with out_fn also write an RG-annotated copy
 static int check_sam(const char *sam_fn, const char *out_fn,
                      const fasta_t *ref, char **rg, int rg_n) {
     ak_file *f = ak_open(sam_fn);
@@ -134,11 +116,22 @@ static int check_sam(const char *sam_fn, const char *out_fn,
     FILE *out = NULL;
     if (out_fn) {
         out = fopen(out_fn, "w");
-        if (!out) { ak_log(AK_LOG_ERROR, "sampoke", "cannot open output %s", out_fn); ak_close(f); return 1; }
+        if (!out) {
+            ak_log(AK_LOG_ERROR, "sampoke", "cannot open output %s", out_fn);
+            ak_close(f);
+            return 1;
+        }
     }
 
     char *ops  = (char *)malloc(SAM_MAX_CIGAR);
-    if (!ops) { ak_log(AK_LOG_ERROR, "sampoke", "out of memory"); if (out) fclose(out); ak_close(f); return 1; }
+    if (!ops) {
+        ak_log(AK_LOG_ERROR, "sampoke", "out of memory");
+        if (out) {
+            fclose(out);
+        }
+        ak_close(f);
+        return 1;
+    }
 
     kstring_t line = KS_INIT, work = KS_INIT;
     char *field[16];
@@ -158,7 +151,10 @@ static int check_sam(const char *sam_fn, const char *out_fn,
             }
             continue;
         }
-        if (out && rg_n && print_rg) { emit_rg_lines(out, rg, rg_n); print_rg = 0; }
+        if (out && rg_n && print_rg) {
+            emit_rg_lines(out, rg, rg_n);
+            print_rg = 0;
+        }
 
         // tokenize a copy so the original line stays intact for output
         if (ks_resize(&work, line.l + 1) != AK_OK) break;
@@ -178,7 +174,9 @@ static int check_sam(const char *sam_fn, const char *out_fn,
         const char *seq   = field[9];
 
         if (strcmp(rname, "*") == 0) {           // unmapped
-            if (out) fprintf(out, "%s\n", line.s);
+            if (out) {
+                fprintf(out, "%s\n", line.s);
+            }
             continue;
         }
 
@@ -201,9 +199,11 @@ static int check_sam(const char *sam_fn, const char *out_fn,
         if (rg_n) {
             char *prefix = sam_rg_prefix(field[0]);
             if (prefix) {
-                for (int i = 0; i < rg_n; i++)
-                    if (strcmp(prefix, rg[i]) == 0)
+                for (int i = 0; i < rg_n; i++) {
+                    if (strcmp(prefix, rg[i]) == 0) {
                         fprintf(out, "%s\tRG:Z:akhal.%d\n", line.s, i);
+                    }
+                }
                 free(prefix);
             } else {
                 fprintf(out, "%s\n", line.s);
@@ -219,7 +219,9 @@ static int check_sam(const char *sam_fn, const char *out_fn,
     ks_free(&line);
     ks_free(&work);
     ak_close(f);
-    if (out) fclose(out);
+    if (out) {
+        fclose(out);
+    }
     return 0;
 }
 

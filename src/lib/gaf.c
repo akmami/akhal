@@ -34,17 +34,11 @@ void gaf_rec_clear(gaf_rec_t *r) {
 #  define GAF_UNLIKELY(x) (x)
 #endif
 
-/** 
- * @brief End of the field starting at p: the next tab, or the NUL terminator. 
- */
 static inline const char *gaf_field_end(const char *p) {
     const char *e = strchr(p, '\t');
     return e ? e : p + strlen(p);
 }
 
-/** 
- * @brief Copy n bytes into a fresh NUL-terminated string; NULL on failure. 
- */
 static inline char *gaf_dup(const char *s, size_t n) {
     char *d = (char *)malloc(n + 1);
     if (GAF_UNLIKELY(!d)) return NULL;
@@ -53,9 +47,7 @@ static inline char *gaf_dup(const char *s, size_t n) {
     return d;
 }
 
-/** 
- * @brief Scan a decimal integer, leaving *pp on the first non-digit. 
- */
+// leaves *pp on the first non-digit
 static inline int64_t gaf_scan_i64(const char **pp) {
     const char *p = *pp;
     unsigned c = (unsigned char)*p;
@@ -78,9 +70,7 @@ static const double gaf_p10n[19] = {
     1e-10, 1e-11, 1e-12, 1e-13, 1e-14, 1e-15, 1e-16, 1e-17, 1e-18
 };
 
-/** 
- * @brief Scan a decimal float. Defers to strtod for exponents or >18 digits. 
- */
+// fast path only; defers to strtod for exponents or more than 18 digits
 static inline double gaf_scan_f64(const char *p) {
     const char *orig = p;
     unsigned c = (unsigned char)*p;
@@ -119,12 +109,7 @@ static inline double gaf_scan_f64(const char *p) {
         p++;                                            \
     } while (0)
 
-/**
- * Parse one GAF line into a cleared record
- * @param line The line (modified in place by tokenizing)
- * @param rec Destination record (cleared first)
- * @return AK_OK, AK_EFORMAT (too few fields), or AK_ENOMEM
- */
+// walks the line in place; the 12 mandatory fields are positional, the rest are optional tags
 static int gaf_parse_line(char *line, gaf_rec_t *rec) {
     gaf_rec_clear(rec);
 
@@ -145,7 +130,10 @@ static int gaf_parse_line(char *line, gaf_rec_t *rec) {
     rec->qend = gaf_scan_i64(&p); GAF_EAT_TAB();
 
     // strand
-    if (GAF_LIKELY(*p != '\t' && *p != '\0')) { rec->strand = *p; p++; }
+    if (GAF_LIKELY(*p != '\t' && *p != '\0')) {
+        rec->strand = *p;
+        p++;
+    }
     GAF_EAT_TAB();
 
     // path
@@ -192,10 +180,16 @@ static int gaf_parse_line(char *line, gaf_rec_t *rec) {
                     }
                     break;
                 case GAF_TAG2('d', 'v'):
-                    if (s[3] == 'f') { rec->dv = gaf_scan_f64(s + 5); rec->has_dv = 1; }
+                    if (s[3] == 'f') {
+                        rec->dv = gaf_scan_f64(s + 5);
+                        rec->has_dv = 1;
+                    }
                     break;
                 case GAF_TAG2('i', 'd'):
-                    if (s[3] == 'f') { rec->id = gaf_scan_f64(s + 5); rec->has_id = 1; }
+                    if (s[3] == 'f') {
+                        rec->id = gaf_scan_f64(s + 5);
+                        rec->has_id = 1;
+                    }
                     break;
                 case GAF_TAG2('c', 'g'):
                     if (s[3] == 'Z') {
@@ -240,12 +234,7 @@ gaf_reader_t *gaf_open(const char *fn) {
     return r;
 }
 
-/**
- * Read the next well-formed record, skipping malformed lines
- * @param r Open reader
- * @param rec Destination record (reused each call)
- * @return 1 on success, 0 at EOF, AK_EINVAL/AK_ENOMEM on error
- */
+// read the next record, skipping malformed lines; 1 on success, 0 at EOF; see akhal/gaf.h
 int gaf_read1(gaf_reader_t *r, gaf_rec_t *rec) {
     if (!r || !rec) return AK_EINVAL;
 
@@ -272,7 +261,9 @@ void gaf_close(gaf_reader_t *r) {
 
 // load an entire GAF file into an array; see akhal/gaf.h
 gaf_rec_t *gaf_slurp(const char *fn, int64_t *n) {
-    if (n) *n = 0;
+    if (n) {
+        *n = 0;
+    }
 
     gaf_reader_t *r = gaf_open(fn);
     if (!r) return NULL;
@@ -287,11 +278,15 @@ gaf_rec_t *gaf_slurp(const char *fn, int64_t *n) {
         if (cnt == cap) {
             int64_t ncap = cap ? cap << 1 : 1024;
             gaf_rec_t *p = (gaf_rec_t *)realloc(arr, (size_t)ncap * sizeof(*p));
-            if (!p) { rc = AK_ENOMEM; break; }
+            if (!p) {
+                rc = AK_ENOMEM;
+                break;
+            }
             arr = p;
             cap = ncap;
         }
-        // move ownership of the record's strings into the array, then detach them from `rec` so the next read does not free them
+
+        // hand the record's strings to the array, then detach so the next read does not free them
         arr[cnt++] = rec;
         gaf_rec_init(&rec);
     }
@@ -305,7 +300,9 @@ gaf_rec_t *gaf_slurp(const char *fn, int64_t *n) {
         return NULL;
     }
 
-    if (n) *n = cnt;
+    if (n) {
+        *n = cnt;
+    }
     return arr;
 }
 
@@ -316,7 +313,7 @@ void gaf_free(gaf_rec_t *recs, int64_t n) {
     free(recs);
 }
 
-// parse the next oriented node from a GAF path string; see akhal/gaf.h
+// parse the next oriented node from a GAF path string, returning bytes consumed; see akhal/gaf.h
 int gaf_path_next(const char *p, uint64_t *id, char *strand) {
     if (*p == '\0') return 0;
     *strand = *p;
