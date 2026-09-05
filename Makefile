@@ -21,6 +21,7 @@ LIB_OBJ := $(LIB_SRC:.c=.o)
 CLI_SRC := src/cli/main.c \
 		   src/cli/cmd_stats.c \
 		   src/cli/cmd_extract.c \
+		   src/cli/cmd_compare.c \
 		   src/cli/cmd_parse.c \
 		   src/cli/cmd_sort.c \
 		   src/cli/cmd_rank.c \

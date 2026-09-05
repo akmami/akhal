@@ -32,6 +32,7 @@ For the command-line tool, see the [main README](../README.md).
 | Module | What it gives you |
 | --- | --- |
 | [`call`](call.md) | Labels a reference backbone through the graph, then reports everything the graph carries beyond it as variants, and writes them as VCF |
+| [`diff`](diff.md) | Compares two graphs that disagree on segment ids: segments matched by sequence content, links through the labelling that produces, paths by the bases they spell |
 | [`annot`](annot.md) | A node-origin store: which variant or which sample sequence explains each node, queryable and round-trippable through a compact binary file |
 
 ### Infrastructure
@@ -136,6 +137,15 @@ gfa_rank_mark(g, ref->on)       gfa    rank 0 on that backbone, 1 elsewhere
 gfa_clear_paths(g)              gfa    drop the old P lines
 gfa_add_path(g, name, walk...)  gfa    install the traced walk in their place
 gfa_write(g, out)               gfa    emit the re-ranked graph
+```
+
+**Compare two graphs that number their nodes differently** - `akhal compare`
+
+```text
+gfa_read(GFA_LINKS|GFA_PATHS)   gfa    load both graphs
+diff_map(a, b)                  diff   match segments by sequence, label them
+diff_graphs(a, b)               diff   ... and compare links and paths through it
+diff_identical(d)               diff   the whole verdict, for an exit status
 ```
 
 **Trace where each node came from** - `akhal annotate`

@@ -21,6 +21,7 @@
  *   akhal/vg.h      vg native (.vg protobuf) graph reader
  *   akhal/annot.h   node annotation store, builders and file format
  *   akhal/call.h    backbone labelling and variant discovery on a graph
+ *   akhal/diff.h    structural comparison of two graphs, ids aside
  */
 
 #include "akhal/version.h"
@@ -36,5 +37,6 @@
 #include "akhal/vg.h"
 #include "akhal/annot.h"
 #include "akhal/call.h"
+#include "akhal/diff.h"
 
 #endif

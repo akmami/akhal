@@ -9,7 +9,7 @@ It is structured like `htslib` + `samtools`: a reusable library (`libakhal`) tha
 
 This README documents the command-line tool. 
 The library has its own reference under [`docs/`](docs/README.md) - one page per module, one section per public function, each with a short snippet showing how to call it and the data preparation it needs. 
-Start at the [library index](docs/README.md), or go straight to a module: [`gfa`](docs/gfa.md), [`call`](docs/call.md), [`annot`](docs/annot.md), [`vg`](docs/vg.md), [`fasta`](docs/fasta.md), [`gaf`](docs/gaf.md), [`sam`](docs/sam.md), [`vcf`](docs/vcf.md), [`io`](docs/io.md), [`kstr`](docs/kstr.md), [`util`](docs/util.md), [`error`](docs/error.md).
+Start at the [library index](docs/README.md), or go straight to a module: [`gfa`](docs/gfa.md), [`call`](docs/call.md), [`diff`](docs/diff.md), [`annot`](docs/annot.md), [`vg`](docs/vg.md), [`fasta`](docs/fasta.md), [`gaf`](docs/gaf.md), [`sam`](docs/sam.md), [`vcf`](docs/vcf.md), [`io`](docs/io.md), [`kstr`](docs/kstr.md), [`util`](docs/util.md), [`error`](docs/error.md).
 
 ## Installation
 
@@ -108,7 +108,62 @@ chr22	21	.	GTTTT	G	.	.	END=25;TYPE=DEL
 chr22	35	.	A	AAAA	.	.	END=35;TYPE=INS
 ```
 
-#### 4. `sort`
+#### 4. `compare`
+Compares two graphs that need not agree on segment ids, and reports how much of one is present in the other.
+
+Nothing is compared by id: builders number nodes as they emit them, and `sort` renumbers them again. 
+Segments are matched on their **sequence content** instead - both files are sorted by sequence and walked once, side by side, and every distinct sequence is put on one shared label. 
+Links are then relabelled and compared as (from, orientation, to, orientation, overlap) tuples, canonicalized so that the two spellings of one edge - `L a + b +` here and `L b - a -` there - count as one link rather than two differences.
+
+A label covers a whole class of equal sequences, not one segment. 
+Variation graphs carry `A` as a node dozens of times over, and which copy in one file is which copy in the other is not something the two files agree on; pairing them off one by one would be a coin toss that every link touching them then inherits. 
+Counting is still multiset-style - with three copies of a sequence in one file and two in the other, two match and the third is reported as unmatched - but a link between repeated sequences asks whether the other graph has that edge *between those sequences*, not between those particular nodes.
+
+Segment ids are still listed for the unmatched surplus, but it is *how many* there are that is meaningful, not which ones file order happened to leave over.
+
+Paths are compared by what they spell, not by what they walk over. 
+Fragmented `P` lines are chained together exactly as `extract path` does, chains are paired by name across the two files, and each pair's sequence is compared - so two graphs that chop one reference into different nodes still agree on it. 
+Lengths are checked before the bases, so a path that differs in length costs nothing to reject. 
+A file with no `P` lines at all is fine; it simply has no paths to report on.
+
+The exit status is 0 when the graphs match, 1 when they differ and 2 when the comparison could not be made, so `compare` can be used as a test. 
+Ids, node numbering, line order and `SR` ranks are not compared: a graph and its own `sort` output are identical to this command.
+
+Two caveats on paths. 
+Chains are paired by the name path merging settled on, so a reference that chains into one piece in one file (`chr1`) but two in the other (`chr1_1`, `chr1_2`, because a joining `L` line is missing) pairs with nothing and reports as unmatched names. 
+And the sequence comparison is byte-for-byte, hence case-sensitive.
+
+**Usage:**
+```sh
+./akhal compare <A .gfa file> <B .gfa file> [--verbose]
+```
+
+Note: `--verbose` additionally lists the ids of the segments and links that only one of the two graphs carries, in that graph's own numbering.
+
+Example:
+```sh
+$ ./akhal compare graph.gfa sorted.gfa
+Segments A: 12
+Segments B: 12
+Segments shared: 12
+Segments only in A: 0
+Segments only in B: 0
+Links A: 15
+Links B: 15
+Links shared: 15
+Links only in A: 0
+Links only in B: 0
+Paths A: 1
+Paths B: 1
+Paths identical: 1
+Paths differing: 0
+Paths only in A: 0
+Paths only in B: 0
+Path chr22: identical (48 bp)
+[INFO] the graphs are identical
+```
+
+#### 5. `sort`
 Topologically sorts a graph and renumbers its nodes `1..N` in the sorted order. Ordering uses Kahn's algorithm; ties in the ready set (the "hops") are broken alphabetically by node **sequence content**, so the result is independent of the input's node numbering — two graphs identical in topology and content sort the same way. Nodes in cycles, if any, are appended after the acyclic prefix. The sorted graph is re-emitted with the new ids (S/L/P lines remapped, link orientation and overlap preserved).
 
 **Usage:**
@@ -118,7 +173,7 @@ Topologically sorts a graph and renumbers its nodes `1..N` in the sorted order. 
 
 Note: If no output file is given, the sorted GFA is written to standard output.
 
-#### 5. `rank`
+#### 6. `rank`
 Rewrites a graph's `SR:i:` ranks against its backbone. 
 In rGFA, rank 0 is the reference and anything higher came from a sample; `rank` decides which segments are which and re-emits the graph.
 
@@ -148,7 +203,7 @@ $ ./akhal rank graph.gfa --fasta GRCh38.chr22.fa
 [INFO] backbone taken from GRCh38.chr22.fa: 41233 node(s) at rank 0, 18904 at rank 1
 ```
 
-#### 6. `vg2gfa`
+#### 7. `vg2gfa`
 Converts vg's native `.vg` format (gzip/BGZF-compressed Protobuf) to GFA. The `.vg` parser is hand-written pure C - no protobuf or libvgio needed, only zlib.
 
 **Usage:**
@@ -158,7 +213,7 @@ Converts vg's native `.vg` format (gzip/BGZF-compressed Protobuf) to GFA. The `.
 
 Note: If no output file is given, the GFA is written to standard output.
 
-#### 7. `gaf2sam`
+#### 8. `gaf2sam`
 Converts a GAF file to a SAM file.
 
 **Usage:**
@@ -172,7 +227,7 @@ GAF file does not store sequences, hence, reads are needed when converting to SA
 Note: `simple` option is optional. 
 If provided, CIGAR string matches `(=)` and mismatches `(X)` will be replaced with sequence match `(M)`.
 
-#### 8. `sampoke`
+#### 9. `sampoke`
 Validate SAM file (converted from gaf). It takes reference file and SAM to process CIGAR strings. 
 Optionally, it can print the filtered SAM file that contains valid lines.
 
@@ -183,7 +238,7 @@ Optionally, it can print the filtered SAM file that contains valid lines.
 
 Note: Output file here is optional.
 
-#### 9. `annotate`
+#### 10. `annotate`
 Traces the origin of every graph node and saves the result as a binary `.annot` file. 
 The backbone reference path (a `P` line) is identified first - by `--ref <name>`, or defaulting to the graph's first path - and its nodes are marked `backbone` with their reference coordinates. 
 With `--vcf`, each variant is matched to the alternative side of its bubble: the shared REF/ALT prefix is stripped, the branch point is located on the backbone, and the nodes spelling the alternate allele are annotated like `SNP chr1:12345 A>G rs99`. 
@@ -197,7 +252,7 @@ A node explained more than once accumulates its annotations separated by `; `.
 ./akhal annotate <r/GFA file> <OUTPUT .annot file> [--vcf <VCF file>] [--fasta <FASTA file>] [--ref <path name>]
 ```
 
-#### 10. `annotget`
+#### 11. `annotget`
 Looks up node annotations in a `.annot` file - the graph itself is not needed. 
 Each queried node prints one line, `<id> <status> [<info>]`, where status is `backbone`, `annot`, or `unknown`. 
 With no node ids, every record in the file is dumped.
