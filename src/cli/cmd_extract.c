@@ -11,16 +11,16 @@
 
 #define FASTA_WRAP 80
 
-// wrap at FASTA_WRAP columns; col carries the column across calls
-static void emit_wrapped(FILE *out, const char *seq, size_t len, int *col) {
+// wrap at wrap_len columns; col carries the column across calls
+static void emit_wrapped(FILE *out, const char *seq, size_t len, int *col, int wrap_len) {
     size_t printed = 0;
     while (printed < len) {
-        size_t space = (size_t)(FASTA_WRAP - *col);
+        size_t space = (size_t)(wrap_len - *col);
         size_t take = (len - printed < space) ? (len - printed) : space;
         fwrite(seq + printed, 1, take, out);
         printed += take;
         *col += (int)take;
-        if (*col >= FASTA_WRAP) {
+        if (*col >= wrap_len) {
             fputc('\n', out);
             *col = 0;
         }
@@ -29,8 +29,8 @@ static void emit_wrapped(FILE *out, const char *seq, size_t len, int *col) {
 
 // print the extract usage lines
 static void usage(void) {
-    ak_log(AK_LOG_ERROR, NULL, "usage: akhal extract fa   <r/GFA> <out.fa|.fasta>");
-    ak_log(AK_LOG_ERROR, NULL, "       akhal extract path <r/GFA> <out.fa|.fasta> [PATH-NAME]");
+    ak_log(AK_LOG_ERROR, NULL, "usage: akhal extract fa   <r/GFA> <out.fa|.fasta> [WRAP-LENGTH]");
+    ak_log(AK_LOG_ERROR, NULL, "       akhal extract path <r/GFA> <out.fa|.fasta> [PATH-NAME] [WRAP-LENGTH]");
     ak_log(AK_LOG_ERROR, NULL, "       akhal extract vcf  <r/GFA> <out.vcf> [--ref <NAME>] [--fasta <FILE>]");
 }
 
@@ -48,14 +48,28 @@ static int want_gfa(const char *fn) {
     return 0;
 }
 
+// 1 when arg is a positive wrap length, else 0 and the reason is logged
+static int want_wrap_len(const char *arg, int *out) {
+    int v;
+    if (!ak_str2int(arg, &v) || v <= 0) {
+        ak_log(AK_LOG_ERROR, NULL, "wrap length must be a positive integer: %s", arg);
+        return 0;
+    }
+    *out = v;
+    return 1;
+}
+
 // `extract fa` - one FASTA record per P line, exactly as the graph stores them
 static int extract_fa(int argc, char **argv) {
-    if (argc != 5) {
+    if (argc < 5 || argc > 6) {
         usage();
         return 1;
     }
     const char *in = argv[3], *out_fn = argv[4];
     if (!want_gfa(in) || !want_fasta(out_fn)) return 1;
+
+    int wrap_len = FASTA_WRAP;
+    if (argc == 6 && !want_wrap_len(argv[5], &wrap_len)) return 1;
 
     FILE *out = fopen(out_fn, "w");
     if (!out) {
@@ -79,7 +93,7 @@ static int extract_fa(int argc, char **argv) {
             if (segs[i] == GFA_NIL) continue;
             gfa_seg_t *s = gfa_seg_at(g, (int32_t)segs[i]);
             if (s->seq) {
-                emit_wrapped(out, s->seq, s->len, &col);
+                emit_wrapped(out, s->seq, s->len, &col, wrap_len);
             }
         }
         if (col) {
@@ -95,12 +109,23 @@ static int extract_fa(int argc, char **argv) {
 
 // `extract path` - fragments that the links join leave as one FASTA record
 static int extract_path(int argc, char **argv) {
-    if (argc < 5 || argc > 6) {
+    if (argc < 5 || argc > 7) {
         usage();
         return 1;
     }
     const char *in = argv[3], *out_fn = argv[4];
-    const char *key = (argc == 6) ? argv[5] : NULL;
+    const char *key = NULL;
+    int wrap_len = FASTA_WRAP;
+    if (argc == 6) {
+        if (!ak_str2int(argv[5], &wrap_len) || wrap_len <= 0) {
+            key = argv[5];
+            wrap_len = FASTA_WRAP;
+        }
+    } else if (argc == 7) {
+        key = argv[5];
+        if (!want_wrap_len(argv[6], &wrap_len)) return 1;
+    }
+
     if (!want_gfa(in) || !want_fasta(out_fn)) return 1;
 
     gfa_t *g = gfa_read(in, GFA_LINKS | GFA_PATHS);
@@ -139,7 +164,7 @@ static int extract_path(int argc, char **argv) {
         for (int64_t i = 0; i < ns; i++) {
             gfa_seg_t *s = gfa_seg_at(g, (int32_t)segs[i]);
             if (s->seq) {
-                emit_wrapped(out, s->seq, s->len, &col);
+                emit_wrapped(out, s->seq, s->len, &col, wrap_len);
             }
         }
         if (col) {

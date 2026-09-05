@@ -35,6 +35,14 @@ void ak_revcomp(char *seq, size_t len);
 int ak_ends_with(const char *str, const char *suffix);
 
 /**
+ * Parse a string as a base-10 int, requiring the whole string to be consumed
+ * @param str String to parse; NULL or empty is rejected
+ * @param out Set to the parsed value on success; untouched on failure
+ * @return 1 if str is a valid int, otherwise 0
+ */
+int ak_str2int(const char *str, int *out);
+
+/**
  * Arithmetic mean of an array of values
  * @param a Array of values
  * @param n Number of values; 0 is safe

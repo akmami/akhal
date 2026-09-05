@@ -12,13 +12,13 @@ materialized, and the mean/variance/stddev trio the `stats` command reports
 with.
 
 ```c
-#include "akhal/util.h"   // ak_complement, ak_revcomp, ak_ends_with, ak_mean/ak_variance/ak_stddev
+#include "akhal/util.h"   // ak_complement, ak_revcomp, ak_ends_with, ak_str2int, ak_mean/ak_variance/ak_stddev
 ```
 
 ## Contents
 
 - [Sequences](#sequences) - [`ak_complement`](#ak_complement), [`ak_revcomp`](#ak_revcomp)
-- [Strings](#strings) - [`ak_ends_with`](#ak_ends_with)
+- [Strings](#strings) - [`ak_ends_with`](#ak_ends_with), [`ak_str2int`](#ak_str2int)
 - [Summary statistics](#summary-statistics) - [`ak_mean`](#ak_mean), [`ak_variance`](#ak_variance), [`ak_stddev`](#ak_stddev)
 
 ## Sequences
@@ -100,6 +100,32 @@ if (ak_ends_with(fn, ".gfa") || ak_ends_with(fn, ".rgfa"))
 if (ak_ends_with(fn, ".RGFA")) return 1;
 if (ak_ends_with("x", ".gfa")) return 1;
 if (!ak_ends_with(fn, ""))     return 1;
+```
+
+### `ak_str2int`
+
+```c
+int ak_str2int(const char *str, int *out);
+```
+
+Returns 1 and writes the parsed value through `out` when `str` is a valid
+base-10 int, otherwise returns 0 and leaves `out` untouched. The whole string
+must be consumed - trailing junk, a bare sign, whitespace, and `""` are all
+rejected the same as `NULL` - and a value outside `int` range is rejected as
+overflow rather than silently truncated.
+
+```c
+int wrap_len;
+
+// A clean base-10 int is accepted and written through out.
+if (ak_str2int("120", &wrap_len))
+    printf("wrap length %d\n", wrap_len);
+
+// Trailing junk, empty input and out-of-range values are all a clean 0 -
+// out is left untouched, so a caller-supplied default survives.
+if (ak_str2int("120x", &wrap_len)) return 1;
+if (ak_str2int("", &wrap_len))     return 1;
+if (ak_str2int("99999999999999999999", &wrap_len)) return 1;
 ```
 
 ## Summary statistics

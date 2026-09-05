@@ -20,16 +20,16 @@ extern "C" {
 // Upper bound on a per-base CIGAR op array / rendered CIGAR string.
 #define SAM_MAX_CIGAR 1048576
 
-// CIGAR operations                       consumes query / reference
-#define CIGAR_ALIGNMENT_MATCH   'M'   // yes  yes
-#define CIGAR_INSERTION         'I'   // yes  no
-#define CIGAR_DELETION          'D'   // no   yes
-#define CIGAR_SKIPPED           'N'   // no   yes
-#define CIGAR_SOFT_CLIP         'S'   // yes  no
-#define CIGAR_HARD_CLIP         'H'   // no   no
-#define CIGAR_PADDING           'P'   // no   no
-#define CIGAR_SEQUENCE_MATCH    '='   // yes  yes
-#define CIGAR_SEQUENCE_MISMATCH 'X'   // yes  yes
+// CIGAR operations                        consumes query / reference
+#define CIGAR_ALIGNMENT_MATCH   'M'     // yes              yes
+#define CIGAR_INSERTION         'I'     // yes              no
+#define CIGAR_DELETION          'D'     // no               yes
+#define CIGAR_SKIPPED           'N'     // no               yes
+#define CIGAR_SOFT_CLIP         'S'     // yes              no
+#define CIGAR_HARD_CLIP         'H'     // no               no
+#define CIGAR_PADDING           'P'     // no               no
+#define CIGAR_SEQUENCE_MATCH    '='     // yes              yes
+#define CIGAR_SEQUENCE_MISMATCH 'X'     // yes              yes
 
 // 1 if op consumes the query sequence.
 #define CIGAR_QUE(x) ((x)==CIGAR_ALIGNMENT_MATCH || (x)==CIGAR_INSERTION || \

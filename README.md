@@ -68,10 +68,13 @@ Extract information from the r/GFA file. The first argument picks what to pull o
 
 **Usage:**
 ```sh
-./akhal extract fa   <r/GFA file> <OUTPUT .fa/.fasta file>
-./akhal extract path <r/GFA file> <OUTPUT .fa/.fasta file> [path name]
+./akhal extract fa   <r/GFA file> <OUTPUT .fa/.fasta file> [wrap length]
+./akhal extract path <r/GFA file> <OUTPUT .fa/.fasta file> [path name] [wrap length]
 ./akhal extract vcf  <r/GFA file> <OUTPUT .vcf file> [--ref <name>] [--fasta <FASTA file>]
 ```
+
+`wrap length` sets how many bases each output FASTA line carries; it defaults to 80 when omitted. 
+For `path`, a single trailing numeric argument is taken as the wrap length rather than a path name.
 
 ##### `fa`
 Writes one FASTA record per `P` line, exactly as the graph stores them.

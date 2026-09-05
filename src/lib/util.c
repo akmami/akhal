@@ -1,6 +1,9 @@
 #include "akhal/util.h"
 
+#include <errno.h>
+#include <limits.h>
 #include <math.h>
+#include <stdlib.h>
 #include <string.h>
 
 // case-insensitive complement of one DNA base; unknown maps to 'N'
@@ -34,6 +37,20 @@ int ak_ends_with(const char *str, const char *suffix) {
     size_t ls = strlen(str), lf = strlen(suffix);
     if (lf > ls) return 0;
     return strcmp(str + ls - lf, suffix) == 0;
+}
+
+// whole-string strtol: rejects "", trailing junk, whitespace-only and overflow
+int ak_str2int(const char *str, int *out) {
+    if (!str || !*str) return 0;
+
+    errno = 0;
+    char *end;
+    long v = strtol(str, &end, 10);
+    if (*end || end == str) return 0;
+    if (errno == ERANGE || v < INT_MIN || v > INT_MAX) return 0;
+
+    *out = (int)v;
+    return 1;
 }
 
 double ak_mean(const size_t *a, size_t n) {

@@ -192,7 +192,7 @@ static inline const char *gfa_path_name(const gfa_t *g, int32_t k) {
 /** 
  * @return Total sequence length of path k
  */
-static inline uint64_t    gfa_path_len(const gfa_t *g, int32_t k) { 
+static inline uint64_t gfa_path_len(const gfa_t *g, int32_t k) { 
     return g->path_len[k]; 
 }
 
@@ -230,9 +230,8 @@ int gfa_path_segs(const gfa_t *g, int32_t k, const uint32_t **segs);
  * Chains of P-line fragments that spell one longer path.
  *
  * Graph builders such as vg emit a reference as several consecutive P lines
- * ("chr22[0]", "chr22[1000]", ...) rather than one. A chain groups those
- * fragments back together, in CSR form like everything else here: chain c owns
- * the path indices frag[off[c] .. off[c+1]).
+ * rather than one. A chain groups those fragments back together, in CSR form 
+ * like everything else here: chain c owns the path indices frag[off[c] .. off[c+1]).
  */
 typedef struct {
     char   **name;       // owned chain names, length n
@@ -245,10 +244,9 @@ typedef struct {
  * Group a graph's P-line fragments into chains.
  *
  * Fragments are selected by name: a path belongs to `key` when its name equals
- * `key` once vg's subpath decoration is stripped ("chr22[1000]", "chr22:1000-2000"
- * -> "chr22"), or when the last '#'-delimited field of that base matches, so a
- * PanSN name like "GRCh38#0#chr22[0]" is found by "chr22". Passing NULL selects
- * every path and groups each base name separately.
+ * `key` once vg's subpath decoration is stripped, or when the last '#'-delimited 
+ * field of that base matches, so a PanSN name like "GRCh38#0#chr22[0]" is found 
+ * by "chr22". Passing NULL selects every path and groups each base name separately.
  *
  * Selected fragments are ordered by the start offset in their name (those
  * without one keep file order and sort last), then chained: fragment A is
