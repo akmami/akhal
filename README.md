@@ -23,6 +23,21 @@ This produces `libakhal.a` and the `akhal` executable.
 
 Requirements: a C compiler and `zlib` (`-lz`, used by `vg2gfa` to decompress `.vg` files). No protobuf or other external libraries are needed.
 
+To install the tool, the library and its headers, and tab completion for bash and zsh:
+
+```sh
+sudo make install
+```
+
+`PREFIX` defaults to `/usr/local`; override it for a home install that needs no root:
+
+```sh
+make install PREFIX=~/.local
+```
+
+`PREFIX=.` installs into the build tree itself, which is handy for trying things out - the library and the headers are already where they would be copied, so those two steps are skipped. 
+`make uninstall` takes it all back out (and leaves the source tree's own `lib/` and `include/akhal/` alone), and `DESTDIR` is honoured for staged installs.
+
 ## Usage
 
 `akhal` provides the following commands:

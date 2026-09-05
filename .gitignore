@@ -5,3 +5,5 @@ lib/libakhal.a
 .vscode
 dev
 data
+bin
+share

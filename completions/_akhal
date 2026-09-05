@@ -1,0 +1,13 @@
+# not `commands`: zsh/parameter already owns that name
+local bin=$words[1]
+local -a cmds
+
+# CURRENT is 1-based over the whole line, so word 2 is the one after `akhal`
+if (( CURRENT != 2 )); then
+    _files
+    return
+fi
+
+cmds=( ${(f)"$($bin -h 2>/dev/null | awk '/^  /{print $1}')"} )
+
+compadd -a cmds

@@ -13,6 +13,18 @@ AR      := ar
 TARGET  := akhal
 LIB     := libakhal.a
 
+PREFIX      ?= /usr/local
+BINDIR      := $(PREFIX)/bin
+LIBDIR      := $(PREFIX)/lib
+INCLUDEDIR  := $(PREFIX)/include
+DATADIR     := $(PREFIX)/share
+BASHCOMPDIR := $(DATADIR)/bash-completion/completions
+ZSHCOMPDIR  := $(DATADIR)/zsh/site-functions
+
+INSTALL         := install
+INSTALL_PROGRAM := $(INSTALL) -m 755
+INSTALL_DATA    := $(INSTALL) -m 644
+
 # library
 LIB_SRC := $(wildcard src/lib/*.c)
 LIB_OBJ := $(LIB_SRC:.c=.o)
@@ -34,7 +46,7 @@ CLI_OBJ := $(CLI_SRC:.c=.o)
 
 ALL_OBJ := $(CLI_OBJ)
 
-.PHONY: all clean
+.PHONY: all clean install uninstall
 all: $(TARGET)
 
 $(LIB): $(LIB_OBJ)
@@ -47,6 +59,21 @@ $(TARGET): $(ALL_OBJ) $(LIB)
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
+
+install: all
+	@$(INSTALL) -d $(DESTDIR)$(BINDIR) $(DESTDIR)$(LIBDIR) $(DESTDIR)$(INCLUDEDIR)/akhal $(DESTDIR)$(BASHCOMPDIR) $(DESTDIR)$(ZSHCOMPDIR)
+	@$(INSTALL_PROGRAM) $(TARGET) $(DESTDIR)$(BINDIR)/
+	@$(INSTALL_DATA) completions/akhal.bash $(DESTDIR)$(BASHCOMPDIR)/$(TARGET)
+	@$(INSTALL_DATA) completions/_akhal $(DESTDIR)$(ZSHCOMPDIR)/_$(TARGET)
+	@[ "$(DESTDIR)$(LIBDIR)" -ef lib ] || $(INSTALL_DATA) lib/$(LIB) $(DESTDIR)$(LIBDIR)/
+	@[ "$(DESTDIR)$(INCLUDEDIR)/akhal" -ef include/akhal ] || $(INSTALL_DATA) include/akhal/*.h $(DESTDIR)$(INCLUDEDIR)/akhal/
+
+uninstall:
+	rm -f  $(DESTDIR)$(BINDIR)/$(TARGET)
+	rm -f  $(DESTDIR)$(BASHCOMPDIR)/$(TARGET)
+	rm -f  $(DESTDIR)$(ZSHCOMPDIR)/_$(TARGET)
+	[ "$(DESTDIR)$(LIBDIR)" -ef lib ] || rm -f $(DESTDIR)$(LIBDIR)/$(LIB)
+	[ "$(DESTDIR)$(INCLUDEDIR)/akhal" -ef include/akhal ] || rm -rf $(DESTDIR)$(INCLUDEDIR)/akhal
 
 clean:
 	rm -f $(TARGET) lib/$(LIB) $(LIB_OBJ) $(CLI_OBJ)
