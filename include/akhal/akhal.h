@@ -24,6 +24,7 @@
  *   akhal/diff.h    structural comparison of two graphs, ids aside
  *   akhal/rgfa.h    stable-sequence labelling: a GFA turned into an rGFA
  *   akhal/compact.h folding non-branching runs of segments into single nodes
+ *   akhal/dot.h     Graphviz output, for looking at a graph
  */
 
 #include "akhal/version.h"
@@ -42,5 +43,6 @@
 #include "akhal/diff.h"
 #include "akhal/rgfa.h"
 #include "akhal/compact.h"
+#include "akhal/dot.h"
 
 #endif

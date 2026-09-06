@@ -41,6 +41,7 @@ For the command-line tool, see the [main README](../README.md).
 
 | Module | What it gives you |
 | --- | --- |
+| [`dot`](dot.md) | Graphviz output: a box per segment and an arrow per link, for looking at a graph rather than computing on it |
 | [`io`](io.md) | The line-oriented input handle every text reader pulls lines through |
 | [`kstr`](kstr.md) | A growable, always-NUL-terminated string buffer |
 | [`util`](util.md) | Complement / reverse-complement, suffix testing, and mean / variance / stddev |

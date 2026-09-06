@@ -24,6 +24,7 @@ static const command_t commands[] = {
     { "rank",     cmd_rank,     "graph", "rewrite SR ranks against the backbone"      },
     { "vg2gfa",   cmd_vg2gfa,   "graph", "convert vg to GFA"                          },
     { "gfa2rgfa", cmd_gfa2rgfa, "graph", "label a GFA as rGFA (SN/SO/SR tags)"        },
+    { "gfa2dot",  cmd_gfa2dot,  "graph", "write a graph as Graphviz, to look at it"   },
     { "gaf2sam",  cmd_gaf2sam,  "align", "convert GAF alignments to SAM"              },
     { "sampoke",  cmd_sampoke,  "align", "validate SAM CIGAR/positions against a ref" },
     { "annotate", cmd_annotate, "annot", "trace node origins (VCF/FASTA) to a .annot file" },

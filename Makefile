@@ -40,6 +40,7 @@ CLI_SRC := src/cli/main.c \
 		   src/cli/cmd_rank.c \
 		   src/cli/cmd_vg2gfa.c \
 		   src/cli/cmd_gfa2rgfa.c \
+		   src/cli/cmd_gfa2dot.c \
 		   src/cli/cmd_gaf2sam.c \
 		   src/cli/cmd_sampoke.c \
 		   src/cli/cmd_annotate.c \

@@ -9,7 +9,7 @@ It is structured like `htslib` + `samtools`: a reusable library (`libakhal`) tha
 
 This README documents the command-line tool. 
 The library has its own reference under [`docs/`](docs/README.md) - one page per module, one section per public function, each with a short snippet showing how to call it and the data preparation it needs. 
-Start at the [library index](docs/README.md), or go straight to a module: [`gfa`](docs/gfa.md), [`call`](docs/call.md), [`diff`](docs/diff.md), [`rgfa`](docs/rgfa.md), [`compact`](docs/compact.md), [`annot`](docs/annot.md), [`vg`](docs/vg.md), [`fasta`](docs/fasta.md), [`gaf`](docs/gaf.md), [`sam`](docs/sam.md), [`vcf`](docs/vcf.md), [`io`](docs/io.md), [`kstr`](docs/kstr.md), [`util`](docs/util.md), [`error`](docs/error.md).
+Start at the [library index](docs/README.md), or go straight to a module: [`gfa`](docs/gfa.md), [`call`](docs/call.md), [`diff`](docs/diff.md), [`rgfa`](docs/rgfa.md), [`compact`](docs/compact.md), [`dot`](docs/dot.md), [`annot`](docs/annot.md), [`vg`](docs/vg.md), [`fasta`](docs/fasta.md), [`gaf`](docs/gaf.md), [`sam`](docs/sam.md), [`vcf`](docs/vcf.md), [`io`](docs/io.md), [`kstr`](docs/kstr.md), [`util`](docs/util.md), [`error`](docs/error.md).
 
 ## Installation
 
@@ -303,7 +303,33 @@ S	5	GG	SN:Z:samp	SO:i:9	SR:i:1
 
 Node 3 is the alternate allele of a SNP: rank 1, named after the sample path that explains it, and offset 4 - the reference coordinate of the node it detours around. Node 5 hangs off the end of the reference and carries on from where it stopped.
 
-#### 10. `gaf2sam`
+#### 10. `gfa2dot`
+Writes a graph as a Graphviz digraph, for looking at rather than computing on.
+
+One box per segment and one arrow per link. 
+A segment carries its id and, when it is short enough to read, its bases; anything longer shows a length instead, and `--ids` drops the sequences entirely for a graph that is getting crowded. 
+GFA is bidirected and DOT is not, so a link that flips strand says so on the arrow (`+/-`) and one that does not is left plain, which keeps a clean variation graph free of clutter. 
+An overlap is labelled where there is one.
+
+On a file that ranks itself the backbone is shaded apart from what hangs off it, so an rGFA's structure reads at a glance - pipe `gfa2rgfa` into this and the reference stands out from the bubbles.
+
+This is meant for graphs small enough to look at: a bubble, a test case, a region pulled out of something bigger. 
+Graphviz will accept a graph of any size and spend a very long time on it, so a graph over ten thousand nodes is reported before it is written.
+
+**Usage:**
+```sh
+./akhal gfa2dot <input r/GFA file> [output .dot/.gv file] [--ids]
+```
+
+Note: If no output file is given, the DOT is written to standard output.
+
+Example:
+```sh
+$ ./akhal gfa2dot graph.gfa graph.dot
+[INFO] wrote 5 node(s) and 5 edge(s) to graph.dot; render with: dot -Tpng graph.dot -o graph.png
+```
+
+#### 11. `gaf2sam`
 Converts a GAF file to a SAM file.
 
 **Usage:**
@@ -317,7 +343,7 @@ GAF file does not store sequences, hence, reads are needed when converting to SA
 Note: `simple` option is optional. 
 If provided, CIGAR string matches `(=)` and mismatches `(X)` will be replaced with sequence match `(M)`.
 
-#### 11. `sampoke`
+#### 12. `sampoke`
 Validate SAM file (converted from gaf). It takes reference file and SAM to process CIGAR strings. 
 Optionally, it can print the filtered SAM file that contains valid lines.
 
@@ -328,7 +354,7 @@ Optionally, it can print the filtered SAM file that contains valid lines.
 
 Note: Output file here is optional.
 
-#### 12. `annotate`
+#### 13. `annotate`
 Traces the origin of every graph node and saves the result as a binary `.annot` file. 
 The backbone reference path (a `P` line) is identified first - by `--ref <name>`, or defaulting to the graph's first path - and its nodes are marked `backbone` with their reference coordinates. 
 With `--vcf`, each variant is matched to the alternative side of its bubble: the shared REF/ALT prefix is stripped, the branch point is located on the backbone, and the nodes spelling the alternate allele are annotated like `SNP chr1:12345 A>G rs99`. 
@@ -342,7 +368,7 @@ A node explained more than once accumulates its annotations separated by `; `.
 ./akhal annotate <r/GFA file> <OUTPUT .annot file> [--vcf <VCF file>] [--fasta <FASTA file>] [--ref <path name>]
 ```
 
-#### 13. `annotget`
+#### 14. `annotget`
 Looks up node annotations in a `.annot` file - the graph itself is not needed. 
 Each queried node prints one line, `<id> <status> [<info>]`, where status is `backbone`, `annot`, or `unknown`. 
 With no node ids, every record in the file is dumped.

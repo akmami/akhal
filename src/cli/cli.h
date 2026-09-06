@@ -88,6 +88,14 @@ int cmd_rank(int argc, char **argv);
 int cmd_gfa2rgfa(int argc, char **argv);
 
 /**
+ * `gfa2dot` - write a graph as a Graphviz digraph, for looking at it
+ * @param argc Argument count
+ * @param argv Arguments; input .gfa, optional output .dot, optional --ids
+ * @return 0 on success, non-zero on failure
+ */
+int cmd_gfa2dot(int argc, char **argv);
+
+/**
  * `vg2gfa` - convert vg's native .vg format to GFA
  * @param argc Argument count
  * @param argv Arguments; input .vg and optional output .gfa
