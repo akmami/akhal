@@ -51,8 +51,8 @@ typedef struct {
  * Label a graph as rGFA, in place.
  *
  * Fragmented P lines are consolidated first, exactly as gfa_path_merge()
- * chains them, so a reference that arrived as "chr22[0]", "chr22[21]", ...
- * leaves as one path and one stable sequence name. The backbone is then
+ * chains them, so a reference that arrived as "chr22:0-1000",
+ * "chr22:1000-2000", ... leaves as one path and one stable sequence name. The backbone is then
  * labelled rank 0 and every other path walked as described above.
  *
  * Segments are labelled through the fields gfa_write_rgfa() emits: `rank` is

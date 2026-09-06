@@ -20,9 +20,10 @@ int cmd_stats(int argc, char **argv);
 
 /**
  * `extract` - pull information out of a graph. The target is argv[2]:
- * "fa" writes each path's sequence as FASTA, "path" stitches a fragmented
- * path back together first, and "vcf" reports the graph's variations over
- * its reference backbone
+ * "fa" writes every path as FASTA with fragmented ones stitched back together
+ * (--raw leaves them a record per P line), "path" does the same for the paths
+ * named on the command line, and "vcf" reports the graph's variations over its
+ * reference backbone
  * @param argc Argument count
  * @param argv Arguments; the target, the graph path, an output path, then any
  *             target-specific arguments

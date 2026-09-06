@@ -101,7 +101,8 @@ with one `P` line per chain and one stable sequence name per reference. That
 rewrite happens whether or not the labelling finds anything to say.
 
 `ref_name` picks the backbone by chain name, or by the name of any fragment
-that went into a chain, so either `chr22` or `chr22[0]` selects the same one.
+that went into a chain, so either `chr22` or `chr22:1000-2000` selects the same
+one.
 `NULL` takes the chain holding the graph's first `P` line.
 
 ```c

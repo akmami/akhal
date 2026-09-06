@@ -287,7 +287,7 @@ Marks every segment of one `P` line as `ANNOT_BACKBONE` with info
 graph has no paths or no path of that name), in which case nothing is marked.
 
 Path names are matched exactly against `g->path[]`, with no fragment chaining -
-a reference split by `vg` into `chr22[0]`, `chr22[21]`, ... must be named by
+a reference split into `chr22:0-1000`, `chr22:1000-2000`, ... must be named by
 one of those literal fragment names, and only that fragment is marked.
 
 ```c

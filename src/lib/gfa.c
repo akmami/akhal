@@ -478,7 +478,8 @@ int gfa_path_segs(const gfa_t *g, int32_t k, const uint32_t **segs) {
 
 // fragmented paths
 
-// name length with vg's subpath decoration stripped: "chr22[1000]" -> "chr22"
+// name length with any region suffix stripped, whether written the usual way
+// or as vg spells it: "chr22:1000-2000" and "chr22[1000]" both give "chr22"
 static size_t frag_base_len(const char *name) {
     const char *b = strchr(name, '[');
     if (b) return (size_t)(b - name);
@@ -488,7 +489,8 @@ static size_t frag_base_len(const char *name) {
     return strlen(name);
 }
 
-// start offset encoded in a path name, or -1 when it carries none
+// start offset a region suffix carries ("chr22:1000-2000" -> 1000), or -1 when
+// the name has none
 static int64_t frag_base_off(const char *name) {
     const char *b = strchr(name, '[');
     if (!b) {

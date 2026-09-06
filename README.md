@@ -83,25 +83,34 @@ Extract information from the r/GFA file. The first argument picks what to pull o
 
 **Usage:**
 ```sh
-./akhal extract fa   <r/GFA file> <OUTPUT .fa/.fasta file> [wrap length]
-./akhal extract path <r/GFA file> <OUTPUT .fa/.fasta file> [path name] [wrap length]
+./akhal extract fa   <r/GFA file> <OUTPUT .fa/.fasta file> [wrap length] [--raw]
+./akhal extract path <r/GFA file> <OUTPUT .fa/.fasta file> <path name> [path name ...] [wrap length]
 ./akhal extract vcf  <r/GFA file> <OUTPUT .vcf file> [--ref <name>] [--fasta <FASTA file>]
 ```
 
 `wrap length` sets how many bases each output FASTA line carries; it defaults to 80 when omitted. 
-For `path`, a single trailing numeric argument is taken as the wrap length rather than a path name.
+For `path`, a trailing numeric argument is read as the wrap length rather than a path name - but only when a name precedes it, so a lone `60` is still the path called `60`.
 
 ##### `fa`
-Writes one FASTA record per `P` line, exactly as the graph stores them.
+Writes every path in the graph as FASTA, one record each, with fragmented `P` lines stitched back together first - so a reference that arrived as `chr22:0-1000`, `chr22:1000-2000`, ... leaves as a single `chr22` record rather than thousands of tiny ones. 
+The chaining is exactly what `path` does, described below.
+
+`--raw` turns that off and writes one record per `P` line exactly as the graph stores them, which is how to see what a file actually contains.
 
 ##### `path`
-Same output, but fragmented paths are stitched back together first.
-Builders like `vg` split one reference across consecutive `P` lines (`chr22[0]`, `chr22[21]`, ...), so asking for `chr22` collects every fragment whose name reduces to it - vg's `name[start]` and `name:start-end` decorations are stripped, and a PanSN name such as `GRCh38#0#chr22[0]` is found by its bare contig name too.
-The fragments are then ordered by the offset in their name and chained through the `L` lines: one fragment follows another when a link joins its last segment to the other's first with matching orientations, the other has no predecessor yet, and the join does not close a cycle.
+The same records, but only for the paths you name - one name at least, as many as you like. 
+`fa` is how to take every path in the graph; this is how to take a few of them.
+Fragmented paths are stitched back together first.
+A reference often arrives as several `P` lines rather than one, and asking for `chr22` collects all of them. 
+Fragments are matched on their base name: the contig, with a region suffix in the usual `chr22:1000-2000` form dropped, or vg's `chr22[1000]` spelling of the same thing, and with a PanSN prefix ignored so `GRCh38#0#chr22:1000-2000` answers to `chr22` as well. 
+Lines carrying no suffix at all - several `P` lines each named simply `chr22` - are collected the same way.
+
+The fragments are then chained through the `L` lines: one follows another when a link joins its last segment to the other's first with matching orientations, the other has no predecessor yet, and the join does not close a cycle. 
+A start offset in the name only decides which candidate is tried first; names without one keep the order they appear in the file.
 Chaining only follows the forward strand, so a fragment stored reverse-complemented relative to its neighbours stays on its own.
 
-Everything is written, merged or not: a chain of several fragments takes their shared base name (`chr22`, or `chr22_1`, `chr22_2`, ... when one base yields more than one chain), and a fragment that nothing joined keeps the name it already had. 
-With no path name given, every path in the graph is grouped by its own base name.
+Everything a name selects is written, merged or not: a chain of several fragments takes their shared base name (`chr22`, or `chr22_1`, `chr22_2`, ... when one base yields more than one chain), and a fragment that nothing joined keeps the name it already had. 
+Several names are written to the one file, in the order given, and a name that matches nothing stops the command rather than leaving a half-written file behind.
 
 ##### `vcf`
 Reads the graph as a reference plus its differences.
@@ -193,7 +202,7 @@ Rewrites a graph's `SR:i:` ranks against its backbone.
 In rGFA, rank 0 is the reference and anything higher came from a sample; `rank` decides which segments are which and re-emits the graph.
 
 By default the backbone is the graph's own `P` lines: every segment any path visits becomes rank 0, everything else rank 1. 
-Fragmented paths are consolidated first - a reference that arrived as `chr22[0]`, `chr22[21]`, ... leaves as a single `P chr22`, chained through the links exactly as `extract path` does. 
+Fragmented paths are consolidated first - a reference that arrived as `chr22:0-1000`, `chr22:1000-2000`, ... leaves as a single `P chr22`, chained through the links exactly as `extract path` does. 
 A graph with no `P` lines has no backbone to rank against, so the command stops rather than silently flattening an rGFA's own tags; use `--fasta` to give it one.
 
 With `--fasta`, an external reference becomes the backbone instead: the sequence is traced through the graph, the nodes it walks become rank 0 and every other node rank 1, and the old `P` lines are replaced by one named after the FASTA record spelling that walk. 
@@ -232,7 +241,7 @@ Note: If no output file is given, the GFA is written to standard output.
 Labels a plain GFA as an rGFA, giving every segment the three tags that say where it sits on a real sequence: `SN:Z:` the name of that sequence, `SO:i:` the offset on it, `SR:i:` how far it is from the linear reference. 
 A GFA carries none of them, but its `P` lines say everything needed to work them out.
 
-Fragmented `P` lines are consolidated first, exactly as `extract path` chains them, so a reference that arrived as `chr22[0]`, `chr22[21]`, ... leaves as one path and one stable sequence name. 
+Fragmented `P` lines are consolidated first, exactly as `extract path` chains them, so a reference that arrived as `chr22:0-1000`, `chr22:1000-2000`, ... leaves as one path and one stable sequence name. 
 One path is then declared the backbone - `--ref <name>`, else the graph's first - and its segments become rank 0, named after it, with offsets running the length of the walk.
 
 Every other path is walked in turn. 

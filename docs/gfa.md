@@ -300,10 +300,10 @@ gfa_destroy(g);
 
 ## Fragmented paths
 
-Builders such as `vg` split one reference across consecutive `P` lines
-(`chr22[0]`, `chr22[21]`, ...). These three functions stitch them back
-together. `gfa_merge_t` is CSR like everything else: chain `c` owns the path
-indices `frag[off[c] .. off[c+1])`.
+A reference often arrives as several consecutive `P` lines rather than one
+(`chr22:0-1000`, `chr22:1000-2000`, ..., or simply several lines each named
+`chr22`). These three functions stitch them back together. `gfa_merge_t` is CSR
+like everything else: chain `c` owns the path indices `frag[off[c] .. off[c+1])`.
 
 ### `gfa_path_merge`
 
@@ -311,9 +311,10 @@ indices `frag[off[c] .. off[c+1])`.
 gfa_merge_t *gfa_path_merge(const gfa_t *g, const char *key);
 ```
 
-Selects fragments by name - vg's `name[start]` and `name:start-end` decoration
-is stripped, and a PanSN name like `GRCh38#0#chr22[0]` is also found by its
-bare contig name - then chains them through the links. `key` of `NULL` selects
+Selects fragments by name - a `name:start-end` region suffix is stripped, as is
+vg's `name[start]` spelling of it, and a PanSN name like
+`GRCh38#0#chr22:1000-2000` is also found by its bare contig name - then chains
+them through the links. `key` of `NULL` selects
 every path and groups each base name separately. Requires
 `GFA_LINKS | GFA_PATHS`.
 

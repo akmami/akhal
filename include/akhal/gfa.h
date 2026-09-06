@@ -258,8 +258,9 @@ typedef struct {
  * Group a graph's P-line fragments into chains.
  *
  * Fragments are selected by name: a path belongs to `key` when its name equals
- * `key` once vg's subpath decoration is stripped, or when the last '#'-delimited 
- * field of that base matches, so a PanSN name like "GRCh38#0#chr22[0]" is found 
+ * `key` once a region suffix is stripped - "chr22:1000-2000" in the usual form,
+ * or "chr22[1000]" as vg spells it - or when the last '#'-delimited field of
+ * that base matches, so a PanSN name like "GRCh38#0#chr22:1000-2000" is found
  * by "chr22". Passing NULL selects every path and groups each base name separately.
  *
  * Selected fragments are ordered by the start offset in their name (those

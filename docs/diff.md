@@ -181,8 +181,8 @@ typedef struct {
 ```
 
 Fragmented `P` lines are chained with [`gfa_path_merge`](gfa.md#gfa_path_merge)
-before anything is compared, so a reference that arrived as `chr22[0]`,
-`chr22[21]`, ... is one entry named `chr22` on both sides. Chains are then
+before anything is compared, so a reference that arrived as `chr22:0-1000`,
+`chr22:1000-2000`, ... is one entry named `chr22` on both sides. Chains are then
 paired by that name and each pair's **sequences** compared, a `-` step
 contributing its reverse complement. Lengths are compared first and the bases
 only spelled when they match, so a path that differs in length costs nothing to
