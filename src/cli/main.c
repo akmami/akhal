@@ -19,6 +19,7 @@ static const command_t commands[] = {
     { "parse",    cmd_parse,    "graph", "validate an r/GFA graph"                    },
     { "extract",  cmd_extract,  "graph", "extract FASTA, paths, or a VCF"             },
     { "compare",  cmd_compare,  "graph", "compare two graphs"                         },
+    { "compact",  cmd_compact,  "graph", "fold non-branching runs into one node"      },
     { "sort",     cmd_sort,     "graph", "topologically sort and renumber a graph"    },
     { "rank",     cmd_rank,     "graph", "rewrite SR ranks against the backbone"      },
     { "vg2gfa",   cmd_vg2gfa,   "graph", "convert vg to GFA"                          },

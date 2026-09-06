@@ -34,6 +34,7 @@ For the command-line tool, see the [main README](../README.md).
 | [`call`](call.md) | Labels a reference backbone through the graph, then reports everything the graph carries beyond it as variants, and writes them as VCF |
 | [`diff`](diff.md) | Compares two graphs that disagree on segment ids: segments matched by sequence content, links through the labelling that produces, paths by the bases they spell |
 | [`rgfa`](rgfa.md) | Works the rGFA stable-sequence tags out of a graph's own P lines: a backbone at rank 0, everything that detours off it one rank deeper and offset from where it left |
+| [`compact`](compact.md) | Folds every run of non-branching segments into one node, keeping the bases, the links between runs and the paths exactly as they were |
 | [`annot`](annot.md) | A node-origin store: which variant or which sample sequence explains each node, queryable and round-trippable through a compact binary file |
 
 ### Infrastructure

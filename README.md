@@ -9,7 +9,7 @@ It is structured like `htslib` + `samtools`: a reusable library (`libakhal`) tha
 
 This README documents the command-line tool. 
 The library has its own reference under [`docs/`](docs/README.md) - one page per module, one section per public function, each with a short snippet showing how to call it and the data preparation it needs. 
-Start at the [library index](docs/README.md), or go straight to a module: [`gfa`](docs/gfa.md), [`call`](docs/call.md), [`diff`](docs/diff.md), [`rgfa`](docs/rgfa.md), [`annot`](docs/annot.md), [`vg`](docs/vg.md), [`fasta`](docs/fasta.md), [`gaf`](docs/gaf.md), [`sam`](docs/sam.md), [`vcf`](docs/vcf.md), [`io`](docs/io.md), [`kstr`](docs/kstr.md), [`util`](docs/util.md), [`error`](docs/error.md).
+Start at the [library index](docs/README.md), or go straight to a module: [`gfa`](docs/gfa.md), [`call`](docs/call.md), [`diff`](docs/diff.md), [`rgfa`](docs/rgfa.md), [`compact`](docs/compact.md), [`annot`](docs/annot.md), [`vg`](docs/vg.md), [`fasta`](docs/fasta.md), [`gaf`](docs/gaf.md), [`sam`](docs/sam.md), [`vcf`](docs/vcf.md), [`io`](docs/io.md), [`kstr`](docs/kstr.md), [`util`](docs/util.md), [`error`](docs/error.md).
 
 ## Installation
 
@@ -187,7 +187,35 @@ Path chr22: identical (48 bp)
 [INFO] the graphs are identical
 ```
 
-#### 5. `sort`
+#### 5. `compact`
+Folds every run of non-branching segments into a single node, the way `vg mod -u` and `odgi unchop` do.
+Builders leave graphs full of chains - node after node joined by one link, with nothing branching anywhere along the way - and nothing is expressed by keeping them apart.
+
+A join `u -> v` is taken when the link leaves `u`'s right end and enters `v`'s left end on the same strand (`L u + v +`, or the same edge read from the other side, `L v - u -`), it is the only link on either of those two ends, and it is a blunt join with no overlap - bases the two share would have to be dropped, and this never rewrites sequence it was not given.
+A join that flips strand is left alone, and so is a self-loop.
+
+Nothing else changes: the merged node keeps the first segment's id, links between runs are repointed at the nodes that swallowed their endpoints, and a path that walked a run step by step comes out walking the one node.
+Two things stop a run where it would otherwise continue.
+A path that starts or ends in the middle of one cuts it there, since a `P` line cannot stop halfway through a node.
+And on an rGFA, two segments merge only if they sit on the same stable sequence at the same rank with contiguous offsets, so the merged node inherits a coordinate that still means something; a plain GFA has no tags to preserve and comes back plain.
+
+Note on tags: the reader keeps a file's `SR` but not its `SN`, and takes each segment's offset from the layout of the path that owns it, so the `SN`/`SO` written here are the owning path and the offset along it rather than whatever the input said. 
+Run `compact` before `gfa2rgfa`, not after, and both come out saying what they mean.
+
+**Usage:**
+```sh
+./akhal compact <input .gfa file> [output .gfa file]
+```
+
+Note: If no output file is given, the compacted graph is written to standard output.
+
+Example:
+```sh
+$ ./akhal compact graph.gfa
+[INFO] 12 segment(s) in, 5 out: 7 folded into a neighbour
+```
+
+#### 6. `sort`
 Topologically sorts a graph and renumbers its nodes `1..N` in the sorted order. Ordering uses Kahn's algorithm; ties in the ready set (the "hops") are broken alphabetically by node **sequence content**, so the result is independent of the input's node numbering — two graphs identical in topology and content sort the same way. Nodes in cycles, if any, are appended after the acyclic prefix. The sorted graph is re-emitted with the new ids (S/L/P lines remapped, link orientation and overlap preserved).
 
 **Usage:**
@@ -197,7 +225,7 @@ Topologically sorts a graph and renumbers its nodes `1..N` in the sorted order. 
 
 Note: If no output file is given, the sorted GFA is written to standard output.
 
-#### 6. `rank`
+#### 7. `rank`
 Rewrites a graph's `SR:i:` ranks against its backbone. 
 In rGFA, rank 0 is the reference and anything higher came from a sample; `rank` decides which segments are which and re-emits the graph.
 
@@ -227,7 +255,7 @@ $ ./akhal rank graph.gfa --fasta GRCh38.chr22.fa
 [INFO] backbone taken from GRCh38.chr22.fa: 41233 node(s) at rank 0, 18904 at rank 1
 ```
 
-#### 7. `vg2gfa`
+#### 8. `vg2gfa`
 Converts vg's native `.vg` format (gzip/BGZF-compressed Protobuf) to GFA. The `.vg` parser is hand-written pure C - no protobuf or libvgio needed, only zlib.
 
 **Usage:**
@@ -237,7 +265,7 @@ Converts vg's native `.vg` format (gzip/BGZF-compressed Protobuf) to GFA. The `.
 
 Note: If no output file is given, the GFA is written to standard output.
 
-#### 8. `gfa2rgfa`
+#### 9. `gfa2rgfa`
 Labels a plain GFA as an rGFA, giving every segment the three tags that say where it sits on a real sequence: `SN:Z:` the name of that sequence, `SO:i:` the offset on it, `SR:i:` how far it is from the linear reference. 
 A GFA carries none of them, but its `P` lines say everything needed to work them out.
 
@@ -275,7 +303,7 @@ S	5	GG	SN:Z:samp	SO:i:9	SR:i:1
 
 Node 3 is the alternate allele of a SNP: rank 1, named after the sample path that explains it, and offset 4 - the reference coordinate of the node it detours around. Node 5 hangs off the end of the reference and carries on from where it stopped.
 
-#### 9. `gaf2sam`
+#### 10. `gaf2sam`
 Converts a GAF file to a SAM file.
 
 **Usage:**
@@ -289,7 +317,7 @@ GAF file does not store sequences, hence, reads are needed when converting to SA
 Note: `simple` option is optional. 
 If provided, CIGAR string matches `(=)` and mismatches `(X)` will be replaced with sequence match `(M)`.
 
-#### 10. `sampoke`
+#### 11. `sampoke`
 Validate SAM file (converted from gaf). It takes reference file and SAM to process CIGAR strings. 
 Optionally, it can print the filtered SAM file that contains valid lines.
 
@@ -300,7 +328,7 @@ Optionally, it can print the filtered SAM file that contains valid lines.
 
 Note: Output file here is optional.
 
-#### 11. `annotate`
+#### 12. `annotate`
 Traces the origin of every graph node and saves the result as a binary `.annot` file. 
 The backbone reference path (a `P` line) is identified first - by `--ref <name>`, or defaulting to the graph's first path - and its nodes are marked `backbone` with their reference coordinates. 
 With `--vcf`, each variant is matched to the alternative side of its bubble: the shared REF/ALT prefix is stripped, the branch point is located on the backbone, and the nodes spelling the alternate allele are annotated like `SNP chr1:12345 A>G rs99`. 
@@ -314,7 +342,7 @@ A node explained more than once accumulates its annotations separated by `; `.
 ./akhal annotate <r/GFA file> <OUTPUT .annot file> [--vcf <VCF file>] [--fasta <FASTA file>] [--ref <path name>]
 ```
 
-#### 12. `annotget`
+#### 13. `annotget`
 Looks up node annotations in a `.annot` file - the graph itself is not needed. 
 Each queried node prints one line, `<id> <status> [<info>]`, where status is `backbone`, `annot`, or `unknown`. 
 With no node ids, every record in the file is dumped.

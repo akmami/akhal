@@ -51,6 +51,15 @@ int cmd_compare(int argc, char **argv);
 int cmd_parse(int argc, char **argv);
 
 /**
+ * `compact` - fold every run of non-branching segments into one, keeping the
+ * bases, the links between runs and the paths exactly as they were
+ * @param argc Argument count
+ * @param argv Arguments; input .gfa and optional output .gfa
+ * @return 0 on success, non-zero on failure
+ */
+int cmd_compact(int argc, char **argv);
+
+/**
  * `sort` - topologically sort a graph and renumber nodes 1..N
  * @param argc Argument count
  * @param argv Arguments; input .gfa and optional output .gfa
