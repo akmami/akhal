@@ -22,6 +22,7 @@
  *   akhal/annot.h   node annotation store, builders and file format
  *   akhal/call.h    backbone labelling and variant discovery on a graph
  *   akhal/diff.h    structural comparison of two graphs, ids aside
+ *   akhal/rgfa.h    stable-sequence labelling: a GFA turned into an rGFA
  */
 
 #include "akhal/version.h"
@@ -38,5 +39,6 @@
 #include "akhal/annot.h"
 #include "akhal/call.h"
 #include "akhal/diff.h"
+#include "akhal/rgfa.h"
 
 #endif

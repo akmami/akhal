@@ -9,7 +9,7 @@ It is structured like `htslib` + `samtools`: a reusable library (`libakhal`) tha
 
 This README documents the command-line tool. 
 The library has its own reference under [`docs/`](docs/README.md) - one page per module, one section per public function, each with a short snippet showing how to call it and the data preparation it needs. 
-Start at the [library index](docs/README.md), or go straight to a module: [`gfa`](docs/gfa.md), [`call`](docs/call.md), [`diff`](docs/diff.md), [`annot`](docs/annot.md), [`vg`](docs/vg.md), [`fasta`](docs/fasta.md), [`gaf`](docs/gaf.md), [`sam`](docs/sam.md), [`vcf`](docs/vcf.md), [`io`](docs/io.md), [`kstr`](docs/kstr.md), [`util`](docs/util.md), [`error`](docs/error.md).
+Start at the [library index](docs/README.md), or go straight to a module: [`gfa`](docs/gfa.md), [`call`](docs/call.md), [`diff`](docs/diff.md), [`rgfa`](docs/rgfa.md), [`annot`](docs/annot.md), [`vg`](docs/vg.md), [`fasta`](docs/fasta.md), [`gaf`](docs/gaf.md), [`sam`](docs/sam.md), [`vcf`](docs/vcf.md), [`io`](docs/io.md), [`kstr`](docs/kstr.md), [`util`](docs/util.md), [`error`](docs/error.md).
 
 ## Installation
 
@@ -228,7 +228,45 @@ Converts vg's native `.vg` format (gzip/BGZF-compressed Protobuf) to GFA. The `.
 
 Note: If no output file is given, the GFA is written to standard output.
 
-#### 8. `gaf2sam`
+#### 8. `gfa2rgfa`
+Labels a plain GFA as an rGFA, giving every segment the three tags that say where it sits on a real sequence: `SN:Z:` the name of that sequence, `SO:i:` the offset on it, `SR:i:` how far it is from the linear reference. 
+A GFA carries none of them, but its `P` lines say everything needed to work them out.
+
+Fragmented `P` lines are consolidated first, exactly as `extract path` chains them, so a reference that arrived as `chr22[0]`, `chr22[21]`, ... leaves as one path and one stable sequence name. 
+One path is then declared the backbone - `--ref <name>`, else the graph's first - and its segments become rank 0, named after it, with offsets running the length of the walk.
+
+Every other path is walked in turn. 
+While it runs over ground that is already labelled it only follows along; where it leaves that ground, the segments it visits alone are one rank deeper, named after that path, and offset onward from the point it left - so a bubble carries the coordinate of the reference stretch it detours around, and the counting stops as soon as the path merges back down to a lower rank. 
+A detour hanging off a rank-1 stretch is rank 2, and so on.
+
+Where two paths disagree, nothing is invented. 
+A segment that one path places at one offset and another at a different one has no single answer, so it keeps its rank and loses `SN`/`SO`, as does everything the walk reaches after it - until the walk arrives somewhere an authoritative path, the backbone above all, has already pinned down. 
+Segments no path visits at all are left untagged. 
+Both are counted in the summary.
+
+This reads a **variation graph**, where the paths are haplotypes over a shared backbone. 
+An assembly graph, whose paths are unrelated contigs, will label badly - there is no meaningful backbone for the rest to be an offset from.
+
+**Usage:**
+```sh
+./akhal gfa2rgfa <input .gfa file> [output .rgfa file] [--ref <path name>]
+```
+
+Note: If no output file is given, the rGFA is written to standard output.
+
+Example:
+```sh
+$ ./akhal gfa2rgfa graph.gfa --ref ref
+S	1	AAAA	SN:Z:ref	SO:i:0	SR:i:0
+S	2	C	SN:Z:ref	SO:i:4	SR:i:0
+S	3	G	SN:Z:samp	SO:i:4	SR:i:1
+S	4	TTTT	SN:Z:ref	SO:i:5	SR:i:0
+S	5	GG	SN:Z:samp	SO:i:9	SR:i:1
+```
+
+Node 3 is the alternate allele of a SNP: rank 1, named after the sample path that explains it, and offset 4 - the reference coordinate of the node it detours around. Node 5 hangs off the end of the reference and carries on from where it stopped.
+
+#### 9. `gaf2sam`
 Converts a GAF file to a SAM file.
 
 **Usage:**
@@ -242,7 +280,7 @@ GAF file does not store sequences, hence, reads are needed when converting to SA
 Note: `simple` option is optional. 
 If provided, CIGAR string matches `(=)` and mismatches `(X)` will be replaced with sequence match `(M)`.
 
-#### 9. `sampoke`
+#### 10. `sampoke`
 Validate SAM file (converted from gaf). It takes reference file and SAM to process CIGAR strings. 
 Optionally, it can print the filtered SAM file that contains valid lines.
 
@@ -253,7 +291,7 @@ Optionally, it can print the filtered SAM file that contains valid lines.
 
 Note: Output file here is optional.
 
-#### 10. `annotate`
+#### 11. `annotate`
 Traces the origin of every graph node and saves the result as a binary `.annot` file. 
 The backbone reference path (a `P` line) is identified first - by `--ref <name>`, or defaulting to the graph's first path - and its nodes are marked `backbone` with their reference coordinates. 
 With `--vcf`, each variant is matched to the alternative side of its bubble: the shared REF/ALT prefix is stripped, the branch point is located on the backbone, and the nodes spelling the alternate allele are annotated like `SNP chr1:12345 A>G rs99`. 
@@ -267,7 +305,7 @@ A node explained more than once accumulates its annotations separated by `; `.
 ./akhal annotate <r/GFA file> <OUTPUT .annot file> [--vcf <VCF file>] [--fasta <FASTA file>] [--ref <path name>]
 ```
 
-#### 11. `annotget`
+#### 12. `annotget`
 Looks up node annotations in a `.annot` file - the graph itself is not needed. 
 Each queried node prints one line, `<id> <status> [<info>]`, where status is `backbone`, `annot`, or `unknown`. 
 With no node ids, every record in the file is dumped.

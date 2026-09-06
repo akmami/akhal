@@ -33,6 +33,7 @@ For the command-line tool, see the [main README](../README.md).
 | --- | --- |
 | [`call`](call.md) | Labels a reference backbone through the graph, then reports everything the graph carries beyond it as variants, and writes them as VCF |
 | [`diff`](diff.md) | Compares two graphs that disagree on segment ids: segments matched by sequence content, links through the labelling that produces, paths by the bases they spell |
+| [`rgfa`](rgfa.md) | Works the rGFA stable-sequence tags out of a graph's own P lines: a backbone at rank 0, everything that detours off it one rank deeper and offset from where it left |
 | [`annot`](annot.md) | A node-origin store: which variant or which sample sequence explains each node, queryable and round-trippable through a compact binary file |
 
 ### Infrastructure
@@ -146,6 +147,15 @@ gfa_read(GFA_LINKS|GFA_PATHS)   gfa    load both graphs
 diff_map(a, b)                  diff   match segments by sequence, label them
 diff_graphs(a, b)               diff   ... and compare links and paths through it
 diff_identical(d)               diff   the whole verdict, for an exit status
+```
+
+**Label a plain GFA as an rGFA** - `akhal gfa2rgfa`
+
+```text
+gfa_read(GFA_LINKS|GFA_PATHS)   gfa    load the graph
+rgfa_build(g, "chr22", &st)     rgfa   chain the P lines, then walk them all,
+                                       writing SN/SO/SR onto every segment
+gfa_write_rgfa(g, out)          gfa    emit the graph, tags and all
 ```
 
 **Trace where each node came from** - `akhal annotate`

@@ -15,15 +15,16 @@ typedef struct {
 } command_t;
 
 static const command_t commands[] = {
-    { "stats",   cmd_stats,   "graph", "summary statistics for an r/GFA graph"      },
-    { "parse",   cmd_parse,   "graph", "validate an r/GFA graph"                    },
-    { "extract", cmd_extract, "graph", "extract FASTA, paths, or a VCF"             },
-    { "compare", cmd_compare, "graph", "compare two graphs"                         },
-    { "sort",    cmd_sort,    "graph", "topologically sort and renumber a graph"    },
-    { "rank",    cmd_rank,    "graph", "rewrite SR ranks against the backbone"      },
-    { "vg2gfa",  cmd_vg2gfa,  "graph", "convert vg to GFA"                          },
-    { "gaf2sam", cmd_gaf2sam, "align", "convert GAF alignments to SAM"              },
-    { "sampoke", cmd_sampoke, "align", "validate SAM CIGAR/positions against a ref" },
+    { "stats",    cmd_stats,    "graph", "summary statistics for an r/GFA graph"      },
+    { "parse",    cmd_parse,    "graph", "validate an r/GFA graph"                    },
+    { "extract",  cmd_extract,  "graph", "extract FASTA, paths, or a VCF"             },
+    { "compare",  cmd_compare,  "graph", "compare two graphs"                         },
+    { "sort",     cmd_sort,     "graph", "topologically sort and renumber a graph"    },
+    { "rank",     cmd_rank,     "graph", "rewrite SR ranks against the backbone"      },
+    { "vg2gfa",   cmd_vg2gfa,   "graph", "convert vg to GFA"                          },
+    { "gfa2rgfa", cmd_gfa2rgfa, "graph", "label a GFA as rGFA (SN/SO/SR tags)"        },
+    { "gaf2sam",  cmd_gaf2sam,  "align", "convert GAF alignments to SAM"              },
+    { "sampoke",  cmd_sampoke,  "align", "validate SAM CIGAR/positions against a ref" },
     { "annotate", cmd_annotate, "annot", "trace node origins (VCF/FASTA) to a .annot file" },
     { "annotget", cmd_annotget, "annot", "look up node annotations in a .annot file" },
     { NULL, NULL, NULL, NULL }

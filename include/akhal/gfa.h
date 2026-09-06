@@ -124,6 +124,20 @@ gfa_t *gfa_read(const char *fn, int flags);
 int gfa_write(const gfa_t *g, FILE *out);
 
 /**
+ * Write a graph as rGFA: the same lines gfa_write() emits, plus the stable
+ * sequence each segment sits on - SN:Z: from `ref_name` and SO:i: from `start`
+ * alongside the SR:i: rank.
+ *
+ * Each tag is emitted only where the segment carries it, so one left without a
+ * name or an offset (a NULL `ref_name`, a negative `start`) simply comes out
+ * with the tags it does have. See rgfa_build(), which works those out
+ * @param g Graph to emit
+ * @param out Destination stream
+ * @return AK_OK, or AK_EIO if the stream went bad
+ */
+int gfa_write_rgfa(const gfa_t *g, FILE *out);
+
+/**
  * Release a graph and everything it owns. Safe to call with NULL
  * @param g Graph to destroy
  */

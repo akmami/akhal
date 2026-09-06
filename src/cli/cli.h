@@ -68,6 +68,16 @@ int cmd_sort(int argc, char **argv);
 int cmd_rank(int argc, char **argv);
 
 /**
+ * `gfa2rgfa` - label a GFA as rGFA: consolidate fragmented paths, then give
+ * every segment the stable sequence it sits on (SN), its offset there (SO) and
+ * its distance from the backbone (SR)
+ * @param argc Argument count
+ * @param argv Arguments; input .gfa, optional output, optional --ref
+ * @return 0 on success, non-zero on failure
+ */
+int cmd_gfa2rgfa(int argc, char **argv);
+
+/**
  * `vg2gfa` - convert vg's native .vg format to GFA
  * @param argc Argument count
  * @param argv Arguments; input .vg and optional output .gfa

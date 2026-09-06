@@ -1,3 +1,5 @@
+#compdef akhal
+
 # not `commands`: zsh/parameter already owns that name
 local bin=$words[1]
 local -a cmds

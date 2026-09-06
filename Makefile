@@ -38,6 +38,7 @@ CLI_SRC := src/cli/main.c \
 		   src/cli/cmd_sort.c \
 		   src/cli/cmd_rank.c \
 		   src/cli/cmd_vg2gfa.c \
+		   src/cli/cmd_gfa2rgfa.c \
 		   src/cli/cmd_gaf2sam.c \
 		   src/cli/cmd_sampoke.c \
 		   src/cli/cmd_annotate.c \
@@ -61,12 +62,18 @@ $(TARGET): $(ALL_OBJ) $(LIB)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 install: all
-	@$(INSTALL) -d $(DESTDIR)$(BINDIR) $(DESTDIR)$(LIBDIR) $(DESTDIR)$(INCLUDEDIR)/akhal $(DESTDIR)$(BASHCOMPDIR) $(DESTDIR)$(ZSHCOMPDIR)
-	@$(INSTALL_PROGRAM) $(TARGET) $(DESTDIR)$(BINDIR)/
-	@$(INSTALL_DATA) completions/akhal.bash $(DESTDIR)$(BASHCOMPDIR)/$(TARGET)
-	@$(INSTALL_DATA) completions/_akhal $(DESTDIR)$(ZSHCOMPDIR)/_$(TARGET)
+	$(INSTALL) -d $(DESTDIR)$(BINDIR) $(DESTDIR)$(LIBDIR) $(DESTDIR)$(INCLUDEDIR)/akhal $(DESTDIR)$(BASHCOMPDIR) $(DESTDIR)$(ZSHCOMPDIR)
+	$(INSTALL_PROGRAM) $(TARGET) $(DESTDIR)$(BINDIR)/
+	$(INSTALL_DATA) completions/akhal.bash $(DESTDIR)$(BASHCOMPDIR)/$(TARGET)
+	$(INSTALL_DATA) completions/_akhal $(DESTDIR)$(ZSHCOMPDIR)/_$(TARGET)
 	@[ "$(DESTDIR)$(LIBDIR)" -ef lib ] || $(INSTALL_DATA) lib/$(LIB) $(DESTDIR)$(LIBDIR)/
 	@[ "$(DESTDIR)$(INCLUDEDIR)/akhal" -ef include/akhal ] || $(INSTALL_DATA) include/akhal/*.h $(DESTDIR)$(INCLUDEDIR)/akhal/
+	@# zsh scans this directory, so completion is in place - but compinit caches
+	@# what it found, and oh-my-zsh reuses that cache for a day
+	@if [ -z "$(DESTDIR)" ] && command -v zsh >/dev/null 2>&1 && \
+	   zsh -c 'print -l $$fpath' 2>/dev/null | grep -qx "$(ZSHCOMPDIR)"; then \
+		echo "if a new tab does not complete: rm -f ~/.zcompdump* && exec zsh"; \
+	fi
 
 uninstall:
 	rm -f  $(DESTDIR)$(BINDIR)/$(TARGET)

@@ -355,12 +355,19 @@ gfa_t *gfa_read(const char *fn, int flags) {
 }
 
 // emit a graph as GFA; see akhal/gfa.h
-int gfa_write(const gfa_t *g, FILE *out) {
+// shared by gfa_write() and gfa_write_rgfa(); `tags` adds SN and SO
+static int write_graph(const gfa_t *g, FILE *out, int tags) {
     fprintf(out, "H\tVN:Z:1.0\n");
 
     for (int32_t i = 0; i < g->n_seg; i++) {
         const gfa_seg_t *s = &g->seg[i];
         fprintf(out, "S\t%llu\t%s", (unsigned long long)s->id, s->seq ? s->seq : "*");
+        if (tags && s->ref_name) {
+            fprintf(out, "\tSN:Z:%s", s->ref_name);
+        }
+        if (tags && s->start >= 0) {
+            fprintf(out, "\tSO:i:%d", s->start);
+        }
         if (s->rank >= 0) {
             fprintf(out, "\tSR:i:%d", s->rank);
         }
@@ -391,6 +398,16 @@ int gfa_write(const gfa_t *g, FILE *out) {
         return AK_EIO;
     }
     return AK_OK;
+}
+
+// emit GFA; see akhal/gfa.h
+int gfa_write(const gfa_t *g, FILE *out) {
+    return write_graph(g, out, 0);
+}
+
+// emit rGFA, stable-sequence tags and all; see akhal/gfa.h
+int gfa_write_rgfa(const gfa_t *g, FILE *out) {
+    return write_graph(g, out, 1);
 }
 
 // free a graph and everything it owns; see akhal/gfa.h
