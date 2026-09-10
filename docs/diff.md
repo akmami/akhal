@@ -13,11 +13,17 @@ Paths are the exception: they are compared by what they spell rather than by
 what they walk over, so two graphs that chop one reference into different nodes
 still agree on it.
 
+The same header also carries the alignment-side comparison,
+[`diff_gaf`](#diff_gaf), which asks the corresponding question of two GAF
+files: how many of their reads are put along the same walk. That one *does*
+look at ids, because two GAF files are only comparable when they were aligned
+against the same graph.
+
 This module backs [`akhal compare`](../README.md#4-compare), which is the whole
-of it: two graphs in, one verdict out.
+of it: two files in, one verdict out.
 
 ```c
-#include "akhal/diff.h"    // diff_map_t, diff_t and the diff_* API
+#include "akhal/diff.h"    // diff_map_t, diff_t, diff_gaf_t and the diff_* API
 #include "akhal/gfa.h"     // gfa_read() and the GFA_* flags (diff.h pulls this in)
 #include "akhal/error.h"   // AK_OK / AK_E* return codes, ak_log()
 ```
@@ -26,6 +32,7 @@ of it: two graphs in, one verdict out.
 
 - [Matching by content](#matching-by-content) - [`diff_map`](#diff_map), [`diff_map_destroy`](#diff_map_destroy)
 - [The comparison](#the-comparison) - [`diff_graphs`](#diff_graphs), [`diff_destroy`](#diff_destroy), [`diff_identical`](#diff_identical)
+- [Comparing alignments](#comparing-alignments) - [`diff_gaf`](#diff_gaf), [`diff_gaf_destroy`](#diff_gaf_destroy), [`diff_gaf_identical`](#diff_gaf_identical)
 
 ## Matching by content
 
@@ -282,6 +289,154 @@ if (diff_identical(d)) printf("same graph, different numbering\n");
 diff_destroy(d);
 gfa_destroy(a);
 gfa_destroy(b);
+```
+
+## Comparing alignments
+
+Two GAF files are compared by the walks they put their reads along, and by
+nothing else. An alignment is reduced to the pair (read name, path): start and
+end coordinates, block lengths, scores, mapping quality and the `cg:Z` CIGAR
+are all dropped, so an alignment that begins 3 bp further into the same walk is
+the same alignment here.
+
+Ids *are* compared, unlike everywhere else in this module. Two GAF files only
+mean the same thing when they were aligned against the same graph, and if they
+were, node 7 is node 7 in both.
+
+The walk is compared in a canonical spelling. `>1>2<3` and `>3>2<1` are one
+walk read from its two ends, and an aligner that hit the read's reverse
+complement writes the second where another writes the first; both spellings are
+built and the smaller one is kept, which reduces "same walk" to a `strcmp`. A
+path field that names a stable sequence rather than walking nodes - `chr1`, as
+an unplaced minigraph alignment carries - has no orientation to flip and is kept
+verbatim, sorting under node id 0.
+
+Both files are then sorted by (read name, first node id of the canonical walk,
+the whole walk) and walked once side by side, so the comparison costs a sort per
+file and a single pass rather than a lookup per alignment.
+
+```c
+// How one alignment fared against the other file.
+enum {
+    DIFF_ALN_SHARED = 0,   // the other file walks this read along the same path
+    DIFF_ALN_A_ONLY = 1,   // only the first file has it
+    DIFF_ALN_B_ONLY = 2    // only the second file has it
+};
+
+typedef struct {
+    char    *qname;      // owned: read name
+    char    *path;       // owned: the walk, in its canonical spelling
+    uint64_t first;      // first node id of that spelling; 0 for a named path
+    int      state;      // DIFF_ALN_SHARED / DIFF_ALN_A_ONLY / DIFF_ALN_B_ONLY
+    int      read_both;  // 1 when the read name occurs in both files
+} diff_aln_t;
+```
+
+**A pair that matched is one entry, not two.** `aln` holds one entry per
+matched pair and one per leftover, in merge order - read name, then walk - so
+walking it once visits every verdict exactly once.
+
+`read_both` separates the two ways an alignment can be unmatched, which are not
+equally interesting: an alignment whose read the other file never aligned at
+all says the read is missing, while one whose read the other file *did* align,
+elsewhere, says the two aligners disagree about where it goes.
+
+**Reads pair off a name at a time.** Within a name both files carry, alignments
+pair one-to-one on their walk, so a read aligned three ways here and twice there
+reports two pairs and one leftover instead of simply "matching" - which is what
+makes the counts below add up in the multi-mapping case.
+
+```c
+typedef struct {
+    diff_aln_t *aln;             // owned: one entry per pair and per leftover
+    int64_t     n_aln;           // entries in `aln`
+
+    int64_t     n_aln_a, n_aln_b;        // alignments read from each file
+    int64_t     n_aln_shared;            // pairs matched on (read, path)
+    int64_t     n_aln_a_only;            // alignments the second file lacks
+    int64_t     n_aln_b_only;            // alignments the first file lacks
+
+    int64_t     n_read_a, n_read_b;      // distinct read names in each file
+    int64_t     n_read_shared;           // names both files align
+    int64_t     n_read_a_only;           // names only the first file aligns
+    int64_t     n_read_b_only;           // names only the second file aligns
+    int64_t     n_read_all_same;         // shared names whose alignments all pair off
+    int64_t     n_read_partial;          // shared names with a pair and a leftover
+    int64_t     n_read_none;             // shared names with no pairing at all
+} diff_gaf_t;
+```
+
+Alignment counts are pair counts on the shared side: `n_aln_shared` pairs means
+that many alignments in *each* file, so `n_aln_shared + n_aln_a_only` is
+`n_aln_a`. Read counts partition the names - `n_read_shared` splits into
+`n_read_all_same`, `n_read_partial` and `n_read_none`, and those three plus the
+two one-sided counts account for every name in either file.
+
+### `diff_gaf`
+
+```c
+diff_gaf_t *diff_gaf(const char *fn_a, const char *fn_b);
+```
+
+Compares two GAF files, taking paths rather than open readers: the files are
+streamed, sorted and merged internally. Returns `NULL` through `ak_log()` when
+a file cannot be opened or an allocation fails. Malformed lines are skipped
+with a warning, as the [`gaf`](gaf.md) reader does everywhere else, and an
+empty file is not a failure - it simply pairs with nothing.
+
+Both files are held in memory for the duration, but only each alignment's read
+name and canonical walk are kept, not its whole record, so a file of long
+CIGARs costs nothing beyond the line it is on.
+
+```c
+diff_gaf_t *d = diff_gaf("minigraph.gaf", "graphaligner.gaf");
+if (!d) return 1;
+
+printf("%lld of %lld reads walk the same way\n",
+       (long long)d->n_read_all_same, (long long)d->n_read_shared);
+
+// The disagreements worth looking at: a read both files aligned, differently.
+for (int64_t i = 0; i < d->n_aln; i++) {
+    const diff_aln_t *a = &d->aln[i];
+    if (a->state != DIFF_ALN_SHARED && a->read_both)
+        printf("only in %s: %s %s\n",
+               a->state == DIFF_ALN_A_ONLY ? "A" : "B", a->qname, a->path);
+}
+
+diff_gaf_destroy(d);
+```
+
+### `diff_gaf_destroy`
+
+```c
+void diff_gaf_destroy(diff_gaf_t *d);
+```
+
+Releases the comparison, the `aln` array and every name and path in it. Safe to
+call with `NULL`.
+
+### `diff_gaf_identical`
+
+```c
+static inline int diff_gaf_identical(const diff_gaf_t *d);
+```
+
+Returns 1 when nothing is left over on either side - every alignment in one
+file has a partner in the other. This is what `akhal compare gaf` turns into
+its exit status. `d` must not be NULL.
+
+It is a statement about read placement, not about the files: two GAF files that
+pass this can still differ in record order, coordinates, scores, mapping
+qualities, CIGARs and the direction each walk is spelled in.
+
+```c
+diff_gaf_t *d = diff_gaf("run1.gaf", "run2.gaf");
+if (!d) return 1;
+
+// True for a file and a re-run of the same aligner, whatever order it emitted.
+if (diff_gaf_identical(d)) printf("the same reads, along the same walks\n");
+
+diff_gaf_destroy(d);
 ```
 
 ---

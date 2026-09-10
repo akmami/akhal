@@ -133,7 +133,18 @@ chr22	35	.	A	AAAA	.	.	END=35;TYPE=INS
 ```
 
 #### 4. `compare`
-Compares two graphs that need not agree on segment ids, and reports how much of one is present in the other.
+Compares two files of the same kind and reports how much of one is present in the other. The first argument picks the kind.
+
+**Usage:**
+```sh
+./akhal compare gfa <A .gfa file> <B .gfa file> [--verbose]
+./akhal compare gaf <A .gaf file> <B .gaf file> [--verbose]
+```
+
+The exit status is 0 when the two files agree, 1 when they differ and 2 when the comparison could not be made, so either target can be used as a test.
+
+##### `gfa`
+Compares two graphs that need not agree on segment ids.
 
 Nothing is compared by id: builders number nodes as they emit them, and `sort` renumbers them again. 
 Segments are matched on their **sequence content** instead - both files are sorted by sequence and walked once, side by side, and every distinct sequence is put on one shared label. 
@@ -150,23 +161,17 @@ Fragmented `P` lines are chained together exactly as `extract path` does, chains
 Lengths are checked before the bases, so a path that differs in length costs nothing to reject. 
 A file with no `P` lines at all is fine; it simply has no paths to report on.
 
-The exit status is 0 when the graphs match, 1 when they differ and 2 when the comparison could not be made, so `compare` can be used as a test. 
 Ids, node numbering, line order and `SR` ranks are not compared: a graph and its own `sort` output are identical to this command.
 
 Two caveats on paths. 
 Chains are paired by the name path merging settled on, so a reference that chains into one piece in one file (`chr1`) but two in the other (`chr1_1`, `chr1_2`, because a joining `L` line is missing) pairs with nothing and reports as unmatched names. 
 And the sequence comparison is byte-for-byte, hence case-sensitive.
 
-**Usage:**
-```sh
-./akhal compare <A .gfa file> <B .gfa file> [--verbose]
-```
-
 Note: `--verbose` additionally lists the ids of the segments and links that only one of the two graphs carries, in that graph's own numbering.
 
 Example:
 ```sh
-$ ./akhal compare graph.gfa sorted.gfa
+$ ./akhal compare gfa graph.gfa sorted.gfa
 Segments A: 12
 Segments B: 12
 Segments shared: 12
@@ -185,6 +190,43 @@ Paths only in A: 0
 Paths only in B: 0
 Path chr22: identical (48 bp)
 [INFO] the graphs are identical
+```
+
+##### `gaf`
+Compares two sets of alignments over the same graph, and reports how many reads both files put along the same walk.
+
+The question is whether two aligners - or two runs, or two versions of one aligner - agree on where the reads go, so an alignment is reduced to the pair (read name, path) and nothing else. 
+Coordinates, scores, mapping quality and CIGARs are not part of it: an alignment that starts 3 bp further into the same walk is the same alignment here.
+
+The walk is compared in a canonical spelling. 
+`>1>2<3` and `>3>2<1` are one walk read from its two ends, and an aligner that hit the read's reverse complement writes the second where another writes the first; both spellings are built and the smaller one is kept, so the two count as one alignment rather than two differences. 
+A path field naming a stable sequence instead of walking nodes (`chr1`, as an unplaced alignment carries) has no orientation to flip and is kept verbatim.
+
+Both files are then sorted by (read name, first node id of the canonical walk, the whole walk) and walked once, side by side - so the comparison costs a sort per file and a single pass, not a lookup per alignment. 
+Reads are handled a name at a time: within a name both files carry, alignments pair off one-to-one on their walk, so a read aligned three ways here and twice there reports two pairs and one leftover rather than simply "matching". 
+That splits the shared names three ways - every alignment paired, some paired, none paired - and those three plus the one-sided names account for every read in either file.
+
+Malformed lines are skipped with a warning, and an empty file is not an error; it simply pairs with nothing.
+
+Note: `--verbose` additionally lists every alignment that only one file carries, marking the ones whose read the other file never aligned at all - a read aligned *elsewhere* is the more interesting of the two.
+
+Example:
+```sh
+$ ./akhal compare gaf minigraph.gaf graphaligner.gaf
+Alignments A: 6
+Alignments B: 5
+Alignments shared: 3
+Alignments only in A: 3
+Alignments only in B: 2
+Reads A: 5
+Reads B: 5
+Reads shared: 4
+Reads only in A: 1
+Reads only in B: 1
+Reads on the same path(s): 2
+Reads partly on the same path(s): 1
+Reads on no shared path: 1
+[INFO] the alignments differ
 ```
 
 #### 5. `compact`

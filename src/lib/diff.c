@@ -1,4 +1,5 @@
 #include "akhal/diff.h"
+#include "akhal/gaf.h"
 #include "akhal/kstr.h"
 #include "akhal/util.h"
 #include "akhal/error.h"
@@ -453,6 +454,341 @@ void diff_destroy(diff_t *d) {
     if (d->path) {
         for (int32_t i = 0; i < d->n_path; i++) free(d->path[i].name);
         free(d->path);
+    }
+    free(d);
+}
+
+// GAF alignment comparison
+
+// one alignment, reduced to what the comparison asks about
+typedef struct {
+    char    *qname;   // owned: read name
+    char    *path;    // owned: canonical spelling of the walk
+    uint64_t first;   // first node id of that spelling; 0 for a named path
+} galn_t;
+
+// one oriented step of a walk
+typedef struct {
+    uint64_t id;
+    char     orient;   // '>' or '<'
+} pstep_t;
+
+// '>' before '<', so the two spellings of a walk order deterministically
+static inline int orient_rank(char c) {
+    return c == '>' ? 0 : 1;
+}
+
+// digits in an id, so the canonical spelling can be sized before it is built
+static inline size_t id_width(uint64_t v) {
+    size_t n = 1;
+    while (v >= 10) {
+        v /= 10;
+        n++;
+    }
+    return n;
+}
+
+// A walk and the same walk read from its other end are one alignment: an
+// aligner that hit the read's reverse complement writes `>3>2<1` where another
+// writes `>1<2<3`, and neither spelling is more correct. So both are built and
+// the smaller one is kept, which makes "same walk" a strcmp
+static int steps_reversed(const pstep_t *v, int64_t n) {
+    for (int64_t k = 0; k < n; k++) {
+        const pstep_t *f = &v[k];
+        uint64_t rid = v[n - 1 - k].id;
+        int rrank = orient_rank(v[n - 1 - k].orient == '>' ? '<' : '>');
+
+        if (f->id != rid) return f->id > rid;
+        int frank = orient_rank(f->orient);
+        if (frank != rrank) return frank > rrank;
+    }
+    return 0;   // a palindrome spells the same either way
+}
+
+// Canonicalize a GAF path field. A path naming a stable sequence rather than
+// walking nodes ("chr1", as minigraph writes for an unplaced alignment) has no
+// orientation to flip, so it is kept verbatim and sorts under id 0
+static int path_canon(const char *path, char **out, uint64_t *first) {
+    *out = NULL;
+    *first = 0;
+
+    if (path[0] != '>' && path[0] != '<') {
+        *out = strdup(path);
+        return *out ? AK_OK : AK_ENOMEM;
+    }
+
+    pstep_t stack[64], *v = stack;
+    int64_t n = 0, cap = 64;
+
+    const char *p = path;
+    int used;
+    uint64_t id;
+    char orient;
+    while ((used = gaf_path_next(p, &id, &orient)) > 0) {
+        if (n == cap) {
+            int64_t ncap = cap << 1;
+            pstep_t *nv = (pstep_t *)malloc((size_t)ncap * sizeof(pstep_t));
+            if (!nv) {
+                if (v != stack) free(v);
+                return AK_ENOMEM;
+            }
+            memcpy(nv, v, (size_t)n * sizeof(pstep_t));
+            if (v != stack) free(v);
+            v = nv;
+            cap = ncap;
+        }
+        v[n].id = id;
+        v[n].orient = orient;
+        n++;
+        p += used;
+    }
+
+    int rev = steps_reversed(v, n);
+
+    size_t len = 0;
+    for (int64_t k = 0; k < n; k++) len += 1 + id_width(v[k].id);
+
+    char *s = (char *)malloc(len + 1);
+    if (!s) {
+        if (v != stack) free(v);
+        return AK_ENOMEM;
+    }
+
+    size_t o = 0;
+    for (int64_t k = 0; k < n; k++) {
+        const pstep_t *st = &v[rev ? n - 1 - k : k];
+        char c = st->orient;
+        if (rev) c = (c == '>') ? '<' : '>';
+        s[o++] = c;
+
+        size_t w = id_width(st->id);
+        uint64_t val = st->id;
+        for (size_t d = w; d > 0; d--) {
+            s[o + d - 1] = (char)('0' + (val % 10));
+            val /= 10;
+        }
+        o += w;
+    }
+    s[o] = '\0';
+
+    *first = n ? v[rev ? n - 1 : 0].id : 0;
+    *out = s;
+    if (v != stack) free(v);
+    return AK_OK;
+}
+
+// read name first, then the walk: the first node id as the user reads it, and
+// the whole spelling to break ties. Both files are ordered this way, so the
+// comparison is one walk down the two arrays side by side
+static int galn_cmp(const void *A, const void *B) {
+    const galn_t *a = (const galn_t *)A, *b = (const galn_t *)B;
+    int c = strcmp(a->qname, b->qname);
+    if (c) return c;
+    if (a->first != b->first) return a->first < b->first ? -1 : 1;
+    return strcmp(a->path, b->path);
+}
+
+// the walk alone, for pairing within one read's block
+static int galn_cmp_path(const galn_t *a, const galn_t *b) {
+    if (a->first != b->first) return a->first < b->first ? -1 : 1;
+    return strcmp(a->path, b->path);
+}
+
+static void galn_free(galn_t *v, int64_t n) {
+    if (!v) return;
+    for (int64_t i = 0; i < n; i++) {
+        free(v[i].qname);
+        free(v[i].path);
+    }
+    free(v);
+}
+
+// every alignment of one file, sorted. Streamed rather than slurped: only the
+// read name and the canonical walk are kept, so a file of long CIGARs costs
+// nothing beyond the line it is on. NULL on failure (logged), never for an
+// empty file
+static galn_t *galn_load(const char *fn, int64_t *n_out) {
+    *n_out = 0;
+
+    gaf_reader_t *r = gaf_open(fn);
+    if (!r) return NULL;
+
+    galn_t *v = NULL;
+    int64_t n = 0, cap = 0;
+    gaf_rec_t rec;
+    gaf_rec_init(&rec);
+
+    int rc;
+    while ((rc = gaf_read1(r, &rec)) == 1) {
+        if (n == cap) {
+            int64_t ncap = cap ? cap << 1 : 4096;
+            galn_t *nv = (galn_t *)realloc(v, (size_t)ncap * sizeof(galn_t));
+            if (!nv) {
+                rc = AK_ENOMEM;
+                break;
+            }
+            v = nv;
+            cap = ncap;
+        }
+
+        // the record's name is handed over rather than copied, and detached so
+        // the next read does not free it
+        v[n].qname = rec.qname;
+        rec.qname = NULL;
+        rc = path_canon(rec.path ? rec.path : "", &v[n].path, &v[n].first);
+        if (rc != AK_OK) {
+            free(v[n].qname);
+            break;
+        }
+        n++;
+    }
+
+    gaf_rec_clear(&rec);
+    gaf_close(r);
+
+    if (rc < 0) {
+        galn_free(v, n);
+        ak_log(AK_LOG_ERROR, "diff", "cannot read %s: %s", fn, ak_strerror(rc));
+        return NULL;
+    }
+    if (!v) {
+        // an empty file is not a failure, but the caller tells NULL from it
+        v = (galn_t *)malloc(sizeof(galn_t));
+        if (!v) {
+            ak_log(AK_LOG_ERROR, "diff", "out of memory");
+            return NULL;
+        }
+    }
+
+    qsort(v, (size_t)n, sizeof(galn_t), galn_cmp);
+    *n_out = n;
+    return v;
+}
+
+// end of the run of alignments sharing v[i]'s read name
+static int64_t block_end(const galn_t *v, int64_t i, int64_t n) {
+    int64_t j = i + 1;
+    while (j < n && strcmp(v[j].qname, v[i].qname) == 0) j++;
+    return j;
+}
+
+// record one verdict, taking the strings off the alignment that produced it
+static void emit_aln(diff_gaf_t *d, galn_t *g, int state, int read_both) {
+    diff_aln_t *a = &d->aln[d->n_aln++];
+    a->qname = g->qname;
+    a->path = g->path;
+    a->first = g->first;
+    a->state = state;
+    a->read_both = read_both;
+    g->qname = NULL;
+    g->path = NULL;
+}
+
+// compare two GAF files; see akhal/diff.h
+diff_gaf_t *diff_gaf(const char *fn_a, const char *fn_b) {
+    int64_t na = 0, nb = 0;
+    galn_t *va = galn_load(fn_a, &na);
+    if (!va) return NULL;
+
+    galn_t *vb = galn_load(fn_b, &nb);
+    if (!vb) {
+        galn_free(va, na);
+        return NULL;
+    }
+
+    diff_gaf_t *d = (diff_gaf_t *)calloc(1, sizeof(diff_gaf_t));
+    if (d) {
+        // a pair takes one entry and a leftover one, so the two files together
+        // are the bound; one allocation covers the whole walk
+        d->aln = (diff_aln_t *)malloc((size_t)(na + nb > 0 ? na + nb : 1) * sizeof(diff_aln_t));
+    }
+    if (!d || !d->aln) {
+        ak_log(AK_LOG_ERROR, "diff", "out of memory");
+        diff_gaf_destroy(d);
+        galn_free(va, na);
+        galn_free(vb, nb);
+        return NULL;
+    }
+    d->n_aln_a = na;
+    d->n_aln_b = nb;
+
+    // a read name at a time down both files. Names are in the same order on
+    // both sides, so a name that is not next in the other file is not in it
+    int64_t i = 0, j = 0;
+    while (i < na || j < nb) {
+        int c;
+        if (i >= na)      c =  1;
+        else if (j >= nb) c = -1;
+        else              c = strcmp(va[i].qname, vb[j].qname);
+
+        if (c < 0) {
+            int64_t i2 = block_end(va, i, na);
+            d->n_read_a++;
+            d->n_read_a_only++;
+            for (; i < i2; i++) {
+                emit_aln(d, &va[i], DIFF_ALN_A_ONLY, 0);
+                d->n_aln_a_only++;
+            }
+        } else if (c > 0) {
+            int64_t j2 = block_end(vb, j, nb);
+            d->n_read_b++;
+            d->n_read_b_only++;
+            for (; j < j2; j++) {
+                emit_aln(d, &vb[j], DIFF_ALN_B_ONLY, 0);
+                d->n_aln_b_only++;
+            }
+        } else {
+            int64_t i2 = block_end(va, i, na), j2 = block_end(vb, j, nb);
+            d->n_read_a++;
+            d->n_read_b++;
+            d->n_read_shared++;
+
+            // within one name, the alignments pair off one-to-one on their
+            // walk: a read aligned three ways here and twice there is two
+            // pairs and a leftover, not a match
+            int64_t matched = 0, left = 0;
+            while (i < i2 || j < j2) {
+                int k;
+                if (i >= i2)      k =  1;
+                else if (j >= j2) k = -1;
+                else              k = galn_cmp_path(&va[i], &vb[j]);
+
+                if (k < 0) {
+                    emit_aln(d, &va[i++], DIFF_ALN_A_ONLY, 1);
+                    d->n_aln_a_only++;
+                    left++;
+                } else if (k > 0) {
+                    emit_aln(d, &vb[j++], DIFF_ALN_B_ONLY, 1);
+                    d->n_aln_b_only++;
+                    left++;
+                } else {
+                    emit_aln(d, &va[i++], DIFF_ALN_SHARED, 1);
+                    j++;
+                    d->n_aln_shared++;
+                    matched++;
+                }
+            }
+
+            if (matched && !left)  d->n_read_all_same++;
+            else if (matched)      d->n_read_partial++;
+            else                   d->n_read_none++;
+        }
+    }
+
+    galn_free(va, na);
+    galn_free(vb, nb);
+    return d;
+}
+
+// free a GAF comparison; see akhal/diff.h
+void diff_gaf_destroy(diff_gaf_t *d) {
+    if (!d) return;
+    if (d->aln) {
+        for (int64_t i = 0; i < d->n_aln; i++) {
+            free(d->aln[i].qname);
+            free(d->aln[i].path);
+        }
+        free(d->aln);
     }
     free(d);
 }

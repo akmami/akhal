@@ -33,6 +33,11 @@
  * by name across the two graphs, and each pair's sequences are compared. Two
  * graphs that chop one reference into different nodes therefore still report
  * that path as identical.
+ *
+ * The same header also carries the alignment-side comparison, diff_gaf(),
+ * which asks the corresponding question of two GAF files: how many of their
+ * reads are put along the same walk. That one does look at ids, because two
+ * GAF files are only comparable when they were aligned against the same graph.
  */
 
 #ifdef __cplusplus
@@ -169,6 +174,103 @@ static inline int diff_identical(const diff_t *d) {
     return d->a.n_seg == 0 && d->b.n_seg == 0 &&
            d->a.n_link == 0 && d->b.n_link == 0 &&
            d->n_path_differ == 0 && d->n_path_a_only == 0 && d->n_path_b_only == 0;
+}
+
+// GAF alignment comparison
+
+/**
+ * Comparison of two GAF files: how much of one file's alignment set the other
+ * one also carries.
+ *
+ * The question is whether the two aligners put the same read along the same
+ * walk, so an alignment is reduced to the pair (read name, path) and nothing
+ * else - coordinates, scores, mapping quality and CIGARs are not part of it.
+ * The walk is compared in a canonical spelling, since `>1>2<3` and `>3>2<1`
+ * are the same walk read from its two ends and no aligner is obliged to pick
+ * one of them.
+ *
+ * Both files are loaded and sorted by (read name, first node id of the
+ * canonical path, whole path), which lets the comparison be a single merge
+ * walk over the two sorted arrays rather than a lookup per alignment. Reads
+ * are handled a name-block at a time: within a block that both files carry,
+ * alignments pair off one-to-one on their path, so a read aligned three ways
+ * here and twice there reports two pairs and one leftover instead of simply
+ * "matching".
+ */
+
+// How one alignment fared against the other file
+enum {
+    DIFF_ALN_SHARED = 0,   // the other file walks this read along the same path
+    DIFF_ALN_A_ONLY = 1,   // only the first file has it
+    DIFF_ALN_B_ONLY = 2    // only the second file has it
+};
+
+/**
+ * One alignment's verdict. A pair that matched is one entry, not two
+ */
+typedef struct {
+    char    *qname;      // owned: read name
+    char    *path;       // owned: the walk, in its canonical spelling
+    uint64_t first;      // first node id of that spelling; 0 for a named path
+    int      state;      // DIFF_ALN_SHARED / DIFF_ALN_A_ONLY / DIFF_ALN_B_ONLY
+    int      read_both;  // 1 when the read name occurs in both files
+} diff_aln_t;
+
+/**
+ * The result of comparing two GAF files, counted per alignment and per read.
+ *
+ * Alignment counts are pair counts on the shared side: `n_aln_shared` pairs
+ * means that many alignments in each file. Read counts partition the names -
+ * `n_read_shared` splits into `n_read_all_same`, `n_read_partial` and
+ * `n_read_none` - so the three read categories plus the two one-sided ones
+ * account for every name in either file
+ */
+typedef struct {
+    diff_aln_t *aln;             // owned: one entry per pair and per leftover
+    int64_t     n_aln;           // entries in `aln`
+
+    int64_t     n_aln_a, n_aln_b;        // alignments read from each file
+    int64_t     n_aln_shared;            // pairs matched on (read, path)
+    int64_t     n_aln_a_only;            // alignments the second file lacks
+    int64_t     n_aln_b_only;            // alignments the first file lacks
+
+    int64_t     n_read_a, n_read_b;      // distinct read names in each file
+    int64_t     n_read_shared;           // names both files align
+    int64_t     n_read_a_only;           // names only the first file aligns
+    int64_t     n_read_b_only;           // names only the second file aligns
+    int64_t     n_read_all_same;         // shared names whose alignments all pair off
+    int64_t     n_read_partial;          // shared names with a pair and a leftover
+    int64_t     n_read_none;             // shared names with no pairing at all
+} diff_gaf_t;
+
+/**
+ * Compare two GAF files by the walks they put their reads along.
+ *
+ * Malformed lines are skipped with a warning, as the reader does everywhere
+ * else; an empty file is not an error and simply contributes nothing. Both
+ * files are held in memory for the duration, though only each alignment's read
+ * name and canonical path are kept, not its whole record
+ * @param fn_a First GAF file
+ * @param fn_b Second GAF file
+ * @return The comparison (release with diff_gaf_destroy), or NULL on failure
+ */
+diff_gaf_t *diff_gaf(const char *fn_a, const char *fn_b);
+
+/**
+ * Release a GAF comparison and everything it owns. Safe to call with NULL
+ * @param d Comparison to destroy
+ */
+void diff_gaf_destroy(diff_gaf_t *d);
+
+/**
+ * Whether the two files align the same reads along the same walks, leaving
+ * nothing over on either side. Coordinates, scores and record order are not
+ * part of it
+ * @param d Comparison to test; must not be NULL
+ * @return 1 when the two files agree, otherwise 0
+ */
+static inline int diff_gaf_identical(const diff_gaf_t *d) {
+    return d->n_aln_a_only == 0 && d->n_aln_b_only == 0;
 }
 
 #ifdef __cplusplus
