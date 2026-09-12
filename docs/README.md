@@ -32,7 +32,7 @@ For the command-line tool, see the [main README](../README.md).
 | Module | What it gives you |
 | --- | --- |
 | [`call`](call.md) | Labels a reference backbone through the graph, then reports everything the graph carries beyond it as variants, and writes them as VCF |
-| [`diff`](diff.md) | Compares two graphs that disagree on segment ids: segments matched by sequence content, links through the labelling that produces, paths by the bases they spell |
+| [`diff`](diff.md) | Compares two graphs that disagree on segment ids: segments matched by sequence content, links through the labelling that produces, paths by the bases they spell. Also compares two GAF files by the walks they put their reads along |
 | [`rgfa`](rgfa.md) | Works the rGFA stable-sequence tags out of a graph's own P lines: a backbone at rank 0, everything that detours off it one rank deeper and offset from where it left |
 | [`compact`](compact.md) | Folds every run of non-branching segments into one node, keeping the bases, the links between runs and the paths exactly as they were |
 | [`annot`](annot.md) | A node-origin store: which variant or which sample sequence explains each node, queryable and round-trippable through a compact binary file |
@@ -142,13 +142,22 @@ gfa_add_path(g, name, walk...)  gfa    install the traced walk in their place
 gfa_write(g, out)               gfa    emit the re-ranked graph
 ```
 
-**Compare two graphs that number their nodes differently** - `akhal compare`
+**Compare two graphs that number their nodes differently** - `akhal compare gfa`
 
 ```text
 gfa_read(GFA_LINKS|GFA_PATHS)   gfa    load both graphs
 diff_map(a, b)                  diff   match segments by sequence, label them
 diff_graphs(a, b)               diff   ... and compare links and paths through it
 diff_identical(d)               diff   the whole verdict, for an exit status
+```
+
+**Ask whether two aligners put the reads in the same place** - `akhal compare gaf`
+
+```text
+diff_gaf("a.gaf", "b.gaf")      diff   sort both by (read, first node, walk),
+                                       then pair alignments off in one pass
+d->n_read_all_same              diff   reads walking the same way in both
+diff_gaf_identical(d)           diff   the whole verdict, for an exit status
 ```
 
 **Label a plain GFA as an rGFA** - `akhal gfa2rgfa`

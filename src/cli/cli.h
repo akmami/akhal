@@ -33,13 +33,16 @@ int cmd_stats(int argc, char **argv);
 int cmd_extract(int argc, char **argv);
 
 /**
- * `compare` - compare two graphs that need not agree on segment ids: segments
- * are matched by sequence content, links through the labelling that produces,
- * and paths by the bases they spell
+ * `compare` - compare two files of the same kind. The target is argv[2]:
+ * "gfa" compares two graphs that need not agree on segment ids (segments are
+ * matched by sequence content, links through the labelling that produces, and
+ * paths by the bases they spell), and "gaf" compares two sets of alignments
+ * over one graph, reporting how many reads both files put along the same walk
  * @param argc Argument count
- * @param argv Arguments; the two graph paths, then optional --verbose
- * @return 0 when the graphs match, 1 when they differ, 2 when the comparison
- *         could not be made
+ * @param argv Arguments; the target, the two input paths, then optional
+ *             --verbose
+ * @return 0 when the two files agree, 1 when they differ, 2 when the
+ *         comparison could not be made
  */
 int cmd_compare(int argc, char **argv);
 

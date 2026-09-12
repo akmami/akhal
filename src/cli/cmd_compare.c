@@ -7,9 +7,10 @@
 #include <stdio.h>
 #include <string.h>
 
-// print the compare usage line
+// print the compare usage lines
 static void usage(void) {
-    ak_log(AK_LOG_ERROR, NULL, "usage: akhal compare <A.gfa> <B.gfa> [--verbose]");
+    ak_log(AK_LOG_ERROR, NULL, "usage: akhal compare gfa <A.gfa> <B.gfa> [--verbose]");
+    ak_log(AK_LOG_ERROR, NULL, "       akhal compare gaf <A.gaf> <B.gaf> [--verbose]");
 }
 
 // 1 when the extension fits, else 0 and the reason is logged
@@ -18,6 +19,44 @@ static int want_gfa(const char *fn) {
     ak_log(AK_LOG_ERROR, NULL, "expected a .gfa or .rgfa file: %s", fn);
     return 0;
 }
+
+// 1 when the extension fits, else 0 and the reason is logged
+static int want_gaf(const char *fn) {
+    if (ak_ends_with(fn, ".gaf")) return 1;
+    ak_log(AK_LOG_ERROR, NULL, "expected a .gaf file: %s", fn);
+    return 0;
+}
+
+// the two inputs and an optional --verbose, which is all either target takes.
+// Returns 1 on success, else 0 and the usage is printed
+static int parse_args(int argc, char **argv, const char **a, const char **b, int *verbose) {
+    *a = *b = NULL;
+    *verbose = 0;
+
+    for (int i = 3; i < argc; i++) {
+        if (!strcmp(argv[i], "--verbose")) {
+            *verbose = 1;
+        } else if (argv[i][0] == '-') {
+            ak_log(AK_LOG_ERROR, NULL, "unknown option: %s", argv[i]);
+            usage();
+            return 0;
+        } else if (!*a) {
+            *a = argv[i];
+        } else if (!*b) {
+            *b = argv[i];
+        } else {
+            usage();
+            return 0;
+        }
+    }
+    if (!*a || !*b) {
+        usage();
+        return 0;
+    }
+    return 1;
+}
+
+// graphs
 
 // the counts both graphs are measured by
 static void print_counts(const gfa_t *a, const gfa_t *b, const diff_t *d) {
@@ -76,23 +115,11 @@ static void print_side(const diff_side_t *s, const char *tag) {
     }
 }
 
-// `compare` entry point; see cli.h
-int cmd_compare(int argc, char **argv) {
-    if (argc < 4 || argc > 5) {
-        usage();
-        return 2;
-    }
-    const char *fn_a = argv[2], *fn_b = argv[3];
-
-    int verbose = 0;
-    if (argc == 5) {
-        if (strcmp(argv[4], "--verbose") != 0) {
-            ak_log(AK_LOG_ERROR, NULL, "unknown option: %s", argv[4]);
-            usage();
-            return 2;
-        }
-        verbose = 1;
-    }
+// `compare gfa` - two graphs that need not agree on segment ids
+static int compare_gfa(int argc, char **argv) {
+    const char *fn_a, *fn_b;
+    int verbose;
+    if (!parse_args(argc, argv, &fn_a, &fn_b, &verbose)) return 2;
     if (!want_gfa(fn_a) || !want_gfa(fn_b)) return 2;
 
     gfa_t *a = gfa_read(fn_a, GFA_LINKS | GFA_PATHS);
@@ -126,4 +153,81 @@ int cmd_compare(int argc, char **argv) {
     gfa_destroy(a);
     gfa_destroy(b);
     return ret;
+}
+
+// alignments
+
+// the counts both alignment sets are measured by
+static void print_gaf_counts(const diff_gaf_t *d) {
+    printf("Alignments A: %lld\n", (long long)d->n_aln_a);
+    printf("Alignments B: %lld\n", (long long)d->n_aln_b);
+    printf("Alignments shared: %lld\n", (long long)d->n_aln_shared);
+    printf("Alignments only in A: %lld\n", (long long)d->n_aln_a_only);
+    printf("Alignments only in B: %lld\n", (long long)d->n_aln_b_only);
+
+    printf("Reads A: %lld\n", (long long)d->n_read_a);
+    printf("Reads B: %lld\n", (long long)d->n_read_b);
+    printf("Reads shared: %lld\n", (long long)d->n_read_shared);
+    printf("Reads only in A: %lld\n", (long long)d->n_read_a_only);
+    printf("Reads only in B: %lld\n", (long long)d->n_read_b_only);
+    printf("Reads on the same path(s): %lld\n", (long long)d->n_read_all_same);
+    printf("Reads partly on the same path(s): %lld\n", (long long)d->n_read_partial);
+    printf("Reads on no shared path: %lld\n", (long long)d->n_read_none);
+}
+
+// every alignment one file has and the other does not, walk and all
+static void print_gaf_alns(const diff_gaf_t *d) {
+    for (int64_t i = 0; i < d->n_aln; i++) {
+        const diff_aln_t *a = &d->aln[i];
+        if (a->state == DIFF_ALN_SHARED) continue;
+
+        // a read the other file never aligned is a different thing from a read
+        // it aligned elsewhere, and the second is the interesting one
+        printf("Alignment only in %s: %s %s%s\n",
+               a->state == DIFF_ALN_A_ONLY ? "A" : "B",
+               a->qname, a->path,
+               a->read_both ? "" : " (read absent from the other file)");
+    }
+}
+
+// `compare gaf` - two alignment sets over the same graph
+static int compare_gaf(int argc, char **argv) {
+    const char *fn_a, *fn_b;
+    int verbose;
+    if (!parse_args(argc, argv, &fn_a, &fn_b, &verbose)) return 2;
+    if (!want_gaf(fn_a) || !want_gaf(fn_b)) return 2;
+
+    diff_gaf_t *d = diff_gaf(fn_a, fn_b);
+    if (!d) return 2;
+
+    print_gaf_counts(d);
+    if (verbose) {
+        print_gaf_alns(d);
+    }
+
+    // 0 the files agree, 1 they differ, 2 the comparison could not be made
+    int ret = diff_gaf_identical(d) ? 0 : 1;
+    if (ret) {
+        ak_log(AK_LOG_INFO, NULL, "the alignments differ");
+    } else {
+        ak_log(AK_LOG_INFO, NULL, "the alignments are identical");
+    }
+
+    diff_gaf_destroy(d);
+    return ret;
+}
+
+// `compare` entry point; see cli.h
+int cmd_compare(int argc, char **argv) {
+    if (argc < 3) {
+        usage();
+        return 2;
+    }
+
+    if (!strcmp(argv[2], "gfa")) return compare_gfa(argc, argv);
+    if (!strcmp(argv[2], "gaf")) return compare_gaf(argc, argv);
+
+    ak_log(AK_LOG_ERROR, NULL, "unknown compare target: %s", argv[2]);
+    usage();
+    return 2;
 }
