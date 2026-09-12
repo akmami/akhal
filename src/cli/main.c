@@ -15,7 +15,7 @@ typedef struct {
 } command_t;
 
 static const command_t commands[] = {
-    { "stats",    cmd_stats,    "graph", "summary statistics for an r/GFA graph"      },
+    { "stats",    cmd_stats,    "graph", "summary statistics for a graph or a GAF"    },
     { "parse",    cmd_parse,    "graph", "validate an r/GFA graph"                    },
     { "extract",  cmd_extract,  "graph", "extract FASTA, paths, or a VCF"             },
     { "compare",  cmd_compare,  "graph", "compare two graphs"                         },

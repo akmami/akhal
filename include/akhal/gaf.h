@@ -39,6 +39,7 @@ typedef struct {
     double  as;   int has_as;   // AS:f  alignment score
     double  dv;   int has_dv;   // dv:f  divergence
     double  id;   int has_id;   // id:f  identity
+    char    tp;   int has_tp;   // tp:A  alignment type ('P' primary, 'S' secondary)
     char   *cigar;              // cg:Z difference CIGAR (owned, NULL if absent)
 } gaf_rec_t;
 

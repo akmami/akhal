@@ -191,6 +191,13 @@ static int gaf_parse_line(char *line, gaf_rec_t *rec) {
                         rec->has_id = 1;
                     }
                     break;
+                case GAF_TAG2('t', 'p'):
+                    // the value is one character, so the field must be 6 long
+                    if (s[3] == 'A' && len > 5) {
+                        rec->tp = s[5];
+                        rec->has_tp = 1;
+                    }
+                    break;
                 case GAF_TAG2('c', 'g'):
                     if (s[3] == 'Z') {
                         rec->cigar = gaf_dup(s + 5, len - 5);

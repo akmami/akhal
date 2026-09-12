@@ -57,14 +57,16 @@ Validates an r/GFA file and ensures its correctness. It checks segments and link
 ```
 
 #### 2. `stats`
-Computes and outputs statistics about an r/GFA file.
+Computes and outputs statistics about an r/GFA graph or a GAF alignment file. 
+The extension picks which: `.gfa`/`.rgfa` report on the graph, `.gaf` on the alignments.
 
 **Usage:**
 ```sh
 ./akhal stats <r/GFA file>
+./akhal stats <GAF file> [--cigar]
 ```
 
-The statistics include:
+##### Graph statistics
 - **Segment count**: Number of segments in the graph.
 - **Segment avg length**: Average segment length.
 - **Segment std length**: Standard deviation of segment lengths.
@@ -77,6 +79,43 @@ The statistics include:
 - **Maximum in degree**: Maximum number of incoming links.
 - **Minimum out degree**: Minimum number of outgoing links.
 - **Maximum out degree**: Maximum number of outgoing links.
+
+##### Alignment statistics
+Everything below the alignment counts describes *primary* alignments with a mapping quality above 0, which is the population `gaftools stat` reports on as well. 
+An alignment is primary unless it carries a `tp:A` tag that is not `P`, so a file without the tag is entirely primary.
+
+- **Total alignments**, with the **Primary** / **Secondary** split.
+- **Reads with at least one alignment**: distinct query names among the primary alignments.
+- **Total aligned bases**: the sum of column 10 (residue matches).
+- **Average highest sequence identity**: per read, the best `matches / block_len` it achieved, averaged over reads - so a read aligned in ten places contributes once.
+- **Average highest map ratio**: the same, for `(qend - qstart) / qlen`.
+- **Mapping quality**, **Sequence identity**, **Map ratio**, **Query length**, **Alignment block length** and **Path node count**, each as avg / std / min. / max. over the alignments themselves. Path node count is the number of oriented nodes in the path string; a stable path name counts as one.
+
+`--cigar` adds a pass over the `cg:Z` difference CIGARs, reporting the number of deletion, insertion, substitution and match runs, how many of each span 50 bp or more, and how many alignments are a single `=` run end to end. 
+Primary alignments with no `cg:Z` tag are counted and reported as a warning rather than skipped silently.
+
+The figures line up with `gaftools stat` on the same file, with two deliberate differences. 
+gaftools divides its "Average mapping quality" by the total alignment count while summing only over primaries; `Mapping quality avg` here divides by the primary count, so the two disagree whenever a file has secondaries. 
+And gaftools calls an alignment perfect when its CIGAR is a single run of any operation; this counts only a single `=` run.
+
+Example:
+```sh
+$ ./akhal stats aln.gaf
+Total alignments: 501
+  Primary: 312
+  Secondary: 189
+Reads with at least one alignment: 196
+Total aligned bases: 1295243
+Average highest sequence identity: 0.917408
+Average highest map ratio: 0.509446
+Mapping quality avg: 69.294872
+...
+Path node count max.: 12
+
+* Figures cover primary alignments with a mapping quality above 0
+```
+
+The whole file is read in one streaming pass and the distributions are accumulated as they arrive, so memory scales with the number of distinct read names rather than with the number of alignments.
 
 #### 3. `extract`
 Extract information from the r/GFA file. The first argument picks what to pull out.
