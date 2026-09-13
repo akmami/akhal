@@ -39,7 +39,7 @@ extern "C" {
  * What the labelling did, for the caller to report
  */
 typedef struct {
-    int32_t n_path;        // paths after fragments were consolidated
+    int32_t n_path;        // P lines the graph carries
     int32_t n_rank0;       // segments on the backbone
     int32_t n_labelled;    // segments that came out with SN and SO
     int32_t n_ambiguous;   // segments a walk reached but could not place
@@ -50,17 +50,17 @@ typedef struct {
 /**
  * Label a graph as rGFA, in place.
  *
- * Fragmented P lines are consolidated first, exactly as gfa_path_merge()
- * chains them, so a reference that arrived as "chr22:0-1000",
- * "chr22:1000-2000", ... leaves as one path and one stable sequence name. The backbone is then
- * labelled rank 0 and every other path walked as described above.
+ * One P line is one path: the backbone is labelled rank 0 and every other path
+ * walked as described above. A reference split over several P lines is
+ * therefore several paths, only the first of which is backbone - join it into
+ * one P line before labelling if that is not what you want.
  *
  * Segments are labelled through the fields gfa_write_rgfa() emits: `rank` is
  * SR, `ref_name` is SN, and `start`/`end` are the SO offset and its end. A
  * segment with no SN/SO carries -1 in `start` and NULL in `ref_name`, which is
  * how an ambiguous or unvisited one is told from a placed one.
  *
- * Requires the graph to be read with GFA_LINKS | GFA_PATHS
+ * Requires the graph to be read with GFA_PATHS
  * @param g Graph to label, modified in place
  * @param ref_name Path to use as the backbone, or NULL for the graph's first
  * @param st Filled in with what was labelled; may be NULL

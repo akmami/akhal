@@ -21,7 +21,6 @@ contiguous slice.
 - [Reading and releasing](#reading-and-releasing) - [`gfa_read`](#gfa_read), [`gfa_write`](#gfa_write), [`gfa_seg_set_seq`](#gfa_seg_set_seq), [`gfa_destroy`](#gfa_destroy)
 - [Lookup and accessors](#lookup-and-accessors) - [`gfa_idx`](#gfa_idx), [`gfa_get`](#gfa_get), [counts and element accessors](#counts-and-element-accessors)
 - [Traversal](#traversal) - [`gfa_arcs`](#gfa_arcs), [`gfa_has_arc`](#gfa_has_arc), [`gfa_path_segs`](#gfa_path_segs)
-- [Fragmented paths](#fragmented-paths) - [`gfa_path_merge`](#gfa_path_merge), [`gfa_merge_segs`](#gfa_merge_segs), [`gfa_merge_destroy`](#gfa_merge_destroy)
 - [Ranks](#ranks) - [`gfa_rank_paths`](#gfa_rank_paths), [`gfa_rank_mark`](#gfa_rank_mark)
 - [Rewriting the path block](#rewriting-the-path-block) - [`gfa_clear_paths`](#gfa_clear_paths), [`gfa_add_path`](#gfa_add_path)
 - [Ordering](#ordering) - [`gfa_toposort`](#gfa_toposort)
@@ -339,93 +338,6 @@ putchar('\n');
 gfa_destroy(g);
 ```
 
-## Fragmented paths
-
-A reference often arrives as several consecutive `P` lines rather than one
-(`chr22:0-1000`, `chr22:1000-2000`, ..., or simply several lines each named
-`chr22`). These three functions stitch them back together. `gfa_merge_t` is CSR
-like everything else: chain `c` owns the path indices `frag[off[c] .. off[c+1])`.
-
-### `gfa_path_merge`
-
-```c
-gfa_merge_t *gfa_path_merge(const gfa_t *g, const char *key);
-```
-
-Selects fragments by name - a `name:start-end` region suffix is stripped, as is
-vg's `name[start]` spelling of it, and a PanSN name like
-`GRCh38#0#chr22:1000-2000` is also found by its bare contig name - then chains
-them through the links. `key` of `NULL` selects
-every path and groups each base name separately. Requires
-`GFA_LINKS | GFA_PATHS`.
-
-```c
-// Both flags are required: names select the fragments, links order them.
-gfa_t *g = gfa_read("graph.gfa", GFA_LINKS | GFA_PATHS);
-if (!g) return 1;
-
-gfa_merge_t *m = gfa_path_merge(g, "chr22");   // NULL would group every path
-if (!m) { gfa_destroy(g); return 1; }
-
-for (int32_t c = 0; c < m->n; c++)
-    printf("%s\tfrom %d P line(s)\n", m->name[c], m->off[c + 1] - m->off[c]);
-
-gfa_merge_destroy(m);
-gfa_destroy(g);
-```
-
-### `gfa_merge_segs`
-
-```c
-int64_t gfa_merge_segs(const gfa_t *g, const gfa_merge_t *m, int32_t c, uint32_t **segs);
-```
-
-Flattens chain `c` into one array of segment indices, dropping `GFA_NIL`
-entries as it goes. **The caller frees `*segs`.** Returns the count, or a
-negative `AK_E*` code.
-
-```c
-gfa_t *g = gfa_read("graph.gfa", GFA_LINKS | GFA_PATHS);
-if (!g) return 1;
-gfa_merge_t *m = gfa_path_merge(g, "chr22");
-if (!m) { gfa_destroy(g); return 1; }
-
-uint32_t *segs;
-int64_t ns = gfa_merge_segs(g, m, 0, &segs);   // chain 0, already GFA_NIL-free
-if (ns > 0) {
-    for (int64_t i = 0; i < ns; i++) {
-        const gfa_seg_t *s = gfa_seg_at(g, (int32_t)segs[i]);
-        if (s->seq) fwrite(s->seq, 1, s->len, stdout);
-    }
-    free(segs);   // the array is yours; the graph still owns the sequences
-}
-
-gfa_merge_destroy(m);
-gfa_destroy(g);
-```
-
-### `gfa_merge_destroy`
-
-```c
-void gfa_merge_destroy(gfa_merge_t *m);
-```
-
-Releases a chain set and the names it owns. Safe with `NULL`. It does not touch
-the graph, so destroy order between the two does not matter.
-
-```c
-gfa_t *g = gfa_read("graph.gfa", GFA_LINKS | GFA_PATHS);
-if (!g) return 1;
-
-gfa_merge_t *m = gfa_path_merge(g, NULL);
-if (m) {
-    printf("%d chain(s)\n", m->n);
-    gfa_merge_destroy(m);   // independent of the graph's lifetime
-}
-
-gfa_destroy(g);
-```
-
 ## Ranks
 
 rGFA's `SR:i:` tag says how far a segment sits from the reference: 0 is the
@@ -530,24 +442,31 @@ outright - which, with `gfa_rank_mark()`, is how an external reference becomes
 the graph's backbone.
 
 ```c
-gfa_t *g = gfa_read("graph.gfa", GFA_LINKS | GFA_PATHS);
+gfa_t *g = gfa_read("graph.gfa", GFA_PATHS);
 if (!g) return 1;
 
-// consolidate a vg-fragmented reference into a single P line
-gfa_merge_t *m = gfa_path_merge(g, "chr22");
-if (!m) {
-    gfa_destroy(g);
-    return 1;
-}
-uint32_t *segs;
-int64_t ns = gfa_merge_segs(g, m, 0, &segs);   // flatten before clearing:
-if (ns > 0) {                                  // it reads the very paths
-    gfa_clear_paths(g);                        // clearing would free
-    gfa_add_path(g, m->name[0], segs, NULL, ns);
-    free(segs);
+// keep only the path named "chr22", walked exactly as it was read
+for (int32_t k = 0; k < gfa_n_path(g); k++) {
+    if (strcmp(gfa_path_name(g, k), "chr22") != 0) continue;
+
+    const uint32_t *segs;
+    int ns = gfa_path_segs(g, k, &segs);
+    const char *ori = g->path_ori + g->path_off[k];
+
+    // copy both arrays out first: clearing the block frees what they point at
+    uint32_t *keep = (uint32_t *)malloc((size_t)ns * sizeof(*keep));
+    char     *dir  = (char *)malloc((size_t)ns);
+    if (keep && dir) {
+        memcpy(keep, segs, (size_t)ns * sizeof(*keep));
+        memcpy(dir,  ori,  (size_t)ns);
+        gfa_clear_paths(g);
+        gfa_add_path(g, "chr22", keep, dir, ns);
+    }
+    free(keep);
+    free(dir);
+    break;
 }
 
-gfa_merge_destroy(m);
 gfa_destroy(g);
 ```
 

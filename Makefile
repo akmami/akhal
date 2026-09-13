@@ -37,7 +37,6 @@ CLI_SRC := src/cli/main.c \
 		   src/cli/cmd_parse.c \
 		   src/cli/cmd_compact.c \
 		   src/cli/cmd_sort.c \
-		   src/cli/cmd_merge_paths.c \
 		   src/cli/cmd_rank.c \
 		   src/cli/cmd_vg2gfa.c \
 		   src/cli/cmd_gfa2rgfa.c \

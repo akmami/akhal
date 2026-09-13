@@ -50,8 +50,8 @@ samp  1(AAAA) --- 3(G) --- 4(TTTT) --- 5(GG)
 Rank is depth, not path order: a detour hanging off a rank-1 stretch is rank 2.
 Ranks and offsets therefore describe a position in the graph rather than which
 path happened to be walked first - though *which* path lends its name to a
-segment several could explain is decided by walk order, which is the order
-[`gfa_path_merge`](gfa.md#gfa_path_merge) returns chains in.
+segment several could explain is decided by walk order, which is the order the
+`P` lines appear in the file.
 
 A path that begins away from the backbone has no split point to count from, so
 it starts at 0 on its own name, which is a coordinate on that path and nothing
@@ -70,7 +70,7 @@ Both they and the ambiguous ones are counted, so the caller can report them.
 
 ```c
 typedef struct {
-    int32_t n_path;        // paths after fragments were consolidated
+    int32_t n_path;        // P lines the graph carries
     int32_t n_rank0;       // segments on the backbone
     int32_t n_labelled;    // segments that came out with SN and SO
     int32_t n_ambiguous;   // segments a walk reached but could not place
@@ -92,18 +92,16 @@ int rgfa_build(gfa_t *g, const char *ref_name, rgfa_stat_t *st);
 ```
 
 Labels the graph in place and returns `AK_OK`, or a negative `AK_E*` code with
-the reason logged. Requires `GFA_LINKS | GFA_PATHS`, and a graph with no `P`
-lines is refused - there is nothing to label against.
+the reason logged. Requires `GFA_PATHS`, and a graph with no `P` lines is
+refused - there is nothing to label against. The path block is not rewritten:
+the `P` lines are labelled exactly as they were read.
 
-Fragmented `P` lines are consolidated first, exactly as
-[`gfa_path_merge`](gfa.md#gfa_path_merge) chains them, so the graph comes back
-with one `P` line per chain and one stable sequence name per reference. That
-rewrite happens whether or not the labelling finds anything to say.
+One `P` line is one path. A reference split over several `P` lines is therefore
+several paths, and only the one chosen as backbone is rank 0 - join such a
+reference into a single `P` line before labelling if that is not what you want.
 
-`ref_name` picks the backbone by chain name, or by the name of any fragment
-that went into a chain, so either `chr22` or `chr22:1000-2000` selects the same
-one.
-`NULL` takes the chain holding the graph's first `P` line.
+`ref_name` picks the backbone by exact path name; `NULL` takes the graph's
+first `P` line.
 
 ```c
 gfa_t *g = gfa_read("graph.gfa", GFA_LINKS | GFA_PATHS);

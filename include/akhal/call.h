@@ -72,15 +72,14 @@ typedef struct {
 /**
  * Label the backbone from the graph's P lines.
  *
- * Because builders such as vg split one reference over several consecutive P
- * lines, the candidates are the chains gfa_path_merge() stitches out of them
- * rather than the raw paths - so `path_name` may name either a whole reference
- * ("chr22") or one of its fragments. Their segments are concatenated in order
- * to give the reference sequence, and each is stamped with its offset in it.
- * A segment the backbone visits more than once keeps its first occurrence
+ * The candidates are the graph's P lines. The chosen path's segments are
+ * concatenated in order to give the reference sequence, and each is stamped
+ * with its offset in it. A segment the backbone visits more than once keeps
+ * its first occurrence
  * @param g Graph read with GFA_LINKS | GFA_PATHS
- * @param path_name Reference to use, or NULL to take the chain holding the
- *                  graph's first path (logged when several are present)
+ * @param path_name Reference to use; when no path carries that name the
+ *                  longest one is taken instead. NULL takes the graph's first
+ *                  P line (logged when several are present)
  * @return The backbone (release with call_ref_destroy), or NULL on failure
  */
 call_ref_t *call_ref_path(const gfa_t *g, const char *path_name);

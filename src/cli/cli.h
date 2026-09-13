@@ -21,10 +21,9 @@ int cmd_stats(int argc, char **argv);
 
 /**
  * `extract` - pull information out of a graph. The target is argv[2]:
- * "fa" writes every path as FASTA with fragmented ones stitched back together
- * (--raw leaves them a record per P line), "path" does the same for the paths
- * named on the command line, and "vcf" reports the graph's variations over its
- * reference backbone
+ * "fa" writes every P line as one FASTA record, "path" does the same for the
+ * paths named on the command line, and "vcf" reports the graph's variations
+ * over its reference backbone
  * @param argc Argument count
  * @param argv Arguments; the target, the graph path, an output path, then any
  *             target-specific arguments
@@ -64,16 +63,6 @@ int cmd_parse(int argc, char **argv);
 int cmd_compact(int argc, char **argv);
 
 /**
- * `merge-paths` - consolidate fragmented P lines into one path each: every
- * set of fragments sharing a base name is chained through the links and
- * rewritten as a single P line, orientations preserved
- * @param argc Argument count
- * @param argv Arguments; input .gfa and optional output .gfa
- * @return 0 on success, non-zero on failure
- */
-int cmd_merge_paths(int argc, char **argv);
-
-/**
  * `sort` - topologically sort a graph and renumber nodes 1..N
  * @param argc Argument count
  * @param argv Arguments; input .gfa and optional output .gfa
@@ -82,8 +71,8 @@ int cmd_merge_paths(int argc, char **argv);
 int cmd_sort(int argc, char **argv);
 
 /**
- * `rank` - rewrite a graph's SR ranks against its backbone, consolidating
- * fragmented paths or replacing them with a traced reference
+ * `rank` - rewrite a graph's SR ranks against its backbone, either the P
+ * lines it already carries or a traced reference that replaces them
  * @param argc Argument count
  * @param argv Arguments; input .gfa, optional output .gfa, optional
  *             --fasta/--ref
@@ -92,9 +81,8 @@ int cmd_sort(int argc, char **argv);
 int cmd_rank(int argc, char **argv);
 
 /**
- * `gfa2rgfa` - label a GFA as rGFA: consolidate fragmented paths, then give
- * every segment the stable sequence it sits on (SN), its offset there (SO) and
- * its distance from the backbone (SR)
+ * `gfa2rgfa` - label a GFA as rGFA: give every segment the stable sequence it
+ * sits on (SN), its offset there (SO) and its distance from the backbone (SR)
  * @param argc Argument count
  * @param argv Arguments; input .gfa, optional output, optional --ref
  * @return 0 on success, non-zero on failure

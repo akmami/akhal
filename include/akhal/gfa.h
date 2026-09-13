@@ -128,8 +128,7 @@ typedef struct {
 // GFA_LINKS on its own records the edges and each segment's degrees, which is
 // all a scan over link[] needs. The CSR on top of it - arc + arc_off, another
 // 145 MB on a chr22 graph and 5.4 GB on a whole-genome one - is what makes
-// gfa_arcs(), gfa_has_arc(), gfa_toposort() and the path chaining in
-// gfa_path_merge() work, and only those need it.
+// gfa_arcs(), gfa_has_arc() and gfa_toposort() work, and only those need it.
 
 /**
  * Read an (r)GFA file into a freshly allocated graph
@@ -302,69 +301,6 @@ int gfa_has_arc(const gfa_t *g, int32_t v, int32_t w);
  */
 int gfa_path_segs(const gfa_t *g, int32_t k, const uint32_t **segs);
 
-// Fragmented paths
-
-/**
- * Chains of P-line fragments that spell one longer path.
- *
- * Graph builders such as vg emit a reference as several consecutive P lines
- * rather than one. A chain groups those fragments back together, in CSR form 
- * like everything else here: chain c owns the path indices frag[off[c] .. off[c+1]).
- */
-typedef struct {
-    char   **name;       // owned chain names, length n
-    int32_t *frag;       // path indices, grouped by chain
-    int32_t *off;        // length n + 1: chain c is frag[off[c] .. off[c+1])
-    int32_t  n;          // number of chains
-} gfa_merge_t;
-
-/**
- * Group a graph's P-line fragments into chains.
- *
- * Fragments are selected by name: a path belongs to `key` when its name equals
- * `key` once a region suffix is stripped - "chr22:1000-2000" in the usual form,
- * or "chr22[1000]" as vg spells it - or when the last '#'-delimited field of
- * that base matches, so a PanSN name like "GRCh38#0#chr22:1000-2000" is found
- * by "chr22". Passing NULL selects every path and groups each base name separately.
- *
- * Selected fragments are ordered by the start offset in their name (those
- * without one keep file order and sort last), then chained: fragment A is
- * followed by B when a link joins A's last segment to B's first with matching
- * orientations, B has no other predecessor, and the link does not close a
- * cycle. Fragments that nothing joins simply end up in a chain of their own,
- * so every selected path appears in the result exactly once.
- *
- * A chain of several fragments is named after their shared base ("chr22"), or
- * "<base>_1", "<base>_2", ... when a base yields more than one such chain. A
- * chain of a single fragment keeps that path's original name.
- *
- * Chaining only follows the forward strand; a fragment stored reverse-
- * complemented relative to its neighbours is left unmerged. Requires the graph
- * to be read with GFA_LINKS | GFA_PATHS
- * @param g Graph to group
- * @param key Path name to select, or NULL for every path
- * @return The chains (release with gfa_merge_destroy), or NULL on failure
- */
-gfa_merge_t *gfa_path_merge(const gfa_t *g, const char *key);
-
-/**
- * Release a chain set and everything it owns. Safe to call with NULL
- * @param m Chain set to destroy
- */
-void gfa_merge_destroy(gfa_merge_t *m);
-
-/**
- * Segments of chain c, in order, as a flat list across its fragments.
- * Unresolved (GFA_NIL) entries are dropped
- * @param g Graph the chains came from
- * @param m Chain set from gfa_path_merge()
- * @param c Chain index
- * @param segs Set to a freshly allocated array of segment indices; the caller
- *             frees it. Set to NULL when the chain spells nothing
- * @return Number of segments written, or a negative AK_E* code
- */
-int64_t gfa_merge_segs(const gfa_t *g, const gfa_merge_t *m, int32_t c, uint32_t **segs);
-
 // Ranks
 
 /**
@@ -375,10 +311,8 @@ int64_t gfa_merge_segs(const gfa_t *g, const gfa_merge_t *m, int32_t c, uint32_t
  * any P line visits is stamped rank 0 and every other segment rank 1, so a
  * graph with no paths at all comes back entirely rank 1.
  *
- * Whether a reference arrives as one P line or as several vg-style fragments
- * makes no difference here, since every path counts as backbone either way;
- * gfa_path_merge() plus gfa_clear_paths()/gfa_add_path() is how you also
- * consolidate those fragments into one P line.
+ * Every P line counts as backbone, so a reference spread over several P lines
+ * is ranked no differently from one that arrives whole.
  *
  * Existing SR values are overwritten. gfa_read() calls this itself when the
  * file carried no SR tags, so calling it explicitly is how you re-rank a graph
@@ -418,9 +352,8 @@ void gfa_clear_paths(gfa_t *g);
  *
  * Together with gfa_clear_paths() and gfa_rank_mark() this is what makes an
  * externally supplied reference the graph's backbone - mark the ranks, then
- * install the walk that produced them in place of the old P lines. It is also
- * how a reference split across several fragments is consolidated back into one
- * P line. Requires GFA_PATHS
+ * install the walk that produced them in place of the old P lines.
+ * Requires GFA_PATHS
  * @param g Graph to modify
  * @param name Name for the new path; copied
  * @param segs Ordered segment indices; GFA_NIL entries are skipped

@@ -52,31 +52,39 @@ static call_ref_t *ref_alloc(const gfa_t *g, const char *name) {
 }
 
 // the requested name wins; without one, the file's first path, else the longest
-static int32_t ref_pick(const gfa_t *g, const gfa_merge_t *m, const char *path_name) {
-    if (m->n == 1) return 0;
+static int32_t ref_pick(const gfa_t *g, const char *path_name) {
+    int32_t n = gfa_n_path(g);
+    if (n == 1 || !path_name) return 0;   // no preference: the file's first P line
 
-    if (!path_name) {
-        // no preference: stay with the path the file listed first
-        for (int32_t k = 0; k < m->n; k++)
-            for (int32_t i = m->off[k]; i < m->off[k + 1]; i++)
-                if (m->frag[i] == 0) return k;
-        return 0;
-    }
-
-    // the name asked for wins outright; otherwise take the longest chain
+    // the name asked for wins outright; otherwise take the longest path
     int32_t best = 0;
     int64_t best_len = -1;
-    for (int32_t k = 0; k < m->n; k++) {
-        if (!strcmp(m->name[k], path_name)) return k;
-        int64_t len = 0;
-        for (int32_t i = m->off[k]; i < m->off[k + 1]; i++)
-            len += (int64_t)gfa_path_len(g, m->frag[i]);
+    for (int32_t k = 0; k < n; k++) {
+        if (!strcmp(gfa_path_name(g, k), path_name)) return k;
+        int64_t len = (int64_t)gfa_path_len(g, k);
         if (len > best_len) {
             best_len = len;
             best = k;
         }
     }
     return best;
+}
+
+// a path's resolved segments, in order, as a freshly allocated array
+static int64_t path_walk(const gfa_t *g, int32_t k, uint32_t **out) {
+    *out = NULL;
+    const uint32_t *segs;
+    int ns = gfa_path_segs(g, k, &segs);
+    int64_t n = 0;
+    for (int i = 0; i < ns; i++) if (segs[i] != GFA_NIL) n++;
+    if (n == 0) return 0;
+
+    uint32_t *w = (uint32_t *)malloc((size_t)n * sizeof(*w));
+    if (!w) return AK_ENOMEM;
+    int64_t j = 0;
+    for (int i = 0; i < ns; i++) if (segs[i] != GFA_NIL) w[j++] = segs[i];
+    *out = w;
+    return n;
 }
 
 // label the backbone from the P lines; see akhal/call.h
@@ -86,35 +94,29 @@ call_ref_t *call_ref_path(const gfa_t *g, const char *path_name) {
         return NULL;
     }
 
-    // one reference is often split over several P lines, so the backbone is a
-    // chain of fragments; an unfragmented graph simply yields chains of one
-    gfa_merge_t *m = gfa_path_merge(g, path_name);
-    if (!m) return NULL;
-
-    int32_t k = ref_pick(g, m, path_name);
-    if (m->n > 1) {
-        ak_log(AK_LOG_INFO, "call", "%d candidate backbone(s); using '%s'", m->n, m->name[k]);
+    int32_t k = ref_pick(g, path_name);
+    const char *name = gfa_path_name(g, k);
+    if (gfa_n_path(g) > 1) {
+        ak_log(AK_LOG_INFO, "call", "%d candidate backbone(s); using '%s'", gfa_n_path(g), name);
     }
 
     uint32_t *segs = NULL;
-    int64_t ns = gfa_merge_segs(g, m, k, &segs);
+    int64_t ns = path_walk(g, k, &segs);
     if (ns < 0) {
-        ak_log(AK_LOG_ERROR, "call", "cannot assemble backbone '%s': %s", m->name[k], ak_strerror((int)ns));
-        gfa_merge_destroy(m);
+        ak_log(AK_LOG_ERROR, "call", "cannot assemble backbone '%s': %s", name, ak_strerror((int)ns));
         return NULL;
     }
 
     int64_t total = 0;
     for (int64_t i = 0; i < ns; i++) total += gfa_seg_at(g, (int32_t)segs[i])->len;
 
-    call_ref_t *r = ref_alloc(g, m->name[k]);
+    call_ref_t *r = ref_alloc(g, name);
     if (r) {
         r->seq = (char *)malloc((size_t)total + 1);
     }
     if (!r || !r->seq) {
         call_ref_destroy(r);
         free(segs);
-        gfa_merge_destroy(m);
         ak_log(AK_LOG_ERROR, "call", "out of memory");
         return NULL;
     }
@@ -133,12 +135,11 @@ call_ref_t *call_ref_path(const gfa_t *g, const char *path_name) {
     }
     r->seq[r->len] = '\0';
 
-    // the flattened chain is already the ordered walk; keep it
+    // the resolved steps are already the ordered walk; keep them
     r->walk = segs;
     r->n_walk = ns;
 
-    ak_log(AK_LOG_INFO, "call", "backbone '%s': %lld bp over %lld node(s), stitched from %d P line(s)", r->name, (long long)r->len, (long long)ns, m->off[k + 1] - m->off[k]);
-    gfa_merge_destroy(m);
+    ak_log(AK_LOG_INFO, "call", "backbone '%s': %lld bp over %lld node(s)", r->name, (long long)r->len, (long long)ns);
     return r;
 }
 

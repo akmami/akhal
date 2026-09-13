@@ -29,7 +29,7 @@ static void emit_wrapped(FILE *out, const char *seq, size_t len, int *col, int w
 
 // print the extract usage lines
 static void usage(void) {
-    ak_log(AK_LOG_ERROR, NULL, "usage: akhal extract fa   <r/GFA> <out.fa|.fasta> [WRAP-LENGTH] [--raw]");
+    ak_log(AK_LOG_ERROR, NULL, "usage: akhal extract fa   <r/GFA> <out.fa|.fasta> [WRAP-LENGTH]");
     ak_log(AK_LOG_ERROR, NULL, "       akhal extract path <r/GFA> <out.fa|.fasta> <PATH-NAME> [PATH-NAME ...] [WRAP-LENGTH]");
     ak_log(AK_LOG_ERROR, NULL, "       akhal extract vcf  <r/GFA> <out.vcf> [--ref <NAME>] [--fasta <FILE>]");
 }
@@ -76,44 +76,45 @@ static void emit_record(FILE *out, const gfa_t *g, const char *name, const uint3
     }
 }
 
-// one record per chain, so a path split over several P lines leaves as a single
-// sequence. `key` picks one path, NULL takes them all. Returns the number of
-// records written, or a negative AK_E* code; `n_stitched` counts the ones that
-// gathered more than one fragment
-static int64_t emit_chains(const gfa_t *g, FILE *out, const char *key, int wrap_len, int32_t *n_stitched) {
-    gfa_merge_t *m = gfa_path_merge(g, key);
-    if (!m) return AK_EINVAL;
-
-    int64_t rc = m->n;
-    *n_stitched = 0;
-    for (int32_t c = 0; c < m->n; c++) {
-        uint32_t *segs;
-        int64_t ns = gfa_merge_segs(g, m, c, &segs);
-        if (ns < 0) {
-            ak_log(AK_LOG_ERROR, NULL, "cannot assemble path %s: %s", m->name[c], ak_strerror((int)ns));
-            rc = ns;
-            break;
-        }
-        if (m->off[c + 1] - m->off[c] > 1) {
-            (*n_stitched)++;
-        }
-        emit_record(out, g, m->name[c], segs, ns, wrap_len);
-        free(segs);
+// A bare contig name selects a PanSN path too, so "chr22" finds
+// "GRCh38#0#chr22" without the caller having to spell the whole thing
+static int path_selected(const char *name, const char *key) {
+    if (!key) return 1;
+    size_t nl = strlen(name), kl = strlen(key);
+    if (nl == kl && !strcmp(name, key)) return 1;
+    for (size_t i = nl; i > 0; i--) {
+        if (name[i - 1] != '#') continue;
+        return nl - i == kl && !strcmp(name + i, key);
     }
-
-    gfa_merge_destroy(m);
-    return rc;
+    return 0;
 }
 
-// `extract fa` - every path as FASTA, fragments stitched back together first
+// one record per P line. `key` picks the paths of that name, NULL takes them
+// all. Returns the number of records written, or a negative AK_E* code
+static int64_t emit_paths(const gfa_t *g, FILE *out, const char *key, int wrap_len) {
+    int64_t n = 0;
+    for (int32_t k = 0; k < gfa_n_path(g); k++) {
+        const char *name = gfa_path_name(g, k);
+        if (!path_selected(name, key)) continue;
+        const uint32_t *segs;
+        int ns = gfa_path_segs(g, k, &segs);
+        emit_record(out, g, name, segs, ns, wrap_len);
+        n++;
+    }
+    if (n == 0 && key) {
+        ak_log(AK_LOG_ERROR, NULL, "no path named '%s' in the graph", key);
+        return AK_EINVAL;
+    }
+    return n;
+}
+
+// `extract fa` - every P line as one FASTA record
 static int extract_fa(int argc, char **argv) {
     const char *in = NULL, *out_fn = NULL;
-    int wrap_len = FASTA_WRAP, raw = 0, seen_wrap = 0;
+    int wrap_len = FASTA_WRAP, seen_wrap = 0;
 
     for (int i = 3; i < argc; i++) {
-        if (!strcmp(argv[i], "--raw")) {
-            raw = 1;
-        } else if (argv[i][0] == '-') {
+        if (argv[i][0] == '-') {
             ak_log(AK_LOG_ERROR, NULL, "unknown option: %s", argv[i]);
             usage();
             return 1;
@@ -135,8 +136,8 @@ static int extract_fa(int argc, char **argv) {
     }
     if (!want_gfa(in) || !want_fasta(out_fn)) return 1;
 
-    // chaining fragments reads the L lines; writing them as they lie does not
-    gfa_t *g = gfa_read(in, raw ? (GFA_PATHS | GFA_SEQ) : GFA_ALL);
+    // writing the paths as they lie needs their steps and the bases, nothing else
+    gfa_t *g = gfa_read(in, GFA_PATHS | GFA_SEQ);
     if (!g) return 1;
 
     if (gfa_n_path(g) == 0) {
@@ -151,21 +152,11 @@ static int extract_fa(int argc, char **argv) {
     }
 
     int ret = 0;
-    if (raw || gfa_n_path(g) == 0) {
-        for (int32_t k = 0; k < gfa_n_path(g); k++) {
-            const uint32_t *segs;
-            int n = gfa_path_segs(g, k, &segs);
-            emit_record(out, g, gfa_path_name(g, k), segs, n, wrap_len);
-        }
-        ak_log(AK_LOG_INFO, NULL, "wrote %d record(s) to %s, one per P line", gfa_n_path(g), out_fn);
+    int64_t n = emit_paths(g, out, NULL, wrap_len);
+    if (n < 0) {
+        ret = 1;
     } else {
-        int32_t n_stitched = 0;
-        int64_t n = emit_chains(g, out, NULL, wrap_len, &n_stitched);
-        if (n < 0) {
-            ret = 1;
-        } else {
-            ak_log(AK_LOG_INFO, NULL, "wrote %lld path(s) to %s: %d stitched from fragments, %lld left as they were", (long long)n, out_fn, n_stitched, (long long)n - n_stitched);
-        }
+        ak_log(AK_LOG_INFO, NULL, "wrote %lld record(s) to %s, one per P line", (long long)n, out_fn);
     }
 
     fclose(out);
@@ -173,8 +164,8 @@ static int extract_fa(int argc, char **argv) {
     return ret;
 }
 
-// `extract path` - the named paths, each with its fragments joined into one
-// FASTA record. At least one name is required; `fa` is how to take them all
+// `extract path` - the named paths, one FASTA record each. At least one name
+// is required; `fa` is how to take them all
 static int extract_path(int argc, char **argv) {
     if (argc < 6) {
         usage();
@@ -192,7 +183,7 @@ static int extract_path(int argc, char **argv) {
     }
     if (!want_gfa(in) || !want_fasta(out_fn)) return 1;
 
-    gfa_t *g = gfa_read(in, GFA_ALL);
+    gfa_t *g = gfa_read(in, GFA_PATHS | GFA_SEQ);
     if (!g) return 1;
 
     FILE *out = fopen(out_fn, "w");
@@ -202,23 +193,21 @@ static int extract_path(int argc, char **argv) {
         return 1;
     }
 
-    // one merge per name: a name that matches nothing stops the whole thing
-    // rather than quietly leaving a half-written file behind
+    // a name that matches nothing stops the whole thing rather than quietly
+    // leaving a half-written file behind
     int64_t n_total = 0;
-    int32_t n_stitched = 0, ret = 0;
+    int ret = 0;
     for (int i = first; i <= last; i++) {
-        int32_t stitched = 0;
-        int64_t n = emit_chains(g, out, argv[i], wrap_len, &stitched);
+        int64_t n = emit_paths(g, out, argv[i], wrap_len);
         if (n < 0) {
             ret = 1;
             break;
         }
         n_total += n;
-        n_stitched += stitched;
     }
 
     if (!ret) {
-        ak_log(AK_LOG_INFO, NULL, "wrote %lld path(s) to %s: %d stitched from fragments, %lld left as they were", (long long)n_total, out_fn, n_stitched, (long long)n_total - n_stitched);
+        ak_log(AK_LOG_INFO, NULL, "wrote %lld record(s) to %s", (long long)n_total, out_fn);
     }
 
     fclose(out);

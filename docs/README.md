@@ -15,7 +15,7 @@ For the command-line tool, see the [main README](../README.md).
 
 | Module | What it gives you |
 | --- | --- |
-| [`gfa`](gfa.md) | The (r)GFA graph model - segments, links, paths - plus the reader and writer every command uses, traversal over the CSR adjacency, fragmented-path merging, `SR` ranking, path-block rewriting and topological sort |
+| [`gfa`](gfa.md) | The (r)GFA graph model - segments, links, paths - plus the reader and writer every command uses, traversal over the CSR adjacency, `SR` ranking, path-block rewriting and topological sort |
 | [`vg`](vg.md) | Reader for vg's native `.vg` format (compressed Protobuf), decoded straight from the wire format with only zlib |
 
 ### Sequence and alignment formats
@@ -80,7 +80,6 @@ layer decides whether to abort. `AK_OK` is 0 and every error is negative, so
 you release with the matching `*_destroy()` / `*_close()`. Every destroy is safe
 to call with `NULL`, which is what makes the `goto done` error paths in the
 commands work. Where a function hands you a buffer to free yourself - such as
-[`gfa_merge_segs`](gfa.md#gfa_merge_segs) or
 [`sam_rg_prefix`](sam.md#sam_rg_prefix) - its page says so explicitly.
 
 **Array + dict.** The graph, the FASTA store and the annotation store all use
@@ -113,12 +112,12 @@ loudly rather than quietly misleading someone.
 The commands are mostly short assemblies of the pieces above. Three worked
 shapes, with the module that owns each step:
 
-**Extract a merged reference** - `akhal extract path`
+**Extract a reference** - `akhal extract path`
 
 ```text
-gfa_read(GFA_LINKS|GFA_PATHS)   gfa    load the graph
-gfa_path_merge(g, "chr22")      gfa    chain the fragmented P lines
-gfa_merge_segs(g, m, c, &segs)  gfa    flatten one chain to segment indices
+gfa_read(GFA_PATHS|GFA_SEQ)     gfa    load the graph
+gfa_path_name(g, k)             gfa    find the P line asked for
+gfa_path_segs(g, k, &segs)      gfa    its steps, in order
   -> write FASTA                       spell the sequences out
 ```
 
@@ -165,8 +164,8 @@ diff_gaf_identical(d)           diff   the whole verdict, for an exit status
 
 ```text
 gfa_read(GFA_LINKS|GFA_PATHS)   gfa    load the graph
-rgfa_build(g, "chr22", &st)     rgfa   chain the P lines, then walk them all,
-                                       writing SN/SO/SR onto every segment
+rgfa_build(g, "chr22", &st)     rgfa   walk every P line, writing SN/SO/SR
+                                       onto every segment
 gfa_write_rgfa(g, out)          gfa    emit the graph, tags and all
 ```
 

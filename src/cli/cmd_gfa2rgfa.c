@@ -71,7 +71,7 @@ int cmd_gfa2rgfa(int argc, char **argv) {
     }
 
     if (!ret) {
-        ak_log(AK_LOG_INFO, NULL, "%d path(s) after merging; %d node(s) on the backbone, %d placed in all, up to rank %d", st.n_path, st.n_rank0, st.n_labelled, st.max_rank);
+        ak_log(AK_LOG_INFO, NULL, "%d path(s); %d node(s) on the backbone, %d placed in all, up to rank %d", st.n_path, st.n_rank0, st.n_labelled, st.max_rank);
         if (st.n_ambiguous) {
             ak_log(AK_LOG_WARN, "gfa2rgfa", "%d node(s) left without SN/SO: the paths reaching them disagree on where they sit", st.n_ambiguous);
         }

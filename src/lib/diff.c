@@ -277,82 +277,73 @@ static int compare_links(const gfa_t *ga, const gfa_t *gb, const diff_map_t *m, 
 
 // paths
 
-// one merged chain, ordered by name so the two graphs' chains can be paired
+// one P line, ordered by name so the two graphs' paths can be paired
 typedef struct {
-    const char *name;   // borrowed from the chain set
-    int32_t     c;      // chain index
-} chain_t;
+    const char *name;   // borrowed from the graph
+    int32_t     k;      // path index
+} pref_t;
 
-static int chain_cmp(const void *A, const void *B) {
-    const chain_t *a = (const chain_t *)A, *b = (const chain_t *)B;
+static int pref_cmp(const void *A, const void *B) {
+    const pref_t *a = (const pref_t *)A, *b = (const pref_t *)B;
     int c = strcmp(a->name, b->name);
     if (c) return c;
-    return a->c < b->c ? -1 : (a->c > b->c);
+    return a->k < b->k ? -1 : (a->k > b->k);
 }
 
-// every chain of a merge set, sorted by name; NULL on allocation failure
-static chain_t *sorted_chains(const gfa_merge_t *m) {
-    chain_t *c = (chain_t *)malloc((size_t)(m->n > 0 ? m->n : 1) * sizeof(chain_t));
-    if (!c) return NULL;
+// every path of a graph, sorted by name; NULL on allocation failure
+static pref_t *sorted_paths(const gfa_t *g) {
+    int32_t n = gfa_n_path(g);
+    pref_t *p = (pref_t *)malloc((size_t)(n > 0 ? n : 1) * sizeof(pref_t));
+    if (!p) return NULL;
 
-    for (int32_t i = 0; i < m->n; i++) {
-        c[i].name = m->name[i];
-        c[i].c = i;
+    for (int32_t i = 0; i < n; i++) {
+        p[i].name = gfa_path_name(g, i);
+        p[i].k = i;
     }
-    qsort(c, (size_t)m->n, sizeof(chain_t), chain_cmp);
-    return c;
+    qsort(p, (size_t)n, sizeof(pref_t), pref_cmp);
+    return p;
 }
 
-// bases a chain spells, without materializing them
-static uint64_t chain_len(const gfa_t *g, const gfa_merge_t *m, int32_t c) {
+// bases a path spells, without materializing them
+static uint64_t path_bases(const gfa_t *g, int32_t k) {
+    const uint32_t *segs;
+    int ns = gfa_path_segs(g, k, &segs);
     uint64_t len = 0;
-    for (int32_t f = m->off[c]; f < m->off[c + 1]; f++) {
-        const uint32_t *segs;
-        int ns = gfa_path_segs(g, m->frag[f], &segs);
-        for (int t = 0; t < ns; t++)
-            if (segs[t] != GFA_NIL) len += gfa_seg_at(g, (int32_t)segs[t])->len;
-    }
+    for (int t = 0; t < ns; t++)
+        if (segs[t] != GFA_NIL) len += gfa_seg_at(g, (int32_t)segs[t])->len;
     return len;
 }
 
 // the bases themselves, a '-' step contributing its reverse complement. Link
 // overlaps are not trimmed off, exactly as `extract path` leaves them
-static int chain_seq(const gfa_t *g, const gfa_merge_t *m, int32_t c, kstring_t *out) {
+static int path_seq(const gfa_t *g, int32_t k, kstring_t *out) {
     ks_clear(out);
-    for (int32_t f = m->off[c]; f < m->off[c + 1]; f++) {
-        int32_t pi = m->frag[f];
-        const uint32_t *segs;
-        int ns = gfa_path_segs(g, pi, &segs);
-        const char *ori = g->path_ori + g->path_off[pi];
+    const uint32_t *segs;
+    int ns = gfa_path_segs(g, k, &segs);
+    const char *ori = g->path_ori + g->path_off[k];
 
-        for (int t = 0; t < ns; t++) {
-            if (segs[t] == GFA_NIL) continue;
-            const gfa_seg_t *s = gfa_seg_at(g, (int32_t)segs[t]);
-            if (!s->seq || s->len == 0) continue;
+    for (int t = 0; t < ns; t++) {
+        if (segs[t] == GFA_NIL) continue;
+        const gfa_seg_t *s = gfa_seg_at(g, (int32_t)segs[t]);
+        if (!s->seq || s->len == 0) continue;
 
-            size_t at = out->l;
-            if (ks_add(out, s->seq, s->len) != AK_OK) return AK_ENOMEM;
-            if (ori[t] == '-') ak_revcomp(out->s + at, s->len);
-        }
+        size_t at = out->l;
+        if (ks_add(out, s->seq, s->len) != AK_OK) return AK_ENOMEM;
+        if (ori[t] == '-') ak_revcomp(out->s + at, s->len);
     }
     return AK_OK;
 }
 
-// chain both graphs' P-line fragments, pair the chains by name, and compare
-// what each pair spells
+// pair the two graphs' P lines by name and compare what each pair spells
 static int compare_paths(const gfa_t *ga, const gfa_t *gb, diff_t *d) {
-    // a graph with no P lines has no chains, which is nothing to fail over -
-    // its segments and links still compare
-    gfa_merge_t *ma = NULL, *mb = NULL;
-    chain_t *ca = NULL, *cb = NULL;
+    // a graph with no P lines has nothing to pair, which is nothing to fail
+    // over - its segments and links still compare
+    pref_t *ca = NULL, *cb = NULL;
     int rc = AK_OK;
 
-    if (gfa_n_path(ga) > 0 && !(ma = gfa_path_merge(ga, NULL))) rc = AK_EINVAL;
-    if (rc == AK_OK && gfa_n_path(gb) > 0 && !(mb = gfa_path_merge(gb, NULL))) rc = AK_EINVAL;
-
-    int32_t na = ma ? ma->n : 0, nb = mb ? mb->n : 0;
-    if (rc == AK_OK && na > 0 && !(ca = sorted_chains(ma))) rc = AK_ENOMEM;
-    if (rc == AK_OK && nb > 0 && !(cb = sorted_chains(mb))) rc = AK_ENOMEM;
+    int32_t na = gfa_n_path(ga), nb = gfa_n_path(gb);
+    if (na > 0 && !(ca = sorted_paths(ga))) rc = AK_ENOMEM;
+    if (rc == AK_OK && nb > 0 && !(cb = sorted_paths(gb))) rc = AK_ENOMEM;
 
     if (rc == AK_OK) {
         d->path = (diff_path_t *)calloc((size_t)(na + nb > 0 ? na + nb : 1), sizeof(diff_path_t));
@@ -376,21 +367,21 @@ static int compare_paths(const gfa_t *ga, const gfa_t *gb, diff_t *d) {
 
             if (c < 0) {
                 p->state = DIFF_A_ONLY;
-                p->len_a = chain_len(ga, ma, ca[i++].c);
+                p->len_a = path_bases(ga, ca[i++].k);
                 d->n_path_a_only++;
             } else if (c > 0) {
                 p->state = DIFF_B_ONLY;
-                p->len_b = chain_len(gb, mb, cb[j++].c);
+                p->len_b = path_bases(gb, cb[j++].k);
                 d->n_path_b_only++;
             } else {
-                p->len_a = chain_len(ga, ma, ca[i].c);
-                p->len_b = chain_len(gb, mb, cb[j].c);
+                p->len_a = path_bases(ga, ca[i].k);
+                p->len_b = path_bases(gb, cb[j].k);
 
                 // different lengths settle it; equal ones need the bases
                 int same = 0;
                 if (p->len_a == p->len_b) {
-                    rc = chain_seq(ga, ma, ca[i].c, &sa);
-                    if (rc == AK_OK) rc = chain_seq(gb, mb, cb[j].c, &sb);
+                    rc = path_seq(ga, ca[i].k, &sa);
+                    if (rc == AK_OK) rc = path_seq(gb, cb[j].k, &sb);
                     if (rc != AK_OK) break;
                     same = sa.l == 0 || memcmp(sa.s, sb.s, sa.l) == 0;
                 }
@@ -410,8 +401,6 @@ static int compare_paths(const gfa_t *ga, const gfa_t *gb, diff_t *d) {
 
     free(ca);
     free(cb);
-    gfa_merge_destroy(ma);
-    gfa_merge_destroy(mb);
     return rc;
 }
 

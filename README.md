@@ -122,7 +122,7 @@ Extract information from the r/GFA file. The first argument picks what to pull o
 
 **Usage:**
 ```sh
-./akhal extract fa   <r/GFA file> <OUTPUT .fa/.fasta file> [wrap length] [--raw]
+./akhal extract fa   <r/GFA file> <OUTPUT .fa/.fasta file> [wrap length]
 ./akhal extract path <r/GFA file> <OUTPUT .fa/.fasta file> <path name> [path name ...] [wrap length]
 ./akhal extract vcf  <r/GFA file> <OUTPUT .vcf file> [--ref <name>] [--fasta <FASTA file>]
 ```
@@ -131,29 +131,20 @@ Extract information from the r/GFA file. The first argument picks what to pull o
 For `path`, a trailing numeric argument is read as the wrap length rather than a path name - but only when a name precedes it, so a lone `60` is still the path called `60`.
 
 ##### `fa`
-Writes every path in the graph as FASTA, one record each, with fragmented `P` lines stitched back together first - so a reference that arrived as `chr22:0-1000`, `chr22:1000-2000`, ... leaves as a single `chr22` record rather than thousands of tiny ones. 
-The chaining is exactly what `path` does, described below.
-
-`--raw` turns that off and writes one record per `P` line exactly as the graph stores them, which is how to see what a file actually contains.
+Writes every `P` line in the graph as one FASTA record, in file order, named after the path. 
+One `P` line is one record: a reference the file splits over several `P` lines comes out as several records, which is what the file actually says.
 
 ##### `path`
 The same records, but only for the paths you name - one name at least, as many as you like. 
 `fa` is how to take every path in the graph; this is how to take a few of them.
-Fragmented paths are stitched back together first.
-A reference often arrives as several `P` lines rather than one, and asking for `chr22` collects all of them. 
-Fragments are matched on their base name: the contig, with a region suffix in the usual `chr22:1000-2000` form dropped, or vg's `chr22[1000]` spelling of the same thing, and with a PanSN prefix ignored so `GRCh38#0#chr22:1000-2000` answers to `chr22` as well. 
-Lines carrying no suffix at all - several `P` lines each named simply `chr22` - are collected the same way.
 
-The fragments are then chained through the `L` lines: one follows another when a link joins its last segment to the other's first with matching orientations, the other has no predecessor yet, and the join does not close a cycle. 
-A start offset in the name only decides which candidate is tried first; names without one keep the order they appear in the file.
-Chaining only follows the forward strand, so a fragment stored reverse-complemented relative to its neighbours stays on its own.
-
-Everything a name selects is written, merged or not: a chain of several fragments takes their shared base name (`chr22`, or `chr22_1`, `chr22_2`, ... when one base yields more than one chain), and a fragment that nothing joined keeps the name it already had. 
+Names match the `P` line exactly, except that a bare contig name also finds a PanSN path - `chr22` selects `GRCh38#0#chr22` without your having to spell the whole thing. 
+Every path the name selects is written, so if the file carries the name more than once you get a record for each. 
 Several names are written to the one file, in the order given, and a name that matches nothing stops the command rather than leaving a half-written file behind.
 
 ##### `vcf`
 Reads the graph as a reference plus its differences.
-One walk is declared the backbone - a path by default (`--ref <name>`, else the graph's first path; fragmented `P` lines are stitched together exactly as `extract path` does), or with `--fasta` an external sequence traced through the nodes, `--ref` then naming the record to trace.
+One walk is declared the backbone - a `P` line by default (`--ref <name>`, else the graph's first path), or with `--fasta` an external sequence traced through the nodes, `--ref` then naming the record to trace.
 Every node on that walk gets a reference coordinate, and everything the backbone does not cover is by definition a variation: a detour that leaves the backbone at one node and rejoins it at a later one spells an alternate allele over the reference span between them, and a link that skips forward along the backbone itself spells a deletion of the bases it jumps over.
 Detours that leave and rejoin at the same nodes share a `REF` span, so they come out as one multi-allelic row.
 
@@ -196,14 +187,14 @@ Counting is still multiset-style - with three copies of a sequence in one file a
 Segment ids are still listed for the unmatched surplus, but it is *how many* there are that is meaningful, not which ones file order happened to leave over.
 
 Paths are compared by what they spell, not by what they walk over. 
-Fragmented `P` lines are chained together exactly as `extract path` does, chains are paired by name across the two files, and each pair's sequence is compared - so two graphs that chop one reference into different nodes still agree on it. 
+`P` lines are paired by name across the two files and each pair's sequence is compared - so two graphs that chop one reference into different nodes still agree on it. 
 Lengths are checked before the bases, so a path that differs in length costs nothing to reject. 
 A file with no `P` lines at all is fine; it simply has no paths to report on.
 
 Ids, node numbering, line order and `SR` ranks are not compared: a graph and its own `sort` output are identical to this command.
 
 Two caveats on paths. 
-Chains are paired by the name path merging settled on, so a reference that chains into one piece in one file (`chr1`) but two in the other (`chr1_1`, `chr1_2`, because a joining `L` line is missing) pairs with nothing and reports as unmatched names. 
+Pairing is on the `P` line's own name, so a reference carried whole in one file (`chr1`) but split in the other (`chr1:0-1000`, `chr1:1000-2000`, ...) shares no name at all and reports as unmatched rather than as one difference. 
 And the sequence comparison is byte-for-byte, hence case-sensitive.
 
 Note: `--verbose` additionally lists the ids of the segments and links that only one of the two graphs carries, in that graph's own numbering.
@@ -311,7 +302,7 @@ Rewrites a graph's `SR:i:` ranks against its backbone.
 In rGFA, rank 0 is the reference and anything higher came from a sample; `rank` decides which segments are which and re-emits the graph.
 
 By default the backbone is the graph's own `P` lines: every segment any path visits becomes rank 0, everything else rank 1. 
-Fragmented paths are consolidated first - a reference that arrived as `chr22:0-1000`, `chr22:1000-2000`, ... leaves as a single `P chr22`, chained through the links exactly as `extract path` does. 
+The path block is left exactly as it was read; only the `SR` tags change. 
 A graph with no `P` lines has no backbone to rank against, so the command stops rather than silently flattening an rGFA's own tags; use `--fasta` to give it one.
 
 With `--fasta`, an external reference becomes the backbone instead: the sequence is traced through the graph, the nodes it walks become rank 0 and every other node rank 1, and the old `P` lines are replaced by one named after the FASTA record spelling that walk. 
@@ -355,8 +346,8 @@ Note: If no output file is given, the GFA is written to standard output.
 Labels a plain GFA as an rGFA, giving every segment the three tags that say where it sits on a real sequence: `SN:Z:` the name of that sequence, `SO:i:` the offset on it, `SR:i:` how far it is from the linear reference. 
 A GFA carries none of them, but its `P` lines say everything needed to work them out.
 
-Fragmented `P` lines are consolidated first, exactly as `extract path` chains them, so a reference that arrived as `chr22:0-1000`, `chr22:1000-2000`, ... leaves as one path and one stable sequence name. 
-One path is then declared the backbone - `--ref <name>`, else the graph's first - and its segments become rank 0, named after it, with offsets running the length of the walk.
+One `P` line is declared the backbone - `--ref <name>`, else the graph's first - and its segments become rank 0, named after it, with offsets running the length of the walk. 
+One `P` line is one path here too, so a reference the file splits over several of them contributes only the backbone line at rank 0; join it into a single `P` line first if that is not what you want.
 
 Every other path is walked in turn. 
 While it runs over ground that is already labelled it only follows along; where it leaves that ground, the segments it visits alone are one rank deeper, named after that path, and offset onward from the point it left - so a bubble carries the coordinate of the reference stretch it detours around, and the counting stops as soon as the path merges back down to a lower rank. 

@@ -104,21 +104,16 @@ is not re-entered, so a cyclic graph terminates rather than spinning.
 call_ref_t *call_ref_path(const gfa_t *g, const char *path_name);
 ```
 
-Builds the backbone from the graph's `P` lines. Because builders such as `vg`
-split one reference over several consecutive `P` lines, the candidates are the
-chains [`gfa_path_merge`](gfa.md#gfa_path_merge) stitches out of them, not the
-raw paths - which is why this needs `GFA_LINKS | GFA_PATHS` even though it is a
-path operation. Only the `GFA_PATHS` half is checked here; the missing
-`GFA_LINKS` is reported by the merge and returns `NULL`.
+Builds the backbone from the graph's `P` lines, which are the candidates. Needs
+`GFA_PATHS`; the `GFA_LINKS` half matters only to the tracing functions below,
+which walk the adjacency.
 
-`path_name` may name a whole reference (`chr22`) or one of its fragments. If
-the name selects fragments but no chain ends up carrying that exact name, the
-**longest** chain is used rather than failing. A segment the backbone visits
-more than once keeps its first coordinate, though `walk` still lists it at
-every visit - the chain flattened in path order is exactly what `walk` holds.
+When no path carries `path_name` exactly, the **longest** one is used rather
+than failing. A segment the backbone visits more than once keeps its first
+coordinate, though `walk` still lists it at every visit - the path's resolved
+steps in order are exactly what `walk` holds.
 
 ```c
-// Both flags are needed: P lines name the fragments, L lines put them in order.
 gfa_t *g = gfa_read("graph.gfa", GFA_LINKS | GFA_PATHS);
 if (!g) return 1;
 

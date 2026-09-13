@@ -29,10 +29,9 @@
  * those sequences rather than between those particular nodes.
  *
  * Paths are compared by what they spell rather than by what they walk over:
- * fragmented P lines are chained with gfa_path_merge() first, chains are paired
- * by name across the two graphs, and each pair's sequences are compared. Two
- * graphs that chop one reference into different nodes therefore still report
- * that path as identical.
+ * P lines are paired by name across the two graphs and each pair's sequences
+ * are compared. Two graphs that chop one reference into different nodes
+ * therefore still report that path as identical.
  *
  * The same header also carries the alignment-side comparison, diff_gaf(),
  * which asks the corresponding question of two GAF files: how many of their
@@ -101,10 +100,10 @@ enum {
 };
 
 /**
- * One path name's verdict, after fragmented P lines were chained together
+ * One path name's verdict
  */
 typedef struct {
-    char    *name;     // owned: chain name, as gfa_path_merge() named it
+    char    *name;     // owned: the path name, as the P line spells it
     int      state;    // DIFF_SAME / DIFF_DIFFER / DIFF_A_ONLY / DIFF_B_ONLY
     uint64_t len_a;    // bases the first graph spells for it, 0 when absent
     uint64_t len_b;    // bases the second graph spells for it, 0 when absent

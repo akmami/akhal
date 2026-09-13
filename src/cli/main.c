@@ -21,7 +21,6 @@ static const command_t commands[] = {
     { "compare",     cmd_compare,     "graph", "compare two graphs or two GAF files" },
     { "compact",     cmd_compact,     "graph", "fold non-branching runs into one node" },
     { "sort",        cmd_sort,        "graph", "topologically sort and renumber a graph" },
-    { "merge-paths", cmd_merge_paths, "graph", "chain fragmented P lines into one path each" },
     { "rank",        cmd_rank,        "graph", "rewrite SR ranks against the backbone" },
     { "vg2gfa",      cmd_vg2gfa,      "graph", "convert vg to GFA" },
     { "gfa2rgfa",    cmd_gfa2rgfa,    "graph", "label a GFA as rGFA (SN/SO/SR tags)" },

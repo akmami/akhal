@@ -180,29 +180,25 @@ Paths get one entry per name, whether one graph has it or both.
 
 ```c
 typedef struct {
-    char    *name;     // owned: chain name, as gfa_path_merge() named it
+    char    *name;     // owned: the path name, as the P line spells it
     int      state;    // DIFF_SAME / DIFF_DIFFER / DIFF_A_ONLY / DIFF_B_ONLY
     uint64_t len_a;    // bases the first graph spells for it, 0 when absent
     uint64_t len_b;    // bases the second graph spells for it, 0 when absent
 } diff_path_t;
 ```
 
-Fragmented `P` lines are chained with [`gfa_path_merge`](gfa.md#gfa_path_merge)
-before anything is compared, so a reference that arrived as `chr22:0-1000`,
-`chr22:1000-2000`, ... is one entry named `chr22` on both sides. Chains are then
-paired by that name and each pair's **sequences** compared, a `-` step
-contributing its reverse complement. Lengths are compared first and the bases
-only spelled when they match, so a path that differs in length costs nothing to
-reject.
+`P` lines are paired by name across the two graphs and each pair's
+**sequences** compared, a `-` step contributing its reverse complement. Lengths
+are compared first and the bases only spelled when they match, so a path that
+differs in length costs nothing to reject.
 
-Two caveats come with pairing by name. The name is the one
-[`gfa_path_merge`](gfa.md#gfa_path_merge) settled on, which depends on how many
-chains a base name yielded - so a reference that chains into one piece here
-(`chr1`) but two there (`chr1_1`, `chr1_2`, because a joining `L` line is
-missing) pairs with nothing, and reports as three unmatched names rather than
-one difference. And the comparison is byte-for-byte, so it is case-sensitive;
-`ak_revcomp` uppercases as it complements, which means a soft-masked graph
-compared against a case-normalized one can differ on case alone.
+Two caveats come with pairing by name. A reference split over several `P` lines
+is several entries, not one - so a graph that carries `chr1` whole and another
+that carries it as `chr1:0-1000`, `chr1:1000-2000`, ... share no name at all and
+report as unmatched rather than as one difference. And the comparison is
+byte-for-byte, so it is case-sensitive; `ak_revcomp` uppercases as it
+complements, which means a soft-masked graph compared against a case-normalized
+one can differ on case alone.
 
 ### `diff_graphs`
 
@@ -213,11 +209,11 @@ diff_t *diff_graphs(const gfa_t *a, const gfa_t *b);
 Compares two graphs, both of which must have been read with `GFA_LINKS |
 GFA_PATHS`; anything less is refused through `ak_log()` with a `NULL` return,
 as is an allocation failure along the way. A graph that carries no `P` lines is
-not a failure - it contributes no chains, and its segments and links compare as
-usual - so a plain GFA is a perfectly good input.
+not a failure - it contributes no path entries, and its segments and links
+compare as usual - so a plain GFA is a perfectly good input.
 
 Path sequences are spelled a pair at a time rather than all at once, so peak
-memory is the two longest chains that share a name, not every path in both
+memory is the two longest paths that share a name, not every path in both
 files. Link overlaps are not trimmed off those bases - the same blunt-join
 assumption [`extract path`](../README.md#path) makes.
 

@@ -14,55 +14,6 @@ static void usage(void) {
     ak_log(AK_LOG_ERROR, NULL, "usage: akhal rank <in.gfa> [out.gfa] [--fasta <FILE>] [--ref <NAME>]");
 }
 
-// consolidate each set of fragmented P lines into one path, in place
-static int merge_paths(gfa_t *g, int32_t *n_before, int32_t *n_after) {
-    gfa_merge_t *m = gfa_path_merge(g, NULL);
-    if (!m) return AK_EINVAL;
-
-    *n_before = gfa_n_path(g);
-    *n_after  = m->n;
-
-    // collect every chain before touching the path block, since flattening a
-    // chain reads the very paths that clearing it would free
-    char     **names = (char **)calloc((size_t)m->n, sizeof(char *));
-    uint32_t **segs  = (uint32_t **)calloc((size_t)m->n, sizeof(uint32_t *));
-    int64_t   *lens  = (int64_t *)calloc((size_t)m->n, sizeof(int64_t));
-    int rc = (names && segs && lens) ? AK_OK : AK_ENOMEM;
-
-    for (int32_t c = 0; rc == AK_OK && c < m->n; c++) {
-        names[c] = strdup(m->name[c]);
-        if (!names[c]) {
-            rc = AK_ENOMEM;
-            break;
-        }
-        int64_t ns = gfa_merge_segs(g, m, c, &segs[c]);
-        if (ns < 0) {
-            rc = (int)ns;
-            break;
-        }
-        lens[c] = ns;
-    }
-
-    if (rc == AK_OK) {
-        gfa_clear_paths(g);
-        for (int32_t c = 0; rc == AK_OK && c < m->n; c++) {
-            rc = gfa_add_path(g, names[c], segs[c], NULL, lens[c]);
-        }
-    }
-
-    if (names) {
-        for (int32_t c = 0; c < m->n; c++) free(names[c]);
-        free(names);
-    }
-    if (segs) {
-        for (int32_t c = 0; c < m->n; c++) free(segs[c]);
-        free(segs);
-    }
-    free(lens);
-    gfa_merge_destroy(m);
-    return rc;
-}
-
 // make an external reference the backbone: rank against its walk, then install
 // that walk in place of whatever the graph called a path before
 static int rank_from_fasta(gfa_t *g, const char *fa_fn, const char *ref_name, int64_t *n0) {
@@ -125,13 +76,13 @@ int cmd_rank(int argc, char **argv) {
     gfa_t *g = gfa_read(in, GFA_ALL);
     if (!g) return 1;
 
-    int rc;
+    int rc = AK_OK;
     int64_t n0 = 0;
-    int32_t n_before = 0, n_after = 0;
+    int32_t n_paths = 0;
 
     if (fa_fn) {
         rc = rank_from_fasta(g, fa_fn, ref_name, &n0);
-        n_after = gfa_n_path(g);
+        n_paths = gfa_n_path(g);
     } else if (gfa_n_path(g) == 0) {
         // with no P lines there is nothing to call a backbone, and ranking
         // against nothing would flatten an rGFA's own SR tags to all-rank-1
@@ -142,14 +93,14 @@ int cmd_rank(int argc, char **argv) {
         if (ref_name) {
             ak_log(AK_LOG_WARN, NULL, "--ref only applies with --fasta; ignoring it");
         }
-        rc = merge_paths(g, &n_before, &n_after);
-        if (rc == AK_OK) {
-            int64_t marked = gfa_rank_paths(g);
-            if (marked < 0) {
-                rc = (int)marked;
-            } else {
-                n0 = marked;
-            }
+        // every P line is backbone, so the paths are ranked exactly as they
+        // were read - nothing is rewritten
+        n_paths = gfa_n_path(g);
+        int64_t marked = gfa_rank_paths(g);
+        if (marked < 0) {
+            rc = (int)marked;
+        } else {
+            n0 = marked;
         }
     }
     if (rc != AK_OK) {
@@ -177,7 +128,7 @@ int cmd_rank(int argc, char **argv) {
         if (fa_fn) {
             ak_log(AK_LOG_INFO, NULL, "backbone taken from %s: %lld node(s) at rank 0, %lld at rank 1", fa_fn, (long long)n0, (long long)((int64_t)gfa_n_seg(g) - n0));
         } else {
-            ak_log(AK_LOG_INFO, NULL, "%d P line(s) merged into %d backbone(s): %lld node(s) at rank 0, %lld at rank 1", n_before, n_after, (long long)n0, (long long)((int64_t)gfa_n_seg(g) - n0));
+            ak_log(AK_LOG_INFO, NULL, "backbone taken from %d P line(s): %lld node(s) at rank 0, %lld at rank 1", n_paths, (long long)n0, (long long)((int64_t)gfa_n_seg(g) - n0));
         }
     }
 
