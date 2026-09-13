@@ -11,6 +11,7 @@
  *
  *   akhal/error.h   diagnostics + return-code conventions
  *   akhal/kstr.h    growable string buffer
+ *   akhal/arena.h   append-only byte arena behind the graph strings
  *   akhal/io.h      line-oriented input handle
  *   akhal/util.h    sequence / statistics helpers
  *   akhal/gfa.h     (r)GFA graph model, reader and traversal
@@ -30,6 +31,7 @@
 #include "akhal/version.h"
 #include "akhal/error.h"
 #include "akhal/kstr.h"
+#include "akhal/arena.h"
 #include "akhal/io.h"
 #include "akhal/util.h"
 #include "akhal/gfa.h"

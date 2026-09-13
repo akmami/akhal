@@ -5,6 +5,8 @@
 #include <stddef.h>
 #include <stdio.h>
 
+#include "akhal/arena.h"
+
 /**
  * In-memory model of an (r)GFA assembly graph.
  *
@@ -34,7 +36,9 @@ extern "C" {
 
 typedef struct {
     uint64_t id;             // segment id as it appears in the file
-    char    *seq;            // owned sequence, or NULL if empty
+    const char *seq;         // borrowed from the graph's arena, NULL if empty;
+                             // never free() it and never assign it directly -
+                             // gfa_seg_set_seq() is the only way to set it
     uint32_t len;            // sequence length (cached strlen)
     int32_t  rank;           // SR tag value, or -1 if the tag is absent
     int32_t  start;          // reference offset (SO tag or path layout)
@@ -85,6 +89,11 @@ typedef struct {
     int32_t     m_path_seg;
     uint64_t    n_path_seg;  // total segment occurrences across all paths
 
+    // Backing store for every segment sequence. One allocation per few
+    // megabytes instead of one per segment, so a graph with millions of
+    // segments is released in a handful of free()s rather than millions.
+    ak_arena_t  strs;
+
     void       *idx;         // opaque id -> index hash table
     int         flags;       // the GFA_* flags this graph was read with
     int         has_sr;      // 1 when the file itself carried SR:i: tags
@@ -122,6 +131,22 @@ gfa_t *gfa_read(const char *fn, int flags);
  * @return AK_OK, or AK_EIO if the stream went bad
  */
 int gfa_write(const gfa_t *g, FILE *out);
+
+/**
+ * Give a segment its sequence, copying it into the graph's arena
+ *
+ * This is the only supported way to set gfa_seg_t.seq. The field points into
+ * storage the graph owns and releases in one go, so assigning a malloc'd
+ * buffer to it directly would be freed twice, and free()ing it would corrupt
+ * the arena. An empty sequence leaves the segment with seq == NULL and len 0,
+ * which is what the reader records for an S line carrying none
+ * @param g Graph owning the segment
+ * @param s Segment to set, obtained from gfa_seg_at()
+ * @param seq Bytes to copy; may be NULL when len is 0
+ * @param len Sequence length in bases
+ * @return AK_OK, AK_EINVAL on a NULL graph or segment, or AK_ENOMEM
+ */
+int gfa_seg_set_seq(gfa_t *g, gfa_seg_t *s, const char *seq, size_t len);
 
 /**
  * Write a graph as rGFA: the same lines gfa_write() emits, plus the stable

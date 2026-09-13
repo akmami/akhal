@@ -18,7 +18,7 @@ contiguous slice.
 
 ## Contents
 
-- [Reading and releasing](#reading-and-releasing) - [`gfa_read`](#gfa_read), [`gfa_write`](#gfa_write), [`gfa_destroy`](#gfa_destroy)
+- [Reading and releasing](#reading-and-releasing) - [`gfa_read`](#gfa_read), [`gfa_write`](#gfa_write), [`gfa_seg_set_seq`](#gfa_seg_set_seq), [`gfa_destroy`](#gfa_destroy)
 - [Lookup and accessors](#lookup-and-accessors) - [`gfa_idx`](#gfa_idx), [`gfa_get`](#gfa_get), [counts and element accessors](#counts-and-element-accessors)
 - [Traversal](#traversal) - [`gfa_arcs`](#gfa_arcs), [`gfa_has_arc`](#gfa_has_arc), [`gfa_path_segs`](#gfa_path_segs)
 - [Fragmented paths](#fragmented-paths) - [`gfa_path_merge`](#gfa_path_merge), [`gfa_merge_segs`](#gfa_merge_segs), [`gfa_merge_destroy`](#gfa_merge_destroy)
@@ -107,6 +107,40 @@ gfa_destroy(g);
 return rc == AK_OK ? 0 : 1;
 ```
 
+### `gfa_seg_set_seq`
+
+```c
+int gfa_seg_set_seq(gfa_t *g, gfa_seg_t *s, const char *seq, size_t len);
+```
+
+Copies `seq` into the graph's arena and points the segment at it, setting
+`len` to match. Returns `AK_OK`, `AK_EINVAL` on a `NULL` graph or segment, or
+`AK_ENOMEM`. An empty sequence leaves the segment with `seq == NULL` and
+`len == 0`, which is what the reader records for an `S` line carrying none.
+
+This is the only supported way to set `gfa_seg_t.seq`. Assigning a `malloc`'d
+buffer to the field would be freed twice - once by you and once when the arena
+goes - and `free()`ing the field would corrupt the arena. The field's `const`
+makes both a compile-time error rather than a crash at teardown.
+
+```c
+gfa_t *g = gfa_read("graph.gfa", 0);
+if (!g) return 1;
+
+// Hard-mask a segment: same length, all Ns. The old bytes stay in the arena
+// until the graph goes, which is a few bytes and not worth reclaiming.
+gfa_seg_t *s = gfa_seg_at(g, 0);
+char *masked = (char *)malloc(s->len + 1);
+if (masked) {
+    memset(masked, 'N', s->len);
+    masked[s->len] = '\0';
+    gfa_seg_set_seq(g, s, masked, s->len);
+    free(masked);            // the arena has its own copy now
+}
+
+gfa_destroy(g);
+```
+
 ### `gfa_destroy`
 
 ```c
@@ -116,6 +150,13 @@ void gfa_destroy(gfa_t *g);
 Releases a graph and everything it owns - segment sequences, links, the CSR
 arrays, path names and the id index. Safe to call with `NULL`, which makes it
 usable on every error path.
+
+Segment sequences are not released one at a time: they live in a single
+[arena](arena.md) the graph holds, so a graph with 17.9 M segments costs 73
+`free()`s rather than 17.9 M. That is also why `gfa_seg_t.seq` is a
+`const char *` - it points into storage the graph owns, so it must never be
+`free()`d or assigned directly. [`gfa_seg_set_seq`](#gfa_seg_set_seq) is the
+only supported way to give a segment its sequence.
 
 ```c
 gfa_t *g = gfa_read("graph.gfa", GFA_PATHS);

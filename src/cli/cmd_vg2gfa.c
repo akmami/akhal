@@ -66,11 +66,24 @@ int cmd_vg2gfa(int argc, char **argv) {
 
     write_gfa(out, g);
 
-    ak_log(AK_LOG_INFO, NULL, "converted %s (%d nodes, %d edges, %d paths)", in, g->n_node, g->n_edge, g->n_path);
+    // Flush and close before tearing the graph down, not after: the teardown
+    // walks the whole graph, and a process that dies in there would otherwise
+    // leave the last buffered lines unwritten and the file never closed.
+    int rc = 0;
+    if (out_fn) {
+        if (fclose(out) != 0) {
+            ak_log(AK_LOG_ERROR, NULL, "write failed on %s", out_fn);
+            rc = 1;
+        }
+    } else if (fflush(stdout) != 0) {
+        ak_log(AK_LOG_ERROR, NULL, "write failed on stdout");
+        rc = 1;
+    }
+
+    if (rc == 0) {
+        ak_log(AK_LOG_INFO, NULL, "converted %s (%d nodes, %d edges, %d paths)", in, g->n_node, g->n_edge, g->n_path);
+    }
 
     vg_graph_destroy(g);
-    if (out_fn) {
-        fclose(out);
-    }
-    return 0;
+    return rc;
 }

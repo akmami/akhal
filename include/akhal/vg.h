@@ -3,6 +3,8 @@
 
 #include <stdint.h>
 
+#include "akhal/arena.h"
+
 /**
  * Reader for vg's native ".vg" format.
  *
@@ -21,7 +23,8 @@ extern "C" {
 
 typedef struct {
     int64_t  id;        // node id (positive, nonzero)
-    char    *seq;       // owned sequence, or NULL if absent
+    const char *seq;    // borrowed from the graph's arena, NULL if absent;
+                        // never free() it
     uint32_t seq_len;   // sequence length
 } vg_node_t;
 
@@ -38,7 +41,7 @@ typedef struct {
 } vg_step_t;
 
 typedef struct {
-    char      *name;        // owned path name
+    const char *name;       // borrowed from the graph's arena
     vg_step_t *step;        // ordered visits
     int32_t    n_step, m_step;
     int        is_circular;
@@ -48,6 +51,11 @@ typedef struct {
     vg_node_t *node; int32_t n_node, m_node;
     vg_edge_t *edge; int32_t n_edge, m_edge;
     vg_path_t *path; int32_t n_path, m_path;
+
+    // Backing store for every node sequence and path name. One allocation per
+    // few megabytes instead of one per node, which is what makes releasing a
+    // graph of hundreds of millions of nodes finish at all.
+    ak_arena_t strs;
 } vg_graph_t;
 
 /**

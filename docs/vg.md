@@ -37,7 +37,9 @@ huge allocation.
 
 ## The graph model
 
-Five plain structs, all of them public and all of them owned by the graph. There
+Five plain structs, all of them public and all of them owned by the graph. Node
+sequences and path names point into a single [arena](arena.md) the graph holds,
+so they are released together rather than one at a time. There
 are no accessor functions: read the fields directly.
 
 `vg_node_t` - one sequence node.
@@ -45,7 +47,7 @@ are no accessor functions: read the fields directly.
 | Field | Type | Notes |
 | --- | --- | --- |
 | `id` | `int64_t` | node id, positive and nonzero; `0` if the message had no id field |
-| `seq` | `char *` | owned, NUL-terminated sequence, or `NULL` when the message carried none |
+| `seq` | `const char *` | NUL-terminated sequence, or `NULL` when the message carried none. Borrowed from the graph's arena - never `free()` it |
 | `seq_len` | `uint32_t` | length of `seq`, `0` when `seq` is `NULL` |
 
 `vg_edge_t` - one edge, by node id rather than by index.
@@ -68,7 +70,7 @@ are no accessor functions: read the fields directly.
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| `name` | `char *` | owned; never `NULL` after a successful read - an unnamed path gets `""` |
+| `name` | `const char *` | never `NULL` after a successful read - an unnamed path gets `""`. Borrowed from the graph's arena |
 | `step` | `vg_step_t *` | owned array of visits, in order |
 | `n_step`, `m_step` | `int32_t` | used and allocated step counts |
 | `is_circular` | `int` | decoded from the message; the GFA writer ignores it |

@@ -163,20 +163,17 @@ static int parse_path(vg_graph_t *g, const unsigned char *buf, uint64_t len) {
             const unsigned char *s;
             uint64_t l;
             if (!pb_bytes(&b, &s, &l)) break;
-            free(pt->name);
-            pt->name = (char *)malloc(l + 1);
-            if (!pt->name) {
+            const char *q = ak_arena_put(&g->strs, (const char *)s, (size_t)l);
+            if (!q) {
                 free(pt->step);
                 return AK_ENOMEM;
             }
-            memcpy(pt->name, s, l);
-            pt->name[l] = '\0';
+            pt->name = q;
         } else if (field == 2 && wire == 2) {
             const unsigned char *s;
             uint64_t l;
             if (!pb_bytes(&b, &s, &l)) break;
             if (parse_mapping(pt, s, l) == AK_ENOMEM) {
-                free(pt->name);
                 free(pt->step);
                 return AK_ENOMEM;
             }
@@ -186,12 +183,7 @@ static int parse_path(vg_graph_t *g, const unsigned char *buf, uint64_t len) {
         } else if (!pb_skip(&b, wire)) break;
     }
     if (!pt->name) {
-        pt->name = (char *)malloc(1);
-        if (!pt->name) {
-            free(pt->step);
-            return AK_ENOMEM;
-        }
-        pt->name[0] = '\0';
+        pt->name = "";   // an unnamed path, without an allocation of its own
     }
     g->n_path++;
     return AK_OK;
@@ -212,11 +204,12 @@ static int parse_node(vg_graph_t *g, const unsigned char *buf, uint64_t len) {
             const unsigned char *s;
             uint64_t l;
             if (!pb_bytes(&b, &s, &l)) break;
-            free(n->seq);
-            n->seq = (char *)malloc(l + 1);
-            if (!n->seq) return AK_ENOMEM;
-            memcpy(n->seq, s, l);
-            n->seq[l] = '\0';
+            // a repeated sequence field simply overwrites; the earlier copy
+            // stays in the arena, which costs a few bytes and cannot happen
+            // in a file vg wrote
+            const char *q = ak_arena_put(&g->strs, (const char *)s, (size_t)l);
+            if (!q) return AK_ENOMEM;
+            n->seq = q;
             n->seq_len = (uint32_t)l;
         } else if (field == 3 && wire == 0) {
             if (!pb_varint(&b, &v)) break;
@@ -281,6 +274,17 @@ static int parse_graph_blob(vg_graph_t *g, const unsigned char *buf, uint64_t le
     return AK_OK;
 }
 
+// Hand back the slack the doubling left behind. Each array grows by doubling,
+// so on arrival it holds up to twice what it needs - on a whole-genome graph
+// that is tens of gigabytes of allocated, untouched pages. Shrinking is cheap:
+// glibc remaps rather than copies, about 5 ms per GB. A failed shrink is not
+// an error, since the oversized block is still perfectly valid.
+static void shrink(void **p, size_t n, size_t esz) {
+    if (!*p || n == 0) return;
+    void *q = realloc(*p, n * esz);
+    if (q) *p = q;
+}
+
 // buffered gzip input
 
 typedef struct {
@@ -340,6 +344,9 @@ vg_graph_t *vg_read(const char *fn) {
         ak_log(AK_LOG_ERROR, "vg", "could not open %s", fn);
         return NULL;
     }
+    // zlib reads the file 8 KiB at a time by default, which turns a large .vg
+    // into millions of syscalls - punishing on a network filesystem
+    gzbuffer(gz, 1 << 22);   /* 4 MiB */
 
     vg_graph_t *g = (vg_graph_t *)calloc(1, sizeof(vg_graph_t));
     if (!g) {
@@ -414,19 +421,25 @@ vg_graph_t *vg_read(const char *fn) {
         ak_log(AK_LOG_ERROR, "vg", "out of memory");
         return NULL;
     }
+
+    // the graph is complete; give back what the doubling over-reserved
+    shrink((void **)&g->node, (size_t)g->n_node, sizeof(*g->node));
+    g->m_node = g->n_node;
+    shrink((void **)&g->edge, (size_t)g->n_edge, sizeof(*g->edge));
+    g->m_edge = g->n_edge;
+    shrink((void **)&g->path, (size_t)g->n_path, sizeof(*g->path));
+    g->m_path = g->n_path;
+
     return g;
 }
 
 // free a vg graph; see akhal/vg.h
 void vg_graph_destroy(vg_graph_t *g) {
     if (!g) return;
-    for (int32_t i = 0; i < g->n_node; i++) free(g->node[i].seq);
+    ak_arena_destroy(&g->strs);   // every sequence and path name, in one go
     free(g->node);
     free(g->edge);
-    for (int32_t i = 0; i < g->n_path; i++) {
-        free(g->path[i].name);
-        free(g->path[i].step);
-    }
+    for (int32_t i = 0; i < g->n_path; i++) free(g->path[i].step);
     free(g->path);
     free(g);
 }

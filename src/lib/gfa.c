@@ -63,6 +63,19 @@ static int reserve_pathseg(gfa_t *g) {
     return AK_OK;
 }
 
+// Hand back the slack the doubling left behind.
+//
+// Each array grows by doubling, so on arrival it holds up to twice what it
+// needs - on a whole-genome graph that is tens of gigabytes of allocated,
+// untouched pages. One realloc down to the exact count reclaims it, and
+// shrinking is cheap: glibc remaps rather than copies, about 5 ms per GB.
+// A failed shrink is not an error, since the oversized block is still valid.
+static void shrink(void **p, size_t n, size_t esz) {
+    if (!*p || n == 0) return;
+    void *q = realloc(*p, n * esz);
+    if (q) *p = q;
+}
+
 // line handlers
 
 // splits "TAG:TYPE:VALUE" in place; VALUE keeps any embedded ':'
@@ -101,11 +114,7 @@ static int handle_S(gfa_t *g, char *line, idxmap_t *h) {
         s->seq = NULL;
         s->len = 0;
     } else {
-        size_t n = strlen(tok);
-        s->seq = (char *)malloc(n + 1);
-        if (!s->seq) return AK_ENOMEM;
-        memcpy(s->seq, tok, n + 1);
-        s->len = (uint32_t)n;
+        if (gfa_seg_set_seq(g, s, tok, strlen(tok)) != AK_OK) return AK_ENOMEM;
     }
     s->start = 0;
     s->end = (int32_t)s->len;
@@ -351,6 +360,20 @@ gfa_t *gfa_read(const char *fn, int flags) {
         gfa_rank_paths(g);
     }
 
+    // nothing appends to the graph after this point except gfa_add_path(),
+    // which grows the path block again on its own
+    shrink((void **)&g->seg,  (size_t)g->n_seg,  sizeof(*g->seg));
+    g->m_seg = g->n_seg;
+    shrink((void **)&g->link, (size_t)g->n_link, sizeof(*g->link));
+    g->m_link = g->n_link;
+    shrink((void **)&g->path,      (size_t)g->n_path, sizeof(*g->path));
+    shrink((void **)&g->path_len,  (size_t)g->n_path, sizeof(*g->path_len));
+    shrink((void **)&g->path_off,  (size_t)g->n_path + 1, sizeof(*g->path_off));
+    g->m_path = g->n_path;
+    shrink((void **)&g->path_seg, (size_t)g->n_path_seg, sizeof(*g->path_seg));
+    shrink((void **)&g->path_ori, (size_t)g->n_path_seg, sizeof(*g->path_ori));
+    g->m_path_seg = (int32_t)g->n_path_seg;
+
     return g;
 }
 
@@ -400,6 +423,21 @@ static int write_graph(const gfa_t *g, FILE *out, int tags) {
     return AK_OK;
 }
 
+// give a segment its sequence; see akhal/gfa.h
+int gfa_seg_set_seq(gfa_t *g, gfa_seg_t *s, const char *seq, size_t len) {
+    if (!g || !s) return AK_EINVAL;
+    if (!seq || len == 0) {
+        s->seq = NULL;
+        s->len = 0;
+        return AK_OK;
+    }
+    const char *p = ak_arena_put(&g->strs, seq, len);
+    if (!p) return AK_ENOMEM;
+    s->seq = p;
+    s->len = (uint32_t)len;
+    return AK_OK;
+}
+
 // emit GFA; see akhal/gfa.h
 int gfa_write(const gfa_t *g, FILE *out) {
     return write_graph(g, out, 0);
@@ -413,7 +451,7 @@ int gfa_write_rgfa(const gfa_t *g, FILE *out) {
 // free a graph and everything it owns; see akhal/gfa.h
 void gfa_destroy(gfa_t *g) {
     if (!g) return;
-    for (int32_t i = 0; i < g->n_seg; i++) free(g->seg[i].seq);
+    ak_arena_destroy(&g->strs);   // every segment sequence, released in one go
     free(g->seg);
     free(g->link);
     free(g->arc);
