@@ -64,6 +64,16 @@ int cmd_parse(int argc, char **argv);
 int cmd_compact(int argc, char **argv);
 
 /**
+ * `merge-paths` - consolidate fragmented P lines into one path each: every
+ * set of fragments sharing a base name is chained through the links and
+ * rewritten as a single P line, orientations preserved
+ * @param argc Argument count
+ * @param argv Arguments; input .gfa and optional output .gfa
+ * @return 0 on success, non-zero on failure
+ */
+int cmd_merge_paths(int argc, char **argv);
+
+/**
  * `sort` - topologically sort a graph and renumber nodes 1..N
  * @param argc Argument count
  * @param argv Arguments; input .gfa and optional output .gfa
