@@ -44,7 +44,7 @@ The twelve mandatory columns, in file order:
 | `block_len` | `int64_t` | alignment block length |
 | `mapq` | `int` | mapping quality; 255 means unavailable |
 
-Everything after column 12 is scanned as optional tags. Five are recognised and
+Everything after column 12 is scanned as optional tags. Six are recognised and
 the rest are ignored. Each recognised tag has a companion `has_*` flag which is
 the only way to tell "the tag was absent" from "the tag was present and zero" -
 the value fields are zeroed by `gaf_rec_clear()`, so a missing `NM` and an
@@ -56,11 +56,17 @@ the value fields are zeroed by `gaf_rec_clear()`, so a missing `NM` and an
 | `AS:f` | `as` (`double`) | `has_as` | alignment score; `AS:i` is also accepted |
 | `dv:f` | `dv` (`double`) | `has_dv` | divergence |
 | `id:f` | `id` (`double`) | `has_id` | identity |
+| `tp:A` | `tp` (`char`) | `has_tp` | alignment type: `P` primary, `S` secondary |
 | `cg:Z` | `cigar` (`char *`) | *none* | difference CIGAR; owned, `NULL` when absent |
 
 `cigar` has no flag because `NULL` already says the tag was absent. A tag whose
 type letter does not match the table - `dv:i`, say - is skipped as if it were
 unrecognised, leaving the flag at 0.
+
+`tp` carries whatever single character the aligner wrote, uninterpreted. Note
+that an absent `tp:A` does not mean secondary: aligners that emit the tag at all
+mark primaries `P`, so the usual test is "primary unless the tag is present and
+is not `P`", which leaves a file without the tag entirely primary.
 
 ## Streaming or batch
 

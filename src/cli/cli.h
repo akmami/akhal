@@ -11,9 +11,10 @@
  */
 
 /**
- * `stats` - print summary statistics for an r/GFA graph
+ * `stats` - print summary statistics for an r/GFA graph or for a GAF alignment
+ * file, chosen by the input's extension
  * @param argc Argument count
- * @param argv Arguments; argv[2] is the graph path
+ * @param argv Arguments; the input path, then optional --cigar (GAF only)
  * @return 0 on success, non-zero on failure
  */
 int cmd_stats(int argc, char **argv);
