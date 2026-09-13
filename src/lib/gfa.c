@@ -12,6 +12,9 @@
 // id -> array index
 KHASHL_MAP_INIT(KH_LOCAL, idxmap_t, idxmap, uint64_t, uint32_t, kh_hash_uint64, kh_eq_generic)
 
+// head segment -> lowest-numbered fragment starting there, when chaining paths
+KHASHL_MAP_INIT(KH_LOCAL, headmap_t, headmap, uint32_t, int32_t, kh_hash_uint32, kh_eq_generic)
+
 // growth helpers
 
 static int reserve_seg(gfa_t *g) {
@@ -618,15 +621,14 @@ static int frag_ends(const gfa_t *g, frag_t *f) {
     return seen;
 }
 
-// whether a link joins v to w with these orientations on both ends
-static int frag_joined(const gfa_t *g, uint32_t v, char vo, uint32_t w, char wo) {
-    const uint32_t *arcs;
-    int na = gfa_arcs(g, (int32_t)v, &arcs);
-    for (int i = 0; i < na; i++) {
-        const gfa_link_t *e = &g->link[arcs[i]];
-        if (e->w == w && e->from_orient == vo && e->to_orient == wo) return 1;
-    }
-    return 0;
+// chains are disjoint paths, so "would this link close a cycle?" is just
+// "are these two already in the same chain?"; a flat union-find answers it in
+// near-constant time, where walking the successors costs the chain's length
+static int32_t chain_find(int32_t *dsu, int32_t x) {
+    int32_t r = x;
+    while (dsu[r] != r) r = dsu[r];
+    while (dsu[x] != r) { int32_t n = dsu[x]; dsu[x] = r; x = n; }
+    return r;
 }
 
 // a merged chain takes the shared base name, numbered when a base yields more
@@ -721,23 +723,98 @@ gfa_merge_t *gfa_path_merge(const gfa_t *g, const char *key) {
     }
     qsort(f, (size_t)nf, sizeof(frag_t), frag_cmp);
 
-    // chain a fragment to the first later one its last segment links into
-    for (int32_t i = 0; i < nf; i++) {
+    // Chain a fragment to the first later one its last segment links into.
+    //
+    // Asking that of every other fragment in turn is O(nf^2): fine for the few
+    // hundred fragments a chromosome arrives in, hopeless for the millions a
+    // whole pangenome does. But a fragment can only follow one whose head is a
+    // segment one link away from this fragment's tail, so index the heads and
+    // let the adjacency name the candidates instead: O(nf * out-degree).
+    headmap_t *hm = headmap_init();
+    int32_t *hnext = (int32_t *)malloc((size_t)nf * sizeof(int32_t));
+    int32_t *dsu   = (int32_t *)malloc((size_t)nf * sizeof(int32_t));
+    int32_t *cand = NULL, n_cand = 0, m_cand = 0;
+    if (!hm || !hnext || !dsu) {
+        free(f);
+        headmap_destroy(hm);
+        free(hnext);
+        free(dsu);
+        ak_log(AK_LOG_ERROR, "gfa", "out of memory");
+        return NULL;
+    }
+    for (int32_t j = 0; j < nf; j++) dsu[j] = j;
+
+    // built back to front so every bucket list comes out in ascending fragment
+    // order, which is the order the old scan considered them in
+    for (int32_t j = nf - 1; j >= 0; j--) {
+        hnext[j] = -1;
+        if (f[j].head == GFA_NIL) continue;
+        int absent;
+        khint_t k = headmap_put(hm, f[j].head, &absent);
+        if (absent) {
+            kh_val(hm, k) = j;
+        } else {
+            hnext[j] = kh_val(hm, k);
+            kh_val(hm, k) = j;
+        }
+    }
+
+    int oom = 0;
+    for (int32_t i = 0; i < nf && !oom; i++) {
         if (f[i].tail == GFA_NIL) continue;
-        for (int32_t j = 0; j < nf; j++) {
-            if (j == i || f[j].claimed || f[j].head == GFA_NIL) continue;
-            if (f[j].base_l != f[i].base_l || strncmp(f[j].base, f[i].base, f[i].base_l) != 0) continue;
-            if (!frag_joined(g, f[i].tail, f[i].tail_ori, f[j].head, f[j].head_ori)) continue;
 
-            // refuse a join that would close a cycle
-            int32_t t = j, guard = 0;
-            while (t >= 0 && t != i && guard++ <= nf) t = f[t].succ;
-            if (t == i) continue;
+        const uint32_t *arcs;
+        int na = gfa_arcs(g, (int32_t)f[i].tail, &arcs);
+        n_cand = 0;
 
+        for (int a = 0; a < na && !oom; a++) {
+            const gfa_link_t *e = &g->link[arcs[a]];
+            if (e->from_orient != f[i].tail_ori) continue;
+            khint_t k = headmap_get(hm, e->w);
+            if (k >= kh_end(hm)) continue;
+
+            for (int32_t j = kh_val(hm, k); j >= 0; j = hnext[j]) {
+                if (j == i || f[j].claimed) continue;
+                if (f[j].head_ori != e->to_orient) continue;
+                if (f[j].base_l != f[i].base_l || strncmp(f[j].base, f[i].base, f[i].base_l) != 0) continue;
+                if (n_cand == m_cand) {
+                    int32_t m = m_cand ? m_cand << 1 : 8;
+                    int32_t *p2 = (int32_t *)realloc(cand, (size_t)m * sizeof(*p2));
+                    if (!p2) { oom = 1; break; }
+                    cand = p2;
+                    m_cand = m;
+                }
+                cand[n_cand++] = j;
+            }
+        }
+        if (oom || n_cand == 0) continue;
+
+        // the old scan took the lowest-numbered candidate that did not close a
+        // cycle, so try them in that order
+        for (int32_t a = 1; a < n_cand; a++) {          // insertion sort; n_cand is tiny
+            int32_t v = cand[a], b = a - 1;
+            while (b >= 0 && cand[b] > v) { cand[b + 1] = cand[b]; b--; }
+            cand[b + 1] = v;
+        }
+        int32_t ri = chain_find(dsu, i);
+        for (int32_t a = 0; a < n_cand; a++) {
+            int32_t j = cand[a], rj = chain_find(dsu, j);
+            if (rj == ri) continue;                      // would close a cycle
             f[i].succ = j;
             f[j].claimed = 1;
+            dsu[rj] = ri;
             break;
         }
+    }
+
+    headmap_destroy(hm);
+    free(hnext);
+    free(dsu);
+    free(cand);
+    if (oom) {
+        free(f);
+        ak_log(AK_LOG_ERROR, "gfa", "out of memory");
+        return NULL;
     }
 
     int32_t nc = 0;
