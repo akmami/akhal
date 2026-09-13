@@ -1,10 +1,15 @@
 #include "akhal/vg.h"
 #include "akhal/error.h"
 
+#include "khashl.h"
+
 #include <zlib.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+
+// path name -> index of the first piece carrying it
+KHASHL_MAP_INIT(KH_LOCAL, namemap_t, namemap, const char *, int32_t, kh_hash_str, kh_eq_str)
 
 // Refuse absurd message sizes (protobuf caps vg graphs at ~64 MB); this also
 // stops a non-vg input from triggering a huge allocation off a garbage length.
@@ -122,12 +127,17 @@ static void parse_position(const unsigned char *buf, uint64_t len, int64_t *node
     }
 }
 
-// Mapping { Position position = 1; ... } -> append one step to the path
+// Mapping { Position position = 1; ...; int64 rank = 5; } -> one path step.
+//
+// The rank is what lets join_paths() put the pieces of a path back in order,
+// so it is worth the two lines it costs to decode: without it the only thing
+// left is the order the chunks happened to be written in, which for anything
+// that went through `vg convert` is the source graph's iteration order.
 static int parse_mapping(vg_path_t *pt, const unsigned char *buf, uint64_t len) {
     pbuf b = { buf, buf + len };
-    int64_t node_id = 0;
+    int64_t node_id = 0, rank = 0;
     int is_rev = 0, have_pos = 0;
-    uint64_t tag;
+    uint64_t tag, v;
     while (b.p < b.end) {
         if (!pb_varint(&b, &tag)) break;
         int field = (int)(tag >> 3), wire = (int)(tag & 7);
@@ -137,12 +147,18 @@ static int parse_mapping(vg_path_t *pt, const unsigned char *buf, uint64_t len) 
             if (!pb_bytes(&b, &s, &l)) break;
             parse_position(s, l, &node_id, &is_rev);
             have_pos = 1;
+        } else if (field == 5 && wire == 0) {
+            if (!pb_varint(&b, &v)) break;
+            rank = (int64_t)v;
         } else if (!pb_skip(&b, wire)) break;
     }
     if (have_pos) {
         if (reserve_step(pt) != AK_OK) return AK_ENOMEM;
         pt->step[pt->n_step].node_id = node_id;
         pt->step[pt->n_step].is_reverse = is_rev;
+        // a rank past INT32_MAX would need a path of two billion steps; record
+        // 0 instead, which join_paths() reads as "no usable rank"
+        pt->step[pt->n_step].rank = (rank > 0 && rank <= INT32_MAX) ? (int32_t)rank : 0;
         pt->n_step++;
     }
     return AK_OK;
@@ -285,6 +301,178 @@ static void shrink(void **p, size_t n, size_t esz) {
     if (q) *p = q;
 }
 
+// joining the pieces of a path back together
+
+// Concatenate a name's pieces in the order they were read. The fallback for a
+// file whose mappings carry no usable rank, and what the reader did before it
+// learned to read one.
+static int join_in_file_order(vg_graph_t *g, int32_t owner, const int32_t *next, int32_t total) {
+    vg_step_t *out = (vg_step_t *)malloc((size_t)total * sizeof(*out));
+    if (!out) return AK_ENOMEM;
+    int32_t i = 0;
+    for (int32_t k = owner; k >= 0; k = next[k]) {
+        memcpy(out + i, g->path[k].step, (size_t)g->path[k].n_step * sizeof(*out));
+        i += g->path[k].n_step;
+    }
+    for (int32_t k = owner; k >= 0; k = next[k]) {
+        free(g->path[k].step);
+        g->path[k].step = NULL;
+    }
+    g->path[owner].step   = out;
+    g->path[owner].n_step = total;
+    g->path[owner].m_step = total;
+    return AK_OK;
+}
+
+// Place a name's pieces by rank. Ranks are 1-based and dense over the whole
+// path, so the pieces drop straight into their slots without a sort; a slot
+// already taken, or a rank outside 1..total, means the ranks cannot be trusted
+// and the caller falls back.
+static int join_by_rank(vg_graph_t *g, int32_t owner, const int32_t *next, int32_t total) {
+    // calloc leaves rank 0 in every slot, which is the "still empty" marker:
+    // a real rank is always >= 1
+    vg_step_t *out = (vg_step_t *)calloc((size_t)total, sizeof(*out));
+    if (!out) return AK_ENOMEM;
+
+    int32_t filled = 0;
+    for (int32_t k = owner; k >= 0; k = next[k]) {
+        const vg_path_t *p = &g->path[k];
+        for (int32_t s = 0; s < p->n_step; s++) {
+            int32_t r = p->step[s].rank;
+            if (r < 1 || r > total || out[r - 1].rank != 0) {
+                free(out);
+                return AK_EFORMAT;
+            }
+            out[r - 1] = p->step[s];
+            filled++;
+        }
+    }
+    if (filled != total) {   // unreachable while the two tests above hold
+        free(out);
+        return AK_EFORMAT;
+    }
+
+    for (int32_t k = owner; k >= 0; k = next[k]) {
+        free(g->path[k].step);
+        g->path[k].step = NULL;
+    }
+    g->path[owner].step   = out;
+    g->path[owner].n_step = total;
+    g->path[owner].m_step = total;
+    return AK_OK;
+}
+
+// Join the pieces of each path into one whole path, in rank order.
+//
+// A .vg file has nowhere to put a path: `Path` is only ever nested inside a
+// `Graph`, so each message carries the mappings whose nodes fall in that
+// message's chunk of nodes, and one path arrives as thousands of pieces.
+// Mapping.rank - the position along the whole path - is what puts them back
+// together. It has to be used, not assumed: chunks from `vg construct` are
+// windows of the reference and their pieces come out contiguous and in order,
+// but chunks from `vg convert` follow the source graph's iteration order, so
+// each piece is an arbitrary scatter of the path and consecutive pieces
+// interleave. Appending them in file order gets the first right and the second
+// silently, irreparably wrong.
+static int join_paths(vg_graph_t *g) {
+    if (g->n_path < 1) return AK_OK;
+
+    namemap_t *nm = namemap_init();
+    int32_t *next = (int32_t *)malloc((size_t)g->n_path * sizeof(int32_t));
+    int32_t *tail = (int32_t *)malloc((size_t)g->n_path * sizeof(int32_t));
+    int32_t *own = NULL, n_own = 0, m_own = 0;
+    if (!nm || !next || !tail) {
+        namemap_destroy(nm);
+        free(next);
+        free(tail);
+        return AK_ENOMEM;
+    }
+
+    // chain the pieces of each name together, keeping the order they arrived in
+    int rc = AK_OK;
+    for (int32_t k = 0; k < g->n_path && rc == AK_OK; k++) {
+        int absent;
+        khint_t it = namemap_put(nm, g->path[k].name, &absent);
+        next[k] = -1;
+        if (absent) {
+            kh_val(nm, it) = k;
+            tail[k] = k;
+            if (n_own == m_own) {
+                int32_t m = m_own ? m_own << 1 : 32;
+                int32_t *p = (int32_t *)realloc(own, (size_t)m * sizeof(*p));
+                if (!p) { rc = AK_ENOMEM; break; }
+                own = p;
+                m_own = m;
+            }
+            own[n_own++] = k;
+        } else {
+            int32_t o = kh_val(nm, it);
+            next[tail[o]] = k;
+            tail[o] = k;
+        }
+    }
+    namemap_destroy(nm);
+    free(tail);
+
+    int warned = 0;
+    for (int32_t i = 0; i < n_own && rc == AK_OK; i++) {
+        int32_t o = own[i];
+
+        int64_t total = 0;
+        int ranked = 1, ordered = 1, circ = 0;
+        int32_t prev = 0;
+        for (int32_t k = o; k >= 0; k = next[k]) {
+            const vg_path_t *p = &g->path[k];
+            total += p->n_step;
+            circ |= p->is_circular;
+            for (int32_t s = 0; s < p->n_step; s++) {
+                if (p->step[s].rank == 0) ranked = 0;
+                if (p->step[s].rank <= prev) ordered = 0;
+                prev = p->step[s].rank;
+            }
+        }
+        g->path[o].is_circular = circ;
+
+        if (total > INT32_MAX) {
+            ak_log(AK_LOG_ERROR, "vg", "path '%s' has more than 2^31 steps", g->path[o].name);
+            rc = AK_EFORMAT;
+            break;
+        }
+        // a lone piece is the whole path already, unless its own ranks say it
+        // arrived out of order
+        if (next[o] < 0 && (ordered || !ranked)) continue;
+
+        if (ranked) {
+            rc = join_by_rank(g, o, next, (int32_t)total);
+            if (rc == AK_EFORMAT) {   // ranks present but not a clean 1..n
+                ranked = 0;
+                rc = AK_OK;
+            }
+        }
+        if (rc == AK_OK && !ranked) {
+            if (!warned) {
+                ak_log(AK_LOG_WARN, "vg",
+                       "path '%s' does not carry a complete 1..n set of mapping ranks; "
+                       "joining its pieces in file order", g->path[o].name);
+                warned = 1;
+            }
+            rc = join_in_file_order(g, o, next, (int32_t)total);
+        }
+    }
+
+    // the owners keep their pieces' slots, so close the gaps
+    if (rc == AK_OK) {
+        for (int32_t i = 0; i < n_own; i++) {
+            if (own[i] != i) g->path[i] = g->path[own[i]];
+        }
+        g->n_path = n_own;
+    }
+
+    free(next);
+    free(own);
+    return rc;
+}
+
 // buffered gzip input
 
 typedef struct {
@@ -419,6 +607,14 @@ vg_graph_t *vg_read(const char *fn) {
     if (oom) {
         vg_graph_destroy(g);
         ak_log(AK_LOG_ERROR, "vg", "out of memory");
+        return NULL;
+    }
+
+    // every chunk has been seen, so every piece of every path is in hand
+    int rc = join_paths(g);
+    if (rc != AK_OK) {
+        vg_graph_destroy(g);
+        ak_log(AK_LOG_ERROR, "vg", "could not reassemble the paths: %s", ak_strerror(rc));
         return NULL;
     }
 

@@ -15,6 +15,16 @@
  * for GFA conversion directly from the wire format (field numbers taken from
  * vg.proto), and accumulates them into one in-memory graph — mirroring what
  * `vg view -g` does. Only zlib is required, for decompression.
+ *
+ * The format has no path storage of its own: a `Path` exists only nested
+ * inside a `Graph`, so each message carries the mappings of a path whose nodes
+ * happen to fall in that message's chunk of nodes. One path therefore arrives
+ * as many pieces, and `Mapping.rank` — a 1-based position along the whole
+ * path — is the only thing that says how they fit together. Chunks written by
+ * `vg construct` are windows of the reference, so their pieces look contiguous;
+ * chunks written by `vg convert` from a HashGraph are arbitrary samples of the
+ * genome, so theirs interleave. vg_read() honours the rank either way and hands
+ * back one whole path per name.
  */
 
 #ifdef __cplusplus
@@ -37,12 +47,14 @@ typedef struct {
 
 typedef struct {
     int64_t node_id;    // visited node
-    int     is_reverse; // visited in reverse-complement orientation
+    int32_t is_reverse; // visited in reverse-complement orientation
+    int32_t rank;       // 1-based position along the whole path, 0 when the
+                        // file omits it; fits the padding `is_reverse` left
 } vg_step_t;
 
 typedef struct {
     const char *name;       // borrowed from the graph's arena
-    vg_step_t *step;        // ordered visits
+    vg_step_t *step;        // ordered visits, joined and rank-ordered
     int32_t    n_step, m_step;
     int        is_circular;
 } vg_path_t;

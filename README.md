@@ -339,6 +339,11 @@ $ ./akhal rank graph.gfa --fasta GRCh38.chr22.fa
 #### 8. `vg2gfa`
 Converts vg's native `.vg` format (gzip/BGZF-compressed Protobuf) to GFA. The `.vg` parser is hand-written pure C - no protobuf or libvgio needed, only zlib.
 
+A `.vg` file has nowhere to store a path: a `Path` message only exists nested inside a `Graph` chunk, so each chunk carries the mappings of a path whose nodes it happens to hold, and one path arrives as thousands of pieces sharing a name. 
+Each mapping carries a `rank` - its position along the whole path - and that is what the reader joins them by, so every path leaves as a single `P` line no matter how the file was chunked. 
+This matters for anything that went through `vg convert`: those chunks follow the source graph's iteration order rather than the reference, so a path's pieces interleave instead of abutting and pasting them together in file order would be quietly wrong. 
+A file whose mappings carry no usable ranks falls back to file order, with a warning.
+
 **Usage:**
 ```sh
 ./akhal vg2gfa <input .vg file> [output .gfa file]
