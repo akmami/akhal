@@ -1,0 +1,29 @@
+# akhal benchmark settings.
+#
+# Copy to benchmark.conf next to the script (or point at it with --config) and edit. 
+# Every value here is the default, so an empty config behaves exactly like no config at all. 
+# This file is sourced by bash, so it is shell syntax.
+
+
+AKHAL="./akhal"
+
+
+DATA_DIR="data"
+GFA="$DATA_DIR/human_v38.gfa"       # the graph
+VG_FILE="$DATA_DIR/human_v38.vg"    # the same graph in vg's native format
+GAF="$DATA_DIR/human_v38.gaf"       # alignments against the graph
+GAF_B="$DATA_DIR/human_v38.2.gaf"   # a second, different alignment set
+READS="$DATA_DIR/hg002.fa"          # the reads those alignments came from
+
+# the backbone the VCF and rGFA tasks work against. 
+# Left empty, the first P line's name is used - which is what akhal itself defaults to
+REF="$DATA_DIR/human_v38.fa"
+
+# where results, logs, scratch and any downloaded binaries go
+OUTDIR="out"
+
+# threads for the tools that take them (akhal and gfatools are single-threaded, so this only ever helps odgi and vg)
+THREADS=1
+
+# runs per measurement; the median is reported. 3 is a reasonable floor for numbers you intend to publish, 1 for a quick look
+REPEATS=1
