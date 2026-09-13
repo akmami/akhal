@@ -103,37 +103,34 @@ static void unlabel(gfa_t *g) {
     for (int32_t i = 0; i < gfa_n_seg(g); i++) {
         gfa_seg_t *s = gfa_seg_at(g, i);
         s->rank     = -1;
-        s->ref_name = NULL;
+        s->ref_path = -1;
         s->start    = -1;
-        s->end      = -1;
     }
 }
 
-// rank r, on sequence `name` at offset `off`
-static void place(gfa_seg_t *s, int r, const char *name, int64_t off) {
-    // start/end are int32_t, so an offset past their reach is no offset at all
-    if (off < 0 || off + s->len > INT32_MAX) {
+// rank r, on the path at index `pi` at offset `off`
+static void place(gfa_seg_t *s, int r, int32_t pi, int64_t off) {
+    // start is int32_t, so an offset past its reach is no offset at all
+    if (pi < 0 || off < 0 || off + s->len > INT32_MAX) {
         s->rank     = r;
-        s->ref_name = NULL;
+        s->ref_path = -1;
         s->start    = -1;
-        s->end      = -1;
         return;
     }
     s->rank     = r;
-    s->ref_name = name;
+    s->ref_path = pi;
     s->start    = (int32_t)off;
-    s->end      = (int32_t)(off + s->len);
 }
 
 // rank r and nothing else: reached, but with no offset anyone can stand behind
 static void place_ranked(gfa_seg_t *s, int r) {
-    place(s, r, NULL, -1);
+    place(s, r, -1, -1);
 }
 
 // the backbone: rank 0, offsets running the length of the walk. A segment the
 // walk comes back to keeps the offset of its first visit
 static void label_backbone(gfa_t *g, int32_t bb) {
-    const char *name = gfa_path_name(g, bb);
+    const int32_t pi = bb;
     const uint32_t *segs;
     int ns = gfa_path_segs(g, bb, &segs);
 
@@ -141,7 +138,7 @@ static void label_backbone(gfa_t *g, int32_t bb) {
     for (int i = 0; i < ns; i++) {
         if (segs[i] == GFA_NIL) continue;
         gfa_seg_t *s = gfa_seg_at(g, (int32_t)segs[i]);
-        if (s->rank < 0) place(s, 0, name, off);
+        if (s->rank < 0) place(s, 0, pi, off);
         off += s->len;
     }
 }
@@ -153,7 +150,7 @@ static void label_backbone(gfa_t *g, int32_t bb) {
 // may still hand out ranks, but no offsets, until it reaches somewhere another
 // path has already pinned down
 static void label_path(gfa_t *g, int32_t k) {
-    const char *name = gfa_path_name(g, k);
+    const int32_t pi = k;
     const uint32_t *segs;
     int ns = gfa_path_segs(g, k, &segs);
 
@@ -168,7 +165,7 @@ static void label_path(gfa_t *g, int32_t k) {
             // ground an earlier walk already covered
             if (s->start < 0) {
                 amb = 1;                    // stepped through something unplaced
-            } else if (amb || !anchored || s->rank == 0 || s->ref_name == name) {
+            } else if (amb || !anchored || s->rank == 0 || s->ref_path == pi) {
                 // the backbone settles it, a segment this same path placed is
                 // its own business, and before the first anchor there is
                 // nothing to disagree with
@@ -187,7 +184,7 @@ static void label_path(gfa_t *g, int32_t k) {
         } else if (amb) {
             place_ranked(s, floor + 1);     // a detour off ground we cannot place
         } else {
-            place(s, floor + 1, name, cur); // one rank deeper, carrying on from
+            place(s, floor + 1, pi, cur); // one rank deeper, carrying on from
             cur += s->len;                  // where the path left that ground
         }
     }

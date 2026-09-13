@@ -122,7 +122,7 @@ int cmd_rank(int argc, char **argv) {
         return 1;
     }
 
-    gfa_t *g = gfa_read(in, GFA_LINKS | GFA_PATHS);
+    gfa_t *g = gfa_read(in, GFA_ALL);
     if (!g) return 1;
 
     int rc;

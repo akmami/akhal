@@ -70,8 +70,7 @@ static void scan_paths(const gfa_t *g, node_t *n) {
 // Only asked of a file that ranks itself; a plain GFA has nothing to preserve
 static int tags_agree(const gfa_seg_t *u, const gfa_seg_t *v) {
     if (u->rank != v->rank) return 0;
-    if ((u->ref_name == NULL) != (v->ref_name == NULL)) return 0;
-    if (u->ref_name && strcmp(u->ref_name, v->ref_name) != 0) return 0;
+    if (u->ref_path != v->ref_path) return 0;
     if (u->start < 0 || v->start < 0) return u->start < 0 && v->start < 0;
     return v->start == u->start + (int32_t)u->len;
 }
@@ -217,8 +216,9 @@ static void write_segs(const gfa_t *g, const compact_t *c, FILE *out, int tags) 
             fputc('*', out);
         }
 
-        if (tags && head->ref_name) {
-            fprintf(out, "\tSN:Z:%s", head->ref_name);
+        const char *sn = gfa_seg_ref(g, head);
+        if (tags && sn) {
+            fprintf(out, "\tSN:Z:%s", sn);
         }
         if (tags && head->start >= 0) {
             fprintf(out, "\tSO:i:%d", head->start);

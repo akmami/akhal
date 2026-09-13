@@ -282,7 +282,7 @@ int32_t annot_backbone(annot_t *a, const gfa_t *g, const char *ref_path);
 
 Marks every segment of one `P` line as `ANNOT_BACKBONE` with info
 `REF <path> <start>-<end>`, where the coordinates come from the segment's
-`start`/`end` fields as the reader laid them out. Returns the path index, which
+`start` field as the reader laid it out (the end follows from `gfa_seg_end()`). Returns the path index, which
 `annot_build_vcf()` wants, or a negative `AK_E*` code (`AK_EINVAL` when the
 graph has no paths or no path of that name), in which case nothing is marked.
 
@@ -317,7 +317,7 @@ int64_t annot_build_vcf(annot_t *a, const gfa_t *g, int32_t ref_path, const char
 
 Annotates alternative-allele nodes from a VCF. For each record whose `CHROM`
 equals the backbone path name, the shared REF/ALT prefix is stripped and the
-branch point is found as the backbone segment whose reference `end` equals the
+branch point is found as the backbone segment whose `gfa_seg_end()` equals the
 variant's 0-based position; each non-backbone successor is then walked through
 its unique non-backbone chain, and a walk whose concatenated sequence equals
 the allele exactly is annotated `<TYPE> <chrom>:<pos> <ref>><alt> [<id>]`.

@@ -136,7 +136,7 @@ static int extract_fa(int argc, char **argv) {
     if (!want_gfa(in) || !want_fasta(out_fn)) return 1;
 
     // chaining fragments reads the L lines; writing them as they lie does not
-    gfa_t *g = gfa_read(in, raw ? GFA_PATHS : (GFA_LINKS | GFA_PATHS));
+    gfa_t *g = gfa_read(in, raw ? (GFA_PATHS | GFA_SEQ) : GFA_ALL);
     if (!g) return 1;
 
     if (gfa_n_path(g) == 0) {
@@ -192,7 +192,7 @@ static int extract_path(int argc, char **argv) {
     }
     if (!want_gfa(in) || !want_fasta(out_fn)) return 1;
 
-    gfa_t *g = gfa_read(in, GFA_LINKS | GFA_PATHS);
+    gfa_t *g = gfa_read(in, GFA_ALL);
     if (!g) return 1;
 
     FILE *out = fopen(out_fn, "w");
@@ -258,7 +258,7 @@ static int extract_vcf(int argc, char **argv) {
         return 1;
     }
 
-    gfa_t *g = gfa_read(in, GFA_LINKS | GFA_PATHS);
+    gfa_t *g = gfa_read(in, GFA_ALL);
     if (!g) return 1;
 
     // label the backbone; everything the graph adds around it is a variation

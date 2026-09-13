@@ -41,12 +41,24 @@ typedef struct {
                              // gfa_seg_set_seq() is the only way to set it
     uint32_t len;            // sequence length (cached strlen)
     int32_t  rank;           // SR tag value, or -1 if the tag is absent
-    int32_t  start;          // reference offset (SO tag or path layout)
-    int32_t  end;            // start + len
+    int32_t  start;          // reference offset (SO tag or path layout), -1 unplaced
     int32_t  in_degree;      // populated when GFA_LINKS is set
     int32_t  out_degree;     // populated when GFA_LINKS is set
-    const char *ref_name;    // borrowed: an owning path name (NULL if none)
+    int32_t  ref_path;       // index of the owning path in path[], -1 for none
 } gfa_seg_t;
+
+/**
+ * End of a segment's span on its stable sequence: start + len
+ *
+ * Derived rather than stored - at 663 M segments a fourth 4-byte field is the
+ * difference between a 40- and a 48-byte record. An unplaced segment carries
+ * start == -1 and ends nowhere, which this reports as -1 rather than len-1
+ * @param s Segment to measure
+ * @return The end offset, or -1 when the segment has no offset
+ */
+static inline int32_t gfa_seg_end(const gfa_seg_t *s) {
+    return s->start < 0 ? -1 : s->start + (int32_t)s->len;
+}
 
 // Edges (L lines)
 
@@ -104,6 +116,20 @@ typedef struct {
 #define GFA_LINKS    0x1     // record edges, degrees, and out-adjacency
 #define GFA_PATHS    0x2     // build path membership (CSR) and layout
 #define GFA_VALIDATE 0x4     // check overlap consistency + integrity
+#define GFA_SEQ      0x8     // copy segment sequences into the graph's arena
+#define GFA_ARCS     0x10    // also build the CSR out-adjacency (implies GFA_LINKS)
+
+// What a caller wanting the whole graph asks for. Sequences dominate a large
+// graph - 562 MB of a chr22 graph's 2.3 GB, 20.8 GB of a whole-genome one - so
+// a command that only needs lengths, degrees or path structure can leave
+// GFA_SEQ out and skip the copy entirely. seg[].len is recorded either way.
+#define GFA_ALL      (GFA_LINKS | GFA_PATHS | GFA_SEQ | GFA_ARCS)
+
+// GFA_LINKS on its own records the edges and each segment's degrees, which is
+// all a scan over link[] needs. The CSR on top of it - arc + arc_off, another
+// 145 MB on a chr22 graph and 5.4 GB on a whole-genome one - is what makes
+// gfa_arcs(), gfa_has_arc(), gfa_toposort() and the path chaining in
+// gfa_path_merge() work, and only those need it.
 
 /**
  * Read an (r)GFA file into a freshly allocated graph
@@ -185,6 +211,19 @@ int32_t gfa_idx(const gfa_t *g, uint64_t id);
  * @return Pointer to the segment, or NULL if absent
  */
 gfa_seg_t *gfa_get(const gfa_t *g, uint64_t id);
+
+/**
+ * The stable sequence a segment sits on - its SN name
+ *
+ * Held as an index into path[] rather than a borrowed pointer, so nothing
+ * dangles when the path block is rewritten and the record stays 40 bytes
+ * @param g Graph owning the segment
+ * @param s Segment to ask about
+ * @return The path name, or NULL when the segment belongs to none
+ */
+static inline const char *gfa_seg_ref(const gfa_t *g, const gfa_seg_t *s) {
+    return s->ref_path < 0 ? NULL : g->path[s->ref_path];
+}
 
 /** 
  * @return Number of segments (nodes) in the graph
@@ -365,8 +404,8 @@ int64_t gfa_rank_mark(gfa_t *g, const uint8_t *on);
 /**
  * Drop every path in the graph.
  *
- * Path names are owned by the graph but borrowed by each segment's ref_name,
- * so this clears ref_name first - no segment is left pointing at a freed name.
+ * Segments refer to their path by index, so this resets every ref_path to -1
+ * rather than leaving one pointing at a path that no longer exists.
  * The segments themselves, and their ranks, are untouched
  * @param g Graph to modify
  */

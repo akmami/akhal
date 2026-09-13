@@ -97,7 +97,8 @@ static int handle_S(gfa_t *g, char *line, idxmap_t *h) {
     if (reserve_seg(g) != AK_OK) return AK_ENOMEM;
     gfa_seg_t *s = &g->seg[g->n_seg];
     memset(s, 0, sizeof(*s));
-    s->rank = -1;   // -1 until an SR tag says otherwise
+    s->rank = -1;       // -1 until an SR tag says otherwise
+    s->ref_path = -1;   // memset made it 0, which would mean path 0
 
     char *save;
     char *tok = strtok_r(line, "\t", &save);   // 'S'
@@ -113,11 +114,16 @@ static int handle_S(gfa_t *g, char *line, idxmap_t *h) {
         ak_log(AK_LOG_WARN, "gfa", "segment %llu has empty sequence", (unsigned long long)s->id);
         s->seq = NULL;
         s->len = 0;
-    } else {
+    } else if (g->flags & GFA_SEQ) {
         if (gfa_seg_set_seq(g, s, tok, strlen(tok)) != AK_OK) return AK_ENOMEM;
+    } else {
+        // The length still drives path layout, segment coordinates and the
+        // statistics, so it is recorded either way; only the bases are skipped
+        // - which is the whole saving, since they are what the arena holds.
+        s->seq = NULL;
+        s->len = (uint32_t)strlen(tok);
     }
     s->start = 0;
-    s->end = (int32_t)s->len;
 
     // optional tags: SN:Z:name  SO:i:offset  SR:i:rank
     while ((tok = strtok_r(NULL, "\t", &save)) != NULL) {
@@ -125,12 +131,11 @@ static int handle_S(gfa_t *g, char *line, idxmap_t *h) {
         if (!split_tag(tok, &tag, &type, &val)) continue;
         if (!strcmp(tag, "SO") && !strcmp(type, "i")) {
             s->start = atoi(val);
-            s->end   = s->start + (int32_t)s->len;
         } else if (!strcmp(tag, "SR") && !strcmp(type, "i")) {
             s->rank = atoi(val);
             g->has_sr = 1;   // the file ranks itself; nothing may overwrite it
         }
-        // SN is handled via path names; segment->ref_name is set there.
+        // SN is handled via path names; segment->ref_path is set there.
     }
 
     int absent;
@@ -255,10 +260,9 @@ static int handle_P(gfa_t *g, char *line, idxmap_t *h, int flags) {
             g->path_ori[g->n_path_seg] = ori;
             if (si != GFA_NIL) {
                 gfa_seg_t *cur = &g->seg[si];
-                cur->ref_name = name;
+                cur->ref_path = pi;
                 cur->start = ref_pos;
                 ref_pos += (int32_t)cur->len;
-                cur->end = ref_pos;
                 g->path_len[pi] += cur->len;
             }
         }
@@ -319,6 +323,12 @@ gfa_t *gfa_read(const char *fn, int flags) {
         return NULL;
     }
     g->idx = h;
+    // the overlap check compares the bases either side of a join, so asking to
+    // validate implies asking for the sequences
+    if (flags & GFA_VALIDATE) flags |= GFA_SEQ;
+    // the adjacency is an index over the edges, so it cannot be built without
+    // them
+    if (flags & GFA_ARCS) flags |= GFA_LINKS;
     g->flags = flags;
 
     kstring_t ks = KS_INIT;
@@ -346,7 +356,7 @@ gfa_t *gfa_read(const char *fn, int flags) {
         return NULL;
     }
 
-    if (flags & GFA_LINKS) {
+    if (flags & GFA_ARCS) {
         if (build_arcs(g) != AK_OK) {
             gfa_destroy(g);
             ak_log(AK_LOG_ERROR, "gfa", "out of memory building adjacency");
@@ -380,13 +390,21 @@ gfa_t *gfa_read(const char *fn, int flags) {
 // emit a graph as GFA; see akhal/gfa.h
 // shared by gfa_write() and gfa_write_rgfa(); `tags` adds SN and SO
 static int write_graph(const gfa_t *g, FILE *out, int tags) {
+    // Without GFA_SEQ every S line would come out as "*", which is a valid
+    // GFA but a silently different graph. Fail instead.
+    if (g->n_seg > 0 && !(g->flags & GFA_SEQ)) {
+        ak_log(AK_LOG_ERROR, "gfa", "graph was read without GFA_SEQ; its segments carry no sequence to write");
+        return AK_EINVAL;
+    }
+
     fprintf(out, "H\tVN:Z:1.0\n");
 
     for (int32_t i = 0; i < g->n_seg; i++) {
         const gfa_seg_t *s = &g->seg[i];
         fprintf(out, "S\t%llu\t%s", (unsigned long long)s->id, s->seq ? s->seq : "*");
-        if (tags && s->ref_name) {
-            fprintf(out, "\tSN:Z:%s", s->ref_name);
+        const char *sn = gfa_seg_ref(g, s);
+        if (tags && sn) {
+            fprintf(out, "\tSN:Z:%s", sn);
         }
         if (tags && s->start >= 0) {
             fprintf(out, "\tSO:i:%d", s->start);
@@ -652,6 +670,10 @@ static int frag_name_chains(const gfa_t *g, gfa_merge_t *m) {
 
 // group P-line fragments into chains; see akhal/gfa.h
 gfa_merge_t *gfa_path_merge(const gfa_t *g, const char *key) {
+    if (!g->arc_off) {
+        ak_log(AK_LOG_ERROR, "gfa", "chaining fragments needs the CSR adjacency; read with GFA_ARCS");
+        return NULL;
+    }
     if (!(g->flags & GFA_PATHS) || !g->path_off) {
         ak_log(AK_LOG_ERROR, "gfa", "path merging requires the graph to be read with GFA_PATHS");
         return NULL;
@@ -850,9 +872,10 @@ int64_t gfa_rank_paths(gfa_t *g) {
 
 // drop every path; see akhal/gfa.h
 void gfa_clear_paths(gfa_t *g) {
-    // ref_name borrows from path[], so drop those references before freeing
+    // every segment refers to a path by index, so reset those before the
+    // names they stand for go away
     for (int32_t i = 0; i < g->n_seg; i++) {
-        g->seg[i].ref_name = NULL;
+        g->seg[i].ref_path = -1;
     }
     if (g->path) {
         for (int32_t i = 0; i < g->n_path; i++) free(g->path[i]);
@@ -890,10 +913,9 @@ int gfa_add_path(gfa_t *g, const char *name, const uint32_t *segs, const char *o
         g->path_ori[g->n_path_seg] = ori ? ori[i] : '+';
 
         gfa_seg_t *cur = &g->seg[segs[i]];
-        cur->ref_name = owned;
+        cur->ref_path = pi;
         cur->start = ref_pos;
         ref_pos += (int32_t)cur->len;
-        cur->end = ref_pos;
         g->path_len[pi] += cur->len;
         g->n_path_seg++;
     }
@@ -951,6 +973,10 @@ static int32_t heap_pop(const gfa_t *g, int32_t *heap, int *hn) {
 
 // topological order with alphabetical id tie-break; see akhal/gfa.h
 int gfa_toposort(const gfa_t *g, int32_t *order) {
+    if (!g->arc_off) {
+        ak_log(AK_LOG_ERROR, "gfa", "toposort needs the CSR adjacency; read with GFA_ARCS");
+        return AK_EINVAL;
+    }
     int32_t n = g->n_seg;
     if (n == 0) return 0;
     if (!(g->flags & GFA_LINKS)) {

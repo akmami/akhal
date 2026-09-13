@@ -46,7 +46,7 @@ int cmd_gfa2dot(int argc, char **argv) {
         return 1;
     }
 
-    gfa_t *g = gfa_read(in, GFA_LINKS);
+    gfa_t *g = gfa_read(in, GFA_LINKS | GFA_SEQ);
     if (!g) return 1;
 
     FILE *out = stdout;

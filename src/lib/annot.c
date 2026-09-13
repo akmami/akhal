@@ -197,7 +197,7 @@ int32_t annot_backbone(annot_t *a, const gfa_t *g, const char *ref_path) {
     for (int i = 0; i < np; i++) {
         if (segs[i] == GFA_NIL) continue;
         const gfa_seg_t *s = &g->seg[segs[i]];
-        snprintf(info, cap, "REF %s %d-%d", name, s->start, s->end);
+        snprintf(info, cap, "REF %s %d-%d", name, s->start, gfa_seg_end(s));
         if (annot_set(a, s->id, ANNOT_BACKBONE, info) != AK_OK) {
             free(info);
             return AK_ENOMEM;
@@ -278,7 +278,7 @@ int64_t annot_build_vcf(annot_t *a, const gfa_t *g, int32_t ref_path, const char
         if (segs[i] == GFA_NIL) continue;
         bb[segs[i]] = 1;
         int absent;
-        khint_t k = annmap_put(cmap, (uint64_t)g->seg[segs[i]].end, &absent);
+        khint_t k = annmap_put(cmap, (uint64_t)gfa_seg_end(&g->seg[segs[i]]), &absent);
         if (absent) {
             kh_val(cmap, k) = segs[i];
         }

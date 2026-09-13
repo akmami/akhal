@@ -47,7 +47,7 @@ static void degree_range(const gfa_t *g, int in, int *min_out, int *max_out) {
 
 // `stats` over an r/GFA graph
 static int stats_gfa(const char *fn) {
-    gfa_t *g = gfa_read(fn, GFA_LINKS | GFA_PATHS);
+    gfa_t *g = gfa_read(fn, GFA_LINKS | GFA_PATHS)   /* no GFA_SEQ: only seg[].len is used */;
     if (!g) return 1;
 
     int32_t n_seg  = gfa_n_seg(g);

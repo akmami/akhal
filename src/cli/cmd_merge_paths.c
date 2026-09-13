@@ -1,4 +1,6 @@
 #include "akhal/gfa.h"
+#include "akhal/io.h"
+#include "akhal/kstr.h"
 #include "akhal/util.h"
 #include "akhal/error.h"
 #include "cli.h"
@@ -69,6 +71,45 @@ static int chain_take(const gfa_t *g, const gfa_merge_t *m, int32_t k, chain_t *
     return AK_OK;
 }
 
+// Copy every line of the input that is not a P line, then append the merged
+// paths.
+//
+// Rewriting the whole graph through gfa_write() would be shorter, but it
+// regenerates the S lines from memory - which costs the sequences (the merge
+// itself never reads a base, so they need not be loaded at all) and quietly
+// stamps on the SR tags the reader derived for a file that carried none.
+// Copying leaves S and L exactly as they arrived, which is all this command
+// should do to them.
+static int emit(const gfa_t *g, const char *in, FILE *out) {
+    ak_file *f = ak_open(in);
+    if (!f) return AK_EOPEN;
+
+    kstring_t ks = KS_INIT;
+    long len;
+    while ((len = ak_getline(f, &ks)) >= 0) {
+        if (len == 0 || ks.s[0] == 'P') continue;
+        fputs(ks.s, out);
+        fputc('\n', out);
+    }
+    ak_close(f);
+    ks_free(&ks);
+
+    for (int32_t k = 0; k < gfa_n_path(g); k++) {
+        fprintf(out, "P\t%s\t", gfa_path_name(g, k));
+        const uint32_t *segs;
+        int ns = gfa_path_segs(g, k, &segs);
+        const char *ori = g->path_ori + g->path_off[k];
+        int written = 0;
+        for (int i = 0; i < ns; i++) {
+            if (segs[i] == GFA_NIL) continue;
+            fprintf(out, "%s%llu%c", written ? "," : "", (unsigned long long)g->seg[segs[i]].id, ori[i]);
+            written = 1;
+        }
+        fprintf(out, "\t*\n");
+    }
+    return ferror(out) ? AK_EIO : AK_OK;
+}
+
 // `merge-paths` entry point; see cli.h
 int cmd_merge_paths(int argc, char **argv) {
     const char *in = NULL, *out_fn = NULL;
@@ -100,8 +141,12 @@ int cmd_merge_paths(int argc, char **argv) {
         return 1;
     }
 
-    // chaining walks the L lines, so the links are needed as well as the paths
-    gfa_t *g = gfa_read(in, GFA_LINKS | GFA_PATHS);
+    // Chaining walks the L lines, so the links are needed as well as the
+    // paths - but not one base: gfa_path_merge() orders fragments by name and
+    // link adjacency, and gfa_add_path() lays them out from seg[].len, which
+    // is recorded with or without GFA_SEQ. Leaving the sequences unread saves
+    // the whole arena (562 MB on chr22, ~20.8 GB on a whole-genome graph).
+    gfa_t *g = gfa_read(in, GFA_LINKS | GFA_PATHS | GFA_ARCS);
     if (!g) return 1;
 
     if (gfa_n_path(g) == 0) {
@@ -155,7 +200,7 @@ int cmd_merge_paths(int argc, char **argv) {
         }
     }
 
-    rc = gfa_write(g, out);
+    rc = emit(g, in, out);
     if (out_fn && fclose(out) != 0) {
         rc = AK_EIO;
     }

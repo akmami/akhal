@@ -18,7 +18,7 @@ int cmd_parse(int argc, char **argv) {
     }
     int is_rgfa = ak_ends_with(fn, ".rgfa");
 
-    gfa_t *g = gfa_read(fn, GFA_LINKS | GFA_PATHS | GFA_VALIDATE);
+    gfa_t *g = gfa_read(fn, GFA_LINKS | GFA_PATHS | GFA_ARCS | GFA_VALIDATE);
     if (!g) return 1;
 
     long issues = 0;

@@ -55,9 +55,10 @@ static void convert_one(const gfa_t *g, const gaf_rec_t *rec, const char *read,
             rev++;
         }
         const gfa_seg_t *s = gfa_seg_at(g, si);
-        if (s->ref_name) {
+        const char *sn = gfa_seg_ref(g, s);
+        if (sn) {
             is_ref = 1;
-            ref_name = s->ref_name;
+            ref_name = sn;
         } else {
             is_alt = 1;
         }
@@ -120,7 +121,7 @@ static void convert_one(const gfa_t *g, const gaf_rec_t *rec, const char *read,
 #define PUSH(c) do { if (op_index < OPS_CAP) ops[op_index++] = (c); else overflow = 1; } while (0)
 
     const gfa_seg_t *seg = gfa_seg_at(g, nodes[0]);
-    const gfa_seg_t *prev_ref = seg->ref_name ? seg : NULL;
+    const gfa_seg_t *prev_ref = gfa_seg_ref(g, seg) ? seg : NULL;
     int p_length = (int)seg->len - pstart;
     int node_index = 0;
 
@@ -140,7 +141,7 @@ static void convert_one(const gfa_t *g, const gaf_rec_t *rec, const char *read,
     while (ci < n_ops && !overflow) {
         char op = cigar_ops[ci++];
 
-        if (!ref_start_set && seg->ref_name && CIGAR_REF(op)) {
+        if (!ref_start_set && gfa_seg_ref(g, seg) && CIGAR_REF(op)) {
             if (op == CIGAR_SEQUENCE_MATCH) {
                 ref_start_set = 1;
             } else {
@@ -148,7 +149,7 @@ static void convert_one(const gfa_t *g, const gaf_rec_t *rec, const char *read,
             }
         }
 
-        if (seg->ref_name) {
+        if (gfa_seg_ref(g, seg)) {
             PUSH(op);
         } else if (CIGAR_QUE(op)) {
             PUSH(CIGAR_INSERTION);
@@ -159,12 +160,12 @@ static void convert_one(const gfa_t *g, const gaf_rec_t *rec, const char *read,
             if (++node_index == node_size) break;  // consumed all nodes
             seg = gfa_seg_at(g, nodes[node_index]);
             p_length = (int)seg->len;
-            if (seg->ref_name) {
+            if (gfa_seg_ref(g, seg)) {
                 if (!ref_start_set) {
                     reference_start = seg->start + 1;
                 }
                 if (prev_ref) {                    // gap between ref segments -> D
-                    for (int x = prev_ref->end; x < seg->start && !overflow; x++)
+                    for (int x = gfa_seg_end(prev_ref); x < seg->start && !overflow; x++)
                         PUSH(CIGAR_DELETION);
                 }
                 prev_ref = seg;
@@ -228,7 +229,7 @@ int cmd_gaf2sam(int argc, char **argv) {
         }
     }
 
-    gfa_t *g = gfa_read(gfa_fn, GFA_LINKS | GFA_PATHS);
+    gfa_t *g = gfa_read(gfa_fn, GFA_ALL);
     if (!g) return 1;
     for (int32_t k = 0; k < gfa_n_link(g); k++) {
         if (gfa_link_at(g, k)->overlap != 0) {

@@ -122,9 +122,9 @@ static int compare_gfa(int argc, char **argv) {
     if (!parse_args(argc, argv, &fn_a, &fn_b, &verbose)) return 2;
     if (!want_gfa(fn_a) || !want_gfa(fn_b)) return 2;
 
-    gfa_t *a = gfa_read(fn_a, GFA_LINKS | GFA_PATHS);
+    gfa_t *a = gfa_read(fn_a, GFA_ALL);
     if (!a) return 2;
-    gfa_t *b = gfa_read(fn_b, GFA_LINKS | GFA_PATHS);
+    gfa_t *b = gfa_read(fn_b, GFA_ALL);
     if (!b) {
         gfa_destroy(a);
         return 2;

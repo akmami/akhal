@@ -218,7 +218,7 @@ if (s) {
     // seq is NUL-terminated but may be NULL when the S line had no sequence;
     // len is the cached length, so there is no need to call strlen().
     printf("id %llu, %u bp, rank %d, ref span %d-%d\n",
-           (unsigned long long)s->id, s->len, s->rank, s->start, s->end);
+           (unsigned long long)s->id, s->len, s->rank, s->start, gfa_seg_end(s));
 }
 
 gfa_destroy(g);
@@ -503,14 +503,14 @@ void gfa_clear_paths(gfa_t *g);
 ```
 
 Drops every path. Path names are owned by the graph but *borrowed* by each
-segment's `ref_name`, so this clears `ref_name` before freeing them - no
+segment's `ref_path` index, so this resets every `ref_path` before freeing them - no
 segment is left pointing at a freed name. Segments and ranks are untouched.
 
 ```c
 gfa_t *g = gfa_read("graph.gfa", GFA_LINKS | GFA_PATHS);
 if (!g) return 1;
 
-gfa_clear_paths(g);   // also resets every seg->ref_name to NULL
+gfa_clear_paths(g);   // also resets every seg->ref_path to -1
 
 printf("%d path(s) left\n", gfa_n_path(g));   // 0
 gfa_destroy(g);
@@ -523,7 +523,7 @@ int gfa_add_path(gfa_t *g, const char *name, const uint32_t *segs, const char *o
 ```
 
 Appends one path, laying it out as the reader would: each segment's reference
-`start`/`end` is recomputed along it and its `ref_name` repointed at the new
+`start` is recomputed along it and its `ref_path` repointed at the new
 name. `ori` may be `NULL` to treat every step as `'+'`, and `GFA_NIL` entries
 are skipped. Pair it with `gfa_clear_paths()` to replace the path block
 outright - which, with `gfa_rank_mark()`, is how an external reference becomes

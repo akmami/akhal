@@ -46,7 +46,7 @@ int cmd_gfa2rgfa(int argc, char **argv) {
     if (!want_gfa(in)) return 1;
     if (out_fn && !want_gfa(out_fn)) return 1;
 
-    gfa_t *g = gfa_read(in, GFA_LINKS | GFA_PATHS);
+    gfa_t *g = gfa_read(in, GFA_ALL);
     if (!g) return 1;
 
     rgfa_stat_t st;

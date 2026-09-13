@@ -131,8 +131,8 @@ graph writer emit them.
 
 | Tag | Field | Unset means |
 | --- | --- | --- |
-| `SN` | `ref_name` | `NULL` - borrowed from the path block, so it dies with the paths |
-| `SO` | `start` (and `end`) | `-1` |
+| `SN` | `ref_path` (read with `gfa_seg_ref()`) | `-1` - an index into the path block, so it means nothing once the paths are rewritten |
+| `SO` | `start` (the end follows from `gfa_seg_end()`) | `-1` |
 | `SR` | `rank` | `-1` |
 
 [`gfa_write_rgfa`](gfa.md#gfa_write_rgfa) emits each tag only where the segment
@@ -141,7 +141,7 @@ one with a bare `S` line. [`gfa_write`](gfa.md#gfa_write) ignores `SN` and `SO`
 entirely and emits plain GFA, which is why `sort` and `rank` are unaffected by
 any of this.
 
-Because `ref_name` borrows from the path block, the labels last exactly as long
+Because `ref_path` indexes the path block, the labels last exactly as long
 as the paths do: [`gfa_clear_paths`](gfa.md#gfa_clear_paths) drops every `SN`,
 and [`gfa_add_path`](gfa.md#gfa_add_path) relabels the segments it lays out.
 Write the graph before rewriting its paths, not after.

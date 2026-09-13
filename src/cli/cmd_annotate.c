@@ -47,7 +47,7 @@ int cmd_annotate(int argc, char **argv) {
         return 1;
     }
 
-    gfa_t *g = gfa_read(gfa_fn, GFA_LINKS | GFA_PATHS);
+    gfa_t *g = gfa_read(gfa_fn, GFA_ALL);
     if (!g) return 1;
 
     annot_t *an = annot_init();
