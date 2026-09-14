@@ -22,6 +22,9 @@ REF="$DATA_DIR/human_v38.fa"
 # where results, logs, scratch and any downloaded binaries go
 OUTDIR="out"
 
+# which tools to measure: any of akhal, gfatools, odgi, vg, gaftools, or "all"
+TOOLS="all"
+
 # threads for the tools that take them (akhal and gfatools are single-threaded, so this only ever helps odgi and vg)
 THREADS=1
 

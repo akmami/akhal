@@ -11,6 +11,7 @@
 #   --threads N       threads for the tools that take them (default: 1)
 #   --repeats N       runs per measurement, median reported (default: 1)
 #   --only REGEX      run only the tasks whose name matches
+#   --tools LIST      which tools to measure, comma or space separated
 #   --install         fetch the missing competitors into <out>/bin first
 #   --keep            keep the scratch files instead of deleting them at the end
 #   --dry-run         print what would be run, measure nothing
@@ -18,7 +19,7 @@
 #
 # Settings, all overridable in the config file:
 #
-#   AKHAL   GFA   VG_FILE   GAF   GAF_B   READS   REF   OUTDIR  THREADS  REPEATS
+#   AKHAL   GFA   VG_FILE   GAF   GAF_B   READS   REF   OUTDIR  THREADS  REPEATS  TOOLS
 #
 # The defaults assume the layout described in the README:
 #
@@ -29,7 +30,7 @@
 #   data/human_v38.fa     the reads those alignments came from (gaf2sam only)
 #
 # Results land in <out>/results.tsv
-# Per-run output and errors go to <out>/logs/
+# Per-run output and errors go to <out>/logs/<task>.<tool>.log, and <out>/logs/<task>.<tool>.time
 
 # defaults
 
@@ -45,6 +46,8 @@ REF=""
 OUTDIR="out"
 THREADS=1
 REPEATS=1
+
+TOOLS="all"
 
 CONFIG=""
 DO_INSTALL=0
@@ -68,6 +71,7 @@ while [ $# -gt 0 ]; do
         --threads) THREADS=$2; shift 2 ;;
         --repeats) REPEATS=$2; shift 2 ;;
         --only)    ONLY=$2; shift 2 ;;
+        --tools)   TOOLS=$2; shift 2 ;;
         --install) DO_INSTALL=1; shift ;;
         --keep)    KEEP=1; shift ;;
         --dry-run) DRY_RUN=1; shift ;;
@@ -90,6 +94,23 @@ if [ -n "$CONFIG" ]; then
     echo "config: $CONFIG"
 else
     echo "config: none, using defaults"
+fi
+
+# which tools are in play
+ALL_TOOLS="akhal gfatools odgi vg gaftools"
+case "$(printf '%s' "$TOOLS" | tr 'A-Z,' 'a-z ')" in
+    *all*) TOOLS="$ALL_TOOLS" ;;
+    *)     TOOLS="$(printf '%s' "$TOOLS" | tr 'A-Z,' 'a-z ' | tr -s ' ')" ;;
+esac
+for t in $TOOLS; do
+    case " $ALL_TOOLS " in
+        *" $t "*) ;;
+        *) echo "unknown tool: $t (choose from $ALL_TOOLS, or all)" >&2; exit 2 ;;
+    esac
+done
+if [ -z "$(printf '%s' "$TOOLS" | tr -d ' ')" ]; then
+    echo "no tools selected: --tools takes one or more of $ALL_TOOLS, or all" >&2
+    exit 2
 fi
 
 # anything the config did not set falls back to the documented layout
@@ -134,6 +155,21 @@ have() {
     command -v "$1" >/dev/null 2>&1; 
 }
 
+# was this tool asked for? 
+want() {
+    case "$1" in all) return 0 ;; esac
+    case " $TOOLS " in *" ${1%-prep} "*) return 0 ;; esac
+    return 1
+}
+
+# is it actually runnable here? akhal is a path out of the config rather than a name on PATH, so it answers differently from the rest
+present() {
+    case "$1" in
+        akhal) [ -x "$AKHAL" ] || have "$AKHAL" ;;
+        *)     have "$1" ;;
+    esac
+}
+
 # is this tool's subcommand actually there? versions differ, and a missing one should read as "unsupported", not as a failed benchmark
 has_sub() {
     local tool=$1 sub=$2
@@ -148,7 +184,7 @@ install_tools() {
     local d
     d="$(cd "$BINDIR" && pwd)"
 
-    if ! have gfatools; then
+    if want gfatools && ! have gfatools; then
         echo "installing gfatools ..."
         ( set -e
           tmp=$(mktemp -d)
@@ -158,7 +194,7 @@ install_tools() {
           rm -rf "$tmp" ) || echo "  gfatools: build failed (needs git, make, gcc, zlib headers)"
     fi
 
-    if ! have vg; then
+    if want vg && ! have vg; then
         echo "installing vg (static release binary) ..."
         # vg publishes one static linux x86_64 binary per release, named `vg`
         if curl -fsSL https://github.com/vgteam/vg/releases/latest/download/vg -o "$d/vg"; then
@@ -169,7 +205,7 @@ install_tools() {
         fi
     fi
 
-    if ! have gaftools; then
+    if want gaftools && ! have gaftools; then
         echo "installing gaftools (pip, into $OUTDIR/venv) ..."
         ( set -e
           python3 -m venv "$OUTDIR/venv" >/dev/null 2>&1
@@ -179,7 +215,7 @@ install_tools() {
           || echo "  gaftools: pip install failed (needs python >= 3.9)"
     fi
 
-    if ! have odgi; then
+    if want odgi && ! have odgi; then
         # odgi is a cmake build with heavy dependencies, so the package manager
         # is the only sane route here
         if have mamba; then
@@ -199,15 +235,17 @@ install_tools() {
 
 # what is here
 
-AVAIL=""
-for t in gfatools odgi vg gaftools; do
-    if have "$t"; then AVAIL="$AVAIL $t"; fi
+AVAIL="" ABSENT=""
+for t in $TOOLS; do
+    if present "$t"; then AVAIL="$AVAIL $t"; else ABSENT="$ABSENT $t"; fi
 done
-echo "akhal:  $AKHAL"
-echo "found: ${AVAIL:- none of gfatools/odgi/vg/gaftools}"
+want akhal && echo "akhal:  $AKHAL"
+echo "tools: ${AVAIL:- none of the requested tools are installed}"
+[ -n "$ABSENT" ] && echo "        asked for but missing:$ABSENT (their rows are marked skipped)"
 echo
 
-if [ ! -x "$AKHAL" ] && ! have "$AKHAL"; then
+# only fatal when akhal is one of the tools being measured
+if want akhal && ! present akhal; then
     echo "akhal not found at '$AKHAL' - build it with make, or set AKHAL in the config" >&2
     exit 2
 fi
@@ -249,12 +287,13 @@ echo
     fi
     echo "threads: $THREADS"
     echo "repeats: $REPEATS"
+    echo "tools:   $TOOLS"
     echo
-    echo "akhal:    $("$AKHAL" --version 2>&1 | head -1)"
-    have gfatools && echo "gfatools: $(gfatools version 2>&1 | head -1)"
-    have odgi     && echo "odgi:     $(odgi version 2>&1 | head -1)"
-    have vg       && echo "vg:       $(vg version 2>&1 | head -1)"
-    have gaftools && echo "gaftools: $(gaftools --version 2>&1 | head -1)"
+    want akhal    && echo "akhal:    $("$AKHAL" --version 2>&1 | head -1)"
+    want gfatools && have gfatools && echo "gfatools: $(gfatools version 2>&1 | head -1)"
+    want odgi     && have odgi     && echo "odgi:     $(odgi version 2>&1 | head -1)"
+    want vg       && have vg       && echo "vg:       $(vg version 2>&1 | head -1)"
+    want gaftools && have gaftools && echo "gaftools: $(gaftools --version 2>&1 | head -1)"
     echo
     echo "inputs:"
     for f in "$GFA" "$VG_FILE" "$GAF" "$GAF_B" "$READS"; do
@@ -283,6 +322,7 @@ row() {  # task tool status exit wall rss bytes note command
 }
 
 skip() {  # task tool reason
+    want "$2" || return 0
     [ -n "$ONLY" ] && ! printf '%s' "$1" | grep -Eq "$ONLY" && return 0
     row "$1" "$2" "skipped" "NA" "NA" "NA" "NA" "$3" ""
     printf '  %-10s %-9s %s\n' "$1" "$2" "skipped: $3"
@@ -302,6 +342,7 @@ now() {
 measure() {
     local task=$1 tool=$2 cmd=$3 note=${4:-} out=${5:-} accept=${6:-0}
 
+    want "$tool" || return 0
     if [ -n "$ONLY" ] && ! printf '%s' "$task" | grep -Eq "$ONLY"; then
         return 0
     fi
@@ -311,25 +352,31 @@ measure() {
     fi
 
     local log="$LOGS/$task.$tool.log"
+    local timelog="$LOGS/$task.$tool.time"
     local tf="$WORK/.time.$$"
     local walls="" rsss="" status="ok" rc=0
     : > "$log"
+    : > "$timelog"
 
-    local i
+    local i w r
     for i in $(seq 1 "$REPEATS"); do
+        printf '== run %s of %s: %s\n' "$i" "$REPEATS" "$cmd" >> "$timelog"
+        w="" r="NA"
         case "$TIME_MODE" in
             gnu)
                 "$TIME_BIN" -v -o "$tf" bash -c "$cmd" >>"$log" 2>>"$log"
                 rc=$?
-                walls="$walls$(awk -F': ' '/Elapsed \(wall clock\)/{print $NF}' "$tf" | to_seconds)"
-                rsss="$rsss$(awk '/Maximum resident set size/{printf "%.3f\n", $NF/1024}' "$tf")"
+                cat "$tf" >> "$timelog"
+                w=$(awk -F': ' '/Elapsed \(wall clock\)/{print $NF}' "$tf" | to_seconds)
+                r=$(awk '/Maximum resident set size/{printf "%.3f\n", $NF/1024}' "$tf")
                 ;;
             bsd)
                 "$TIME_BIN" -l bash -c "$cmd" >>"$log" 2>"$tf"
                 rc=$?
                 cat "$tf" >> "$log"
-                walls="$walls$(awk '/^ *real/{print $1}' "$tf" | tail -1)"
-                rsss="$rsss$(awk '/maximum resident set size/{printf "%.3f\n", $1/1048576}' "$tf")"
+                cat "$tf" >> "$timelog"
+                w=$(awk '/^ *real/{print $1}' "$tf" | tail -1)
+                r=$(awk '/maximum resident set size/{printf "%.3f\n", $1/1048576}' "$tf")
                 ;;
             *)
                 local t0 t1
@@ -337,10 +384,13 @@ measure() {
                 bash -c "$cmd" >>"$log" 2>>"$log"
                 rc=$?
                 t1=$(now)
-                walls="$walls$(awk -v a="$t0" -v b="$t1" 'BEGIN{printf "%.3f\n", b-a}')"
-                rsss="${rsss}NA"
+                w=$(awk -v a="$t0" -v b="$t1" 'BEGIN{printf "%.3f\n", b-a}')
+                printf 'no timer installed; wall clock taken from the shell: %s s\n' "$w" >> "$timelog"
                 ;;
         esac
+        printf 'exit status: %s\n\n' "$rc" >> "$timelog"
+        walls="$walls$w"
+        rsss="$rsss$r"
         if ! printf '%s' " $accept " | grep -q " $rc "; then
             status="failed"
             break
@@ -364,6 +414,16 @@ measure() {
     return 0
 }
 
+# measure a competitor's row
+try() {  # task tool cmd [note] [out] [accept]
+    want "$2" || return 0
+    if ! present "$2"; then
+        skip "$1" "$2" "not installed"
+        return 0
+    fi
+    measure "$@"
+}
+
 heading() {
     [ -n "$ONLY" ] && ! printf '%s' "$2" | grep -Eq "$ONLY" && return 0
     printf '\n%s\n' "$1"
@@ -378,20 +438,16 @@ heading() {
 OG="$WORK/graph.og"
 VGP="$WORK/graph.packed.vg"
 
-heading "== prep: the formats the other tools want ==" "prep"
-if [ -f "$GFA" ]; then
-    if have odgi; then
-        measure "prep" "odgi" "odgi build -g '$GFA' -o '$OG' -t $THREADS" "GFA -> .og, needed by every odgi row" "$OG"
+# the only rows here belong to odgi and vg, so with neither asked for the
+# section does not exist at all
+if want odgi || want vg; then
+    heading "== prep: the formats the other tools want ==" "prep"
+    if [ -f "$GFA" ]; then
+        try "prep" "odgi" "odgi build -g '$GFA' -o '$OG' -t $THREADS" "GFA -> .og, needed by every odgi row" "$OG"
+        try "prep" "vg"   "vg convert -g -p '$GFA' > '$VGP'" "GFA -> packed graph, needed by every vg row" "$VGP"
     else
-        skip "prep" "odgi" "odgi not installed"
+        skip "prep" "all" "no GFA at $GFA"
     fi
-    if have vg; then
-        measure "prep" "vg" "vg convert -g -p '$GFA' > '$VGP'" "GFA -> packed graph, needed by every vg row" "$VGP"
-    else
-        skip "prep" "vg" "vg not installed"
-    fi
-else
-    skip "prep" "all" "no GFA at $GFA"
 fi
 
 # odgi and vg read a GFA directly too, just slower; if the conversion failed,
@@ -404,9 +460,9 @@ fi
 heading "== stats: count nodes, edges and sequence ==" "stats"
 if [ -f "$GFA" ]; then
     measure "stats" "akhal"    "$AKHAL stats '$GFA'"
-    have gfatools && measure "stats" "gfatools" "gfatools stat '$GFA'" || skip "stats" "gfatools" "not installed"
-    have odgi     && measure "stats" "odgi"     "odgi stats -i '$OG' -S -t $THREADS" "on the prebuilt .og" || skip "stats" "odgi" "not installed"
-    have vg       && measure "stats" "vg"       "vg stats -z -l '$VGP'" "on the converted graph" || skip "stats" "vg" "not installed"
+    try "stats" "gfatools" "gfatools stat '$GFA'"
+    try "stats" "odgi"     "odgi stats -i '$OG' -S -t $THREADS" "on the prebuilt .og"
+    try "stats" "vg"       "vg stats -z -l '$VGP'" "on the converted graph"
 else
     skip "stats" "all" "no GFA at $GFA"
 fi
@@ -416,8 +472,8 @@ fi
 heading "== validate: is the graph well formed ==" "validate"
 if [ -f "$GFA" ]; then
     measure "validate" "akhal" "$AKHAL parse '$GFA'"
-    have odgi && measure "validate" "odgi" "odgi validate -i '$OG' -t $THREADS" "on the prebuilt .og" || skip "validate" "odgi" "not installed"
-    have vg   && measure "validate" "vg"   "vg validate '$VGP'" "on the converted graph" || skip "validate" "vg" "not installed"
+    try "validate" "odgi" "odgi validate -i '$OG' -t $THREADS" "on the prebuilt .og"
+    try "validate" "vg"   "vg validate '$VGP'" "on the converted graph"
     skip "validate" "gfatools" "no equivalent subcommand"
 else
     skip "validate" "all" "no GFA at $GFA"
@@ -430,8 +486,8 @@ SORTED="$WORK/akhal.sorted.gfa"
 heading "== sort: topological order, ids renumbered ==" "sort"
 if [ -f "$GFA" ]; then
     measure "sort" "akhal" "$AKHAL sort '$GFA' '$SORTED'" "" "$SORTED"
-    have odgi && measure "sort" "odgi" "odgi sort -i '$OG' -o '$WORK/odgi.sorted.og' -z -t $THREADS" "depth-first topological sort" "$WORK/odgi.sorted.og" || skip "sort" "odgi" "not installed"
-    have vg   && measure "sort" "vg"   "vg ids -s '$VGP' > '$WORK/vg.sorted.vg'" "generalized topological order" "$WORK/vg.sorted.vg" || skip "sort" "vg" "not installed"
+    try "sort" "odgi" "odgi sort -i '$OG' -o '$WORK/odgi.sorted.og' -z -t $THREADS" "depth-first topological sort" "$WORK/odgi.sorted.og"
+    try "sort" "vg"   "vg ids -s '$VGP' > '$WORK/vg.sorted.vg'" "generalized topological order" "$WORK/vg.sorted.vg"
     skip "sort" "gfatools" "no equivalent subcommand"
 else
     skip "sort" "all" "no GFA at $GFA"
@@ -442,8 +498,8 @@ fi
 heading "== compact: fold non-branching runs into one node ==" "compact"
 if [ -f "$GFA" ]; then
     measure "compact" "akhal" "$AKHAL compact '$GFA' '$WORK/akhal.compact.gfa'" "" "$WORK/akhal.compact.gfa"
-    have odgi && measure "compact" "odgi" "odgi unchop -i '$OG' -o '$WORK/odgi.unchop.og' -t $THREADS" "unchop" "$WORK/odgi.unchop.og" || skip "compact" "odgi" "not installed"
-    have vg   && measure "compact" "vg"   "vg mod -u '$VGP' > '$WORK/vg.unchop.vg'" "mod -u" "$WORK/vg.unchop.vg" || skip "compact" "vg" "not installed"
+    try "compact" "odgi" "odgi unchop -i '$OG' -o '$WORK/odgi.unchop.og' -t $THREADS" "unchop" "$WORK/odgi.unchop.og"
+    try "compact" "vg"   "vg mod -u '$VGP' > '$WORK/vg.unchop.vg'" "mod -u" "$WORK/vg.unchop.vg"
     skip "compact" "gfatools" "asm -u builds unitigs, which is a different operation"
 else
     skip "compact" "all" "no GFA at $GFA"
@@ -453,10 +509,10 @@ fi
 
 heading "== gfa2fa: write every path as FASTA ==" "gfa2fa"
 if [ -f "$GFA" ]; then
-    measure "gfa2fa" "akhal"    "$AKHAL extract fa '$GFA' '$WORK/akhal.paths.fa'" "fragmented P lines stitched first" "$WORK/akhal.paths.fa"
-    have gfatools && measure "gfa2fa" "gfatools" "gfatools gfa2fa -s '$GFA' > '$WORK/gfatools.paths.fa'" "-s: stable sequences" "$WORK/gfatools.paths.fa" || skip "gfa2fa" "gfatools" "not installed"
-    have odgi     && measure "gfa2fa" "odgi"     "odgi paths -i '$OG' -f -t $THREADS > '$WORK/odgi.paths.fa'" "on the prebuilt .og" "$WORK/odgi.paths.fa" || skip "gfa2fa" "odgi" "not installed"
-    have vg       && measure "gfa2fa" "vg"       "vg paths -x '$VGP' -F > '$WORK/vg.paths.fa'" "on the converted graph" "$WORK/vg.paths.fa" || skip "gfa2fa" "vg" "not installed"
+    measure "gfa2fa" "akhal"    "$AKHAL extract fa '$GFA' '$WORK/akhal.paths.fa'" "one record per P line" "$WORK/akhal.paths.fa"
+    try "gfa2fa" "gfatools" "gfatools gfa2fa -s '$GFA' > '$WORK/gfatools.paths.fa'" "-s: stable sequences" "$WORK/gfatools.paths.fa"
+    try "gfa2fa" "odgi"     "odgi paths -i '$OG' -f -t $THREADS > '$WORK/odgi.paths.fa'" "on the prebuilt .og" "$WORK/odgi.paths.fa"
+    try "gfa2fa" "vg"       "vg paths -x '$VGP' -F > '$WORK/vg.paths.fa'" "on the converted graph" "$WORK/vg.paths.fa"
 else
     skip "gfa2fa" "all" "no GFA at $GFA"
 fi
@@ -466,7 +522,7 @@ fi
 heading "== vcf: variation off the reference backbone ==" "vcf"
 if [ -f "$GFA" ] && [ -n "$REF" ]; then
     measure "vcf" "akhal" "$AKHAL extract vcf '$GFA' '$WORK/akhal.vcf' --ref '$REF'" "backbone: $REF" "$WORK/akhal.vcf"
-    have vg && measure "vcf" "vg" "vg deconstruct -p '$REF' -t $THREADS '$VGP' > '$WORK/vg.vcf'" "deconstruct against $REF" "$WORK/vg.vcf" || skip "vcf" "vg" "not installed"
+    try "vcf" "vg" "vg deconstruct -p '$REF' -t $THREADS '$VGP' > '$WORK/vg.vcf'" "deconstruct against $REF" "$WORK/vg.vcf"
     skip "vcf" "odgi" "no equivalent subcommand"
     skip "vcf" "gfatools" "no equivalent subcommand"
 else
@@ -478,8 +534,8 @@ fi
 heading "== vg2gfa: vg's native format to GFA ==" "vg2gfa"
 if [ -f "$VG_FILE" ]; then
     measure "vg2gfa" "akhal" "$AKHAL vg2gfa '$VG_FILE' '$WORK/akhal.fromvg.gfa'" "" "$WORK/akhal.fromvg.gfa"
-    have vg && measure "vg2gfa" "vg" "vg convert -f '$VG_FILE' > '$WORK/vg.fromvg.gfa'" "" "$WORK/vg.fromvg.gfa" || skip "vg2gfa" "vg" "not installed"
-    have odgi && measure "vg2gfa" "odgi" "odgi view -i '$OG' -g > '$WORK/odgi.view.gfa'" "og -> GFA; odgi cannot read vg's protobuf, so this is the nearest operation" "$WORK/odgi.view.gfa" || skip "vg2gfa" "odgi" "not installed"
+    try "vg2gfa" "vg" "vg convert -f '$VG_FILE' > '$WORK/vg.fromvg.gfa'" "" "$WORK/vg.fromvg.gfa"
+    try "vg2gfa" "odgi" "odgi view -i '$OG' -g > '$WORK/odgi.view.gfa'" "og -> GFA; odgi cannot read vg's protobuf, so this is the nearest operation" "$WORK/odgi.view.gfa"
 else
     skip "vg2gfa" "all" "no .vg at $VG_FILE"
 fi
@@ -493,14 +549,10 @@ if [ -f "$GFA" ]; then
     else
         measure "gfa2rgfa" "akhal" "$AKHAL gfa2rgfa '$GFA' '$WORK/akhal.rgfa'" "" "$WORK/akhal.rgfa"
     fi
-    if have gaftools; then
-        if [ -n "$REF" ]; then
-            measure "gfa2rgfa" "gaftools" "gaftools gfa2rgfa '$GFA' --reference-name '$REF' --output '$WORK/gaftools.rgfa'" "backbone: $REF" "$WORK/gaftools.rgfa"
-        else
-            measure "gfa2rgfa" "gaftools" "gaftools gfa2rgfa '$GFA' --output '$WORK/gaftools.rgfa'" "" "$WORK/gaftools.rgfa"
-        fi
+    if [ -n "$REF" ]; then
+        try "gfa2rgfa" "gaftools" "gaftools gfa2rgfa '$GFA' --reference-name '$REF' --output '$WORK/gaftools.rgfa'" "backbone: $REF" "$WORK/gaftools.rgfa"
     else
-        skip "gfa2rgfa" "gaftools" "not installed"
+        try "gfa2rgfa" "gaftools" "gaftools gfa2rgfa '$GFA' --output '$WORK/gaftools.rgfa'" "" "$WORK/gaftools.rgfa"
     fi
 else
     skip "gfa2rgfa" "all" "no GFA at $GFA"
@@ -511,7 +563,7 @@ fi
 heading "== gfa2dot: the graph as Graphviz ==" "gfa2dot"
 if [ -f "$GFA" ]; then
     measure "gfa2dot" "akhal" "$AKHAL gfa2dot '$GFA' '$WORK/akhal.dot'" "" "$WORK/akhal.dot"
-    have vg && measure "gfa2dot" "vg" "vg view -d '$VGP' > '$WORK/vg.dot'" "on the converted graph" "$WORK/vg.dot" || skip "gfa2dot" "vg" "not installed"
+    try "gfa2dot" "vg" "vg view -d '$VGP' > '$WORK/vg.dot'" "on the converted graph" "$WORK/vg.dot"
 else
     skip "gfa2dot" "all" "no GFA at $GFA"
 fi
@@ -521,7 +573,7 @@ fi
 heading "== gaf2sam: alignments as SAM ==" "gaf2sam"
 if [ -f "$GFA" ] && [ -f "$GAF" ] && [ -f "$READS" ]; then
     measure "gaf2sam" "akhal" "$AKHAL gaf2sam '$GFA' '$GAF' '$READS' '$WORK/akhal.sam'" "" "$WORK/akhal.sam"
-    have vg && measure "gaf2sam" "vg" "vg surject -x '$VGP' -G -s --read-length long -t $THREADS '$GAF' > '$WORK/vg.sam'" "surject onto reference paths - related, not identical" "$WORK/vg.sam" || skip "gaf2sam" "vg" "not installed"
+    try "gaf2sam" "vg" "vg surject -x '$VGP' -G -s --read-length long -t $THREADS '$GAF' > '$WORK/vg.sam'" "surject onto reference paths - related, not identical" "$WORK/vg.sam"
 else
     skip "gaf2sam" "all" "needs the graph, the GAF and the reads FASTA ($READS)"
 fi
@@ -535,16 +587,16 @@ fi
 heading "== gafsort: putting a GAF in order ==" "gafsort"
 if [ -f "$GAF" ]; then
     measure "gafsort" "akhal" "$AKHAL compare gaf '$GAF' '$GAF'" "sorts both files, then compares them" "" "0 1"
-    if have gaftools; then
+    if want gaftools && have gaftools; then
         ORDERED="$WORK/ordered"
-        measure "gafsort" "gaftools-prep" "gaftools order_gfa --outdir '$ORDERED' '$GFA'" "adds the BO/NO tags gaftools sort requires" ""
+        try "gafsort" "gaftools-prep" "gaftools order_gfa --outdir '$ORDERED' '$GFA'" "adds the BO/NO tags gaftools sort requires" ""
         ORDERED_GFA=$(ls "$ORDERED"/*.gfa 2>/dev/null | head -1)
         if [ -n "${ORDERED_GFA:-}" ]; then
-            measure "gafsort" "gaftools" "gaftools sort '$GAF' '$ORDERED_GFA' --outgaf '$WORK/gaftools.sorted.gaf'" "needs the ordered GFA above" "$WORK/gaftools.sorted.gaf"
+            try "gafsort" "gaftools" "gaftools sort '$GAF' '$ORDERED_GFA' --outgaf '$WORK/gaftools.sorted.gaf'" "needs the ordered GFA above" "$WORK/gaftools.sorted.gaf"
         else
             skip "gafsort" "gaftools" "order_gfa produced no GFA to sort against"
         fi
-        measure "gafstat" "gaftools" "gaftools stat '$GAF' -o '$WORK/gaftools.stat.txt'" "GAF parsing reference point; akhal has no gaf stats command" "$WORK/gaftools.stat.txt"
+        try "gafstat" "gaftools" "gaftools stat '$GAF' -o '$WORK/gaftools.stat.txt'" "GAF parsing reference point; akhal has no gaf stats command" "$WORK/gaftools.stat.txt"
     else
         skip "gafsort" "gaftools" "not installed"
     fi
@@ -559,46 +611,51 @@ fi
 # a graph and its own sort output must come out identical, and the exit status
 # says whether they did
 
-heading "== akhal only: no equivalent in the other tools ==" "compare|rank|annotate"
+# nothing else here compares two graphs or two alignment sets, so with akhal
+# left out there is no section at all
+if want akhal; then
+    heading "== akhal only: no equivalent in the other tools ==" "compare|rank|annotate"
 
-# the comparison needs the sorted graph, which --only may have skipped past;
-# make it here rather than dropping the task, untimed since the sort has
-# already been measured on its own
-if [ ! -s "$SORTED" ] && [ -f "$GFA" ] && [ "$DRY_RUN" = 0 ]; then
-    "$AKHAL" sort "$GFA" "$SORTED" >/dev/null 2>&1
-fi
-
-if [ -f "$GFA" ] && [ -s "$SORTED" ]; then
-    measure "compare" "akhal" "$AKHAL compare gfa '$GFA' '$SORTED'" "the graph against its own sort output: must be identical" "" "0 1"
-    st=$(awk -F'\t' '$1=="compare" && $2=="akhal"{print $4}' "$RESULTS" | tail -1)
-    case "$st" in
-        0) echo "             correctness: PASS - sorting renumbered every node and the graph still compares identical" ;;
-        1) echo "             correctness: FAIL - the sorted graph differs from the original, see $LOGS/compare.akhal.log" ;;
-        *) echo "             correctness: could not be established (exit $st)" ;;
-    esac
-else
-    skip "compare" "akhal" "needs the GFA and a successful sort"
-fi
-
-if [ -f "$GAF" ] && [ -f "$GAF_B" ]; then
-    measure "comparegaf" "akhal" "$AKHAL compare gaf '$GAF' '$GAF_B'" "${GAF_B_NOTE:-two different alignment sets}" "" "0 1"
-    st=$(awk -F'\t' '$1=="comparegaf" && $2=="akhal"{print $4}' "$RESULTS" | tail -1)
-    case "$st" in
-        0) echo "             the two GAF files place every read the same way" ;;
-        1) echo "             the two GAF files differ - the counts are in $LOGS/comparegaf.akhal.log" ;;
-    esac
-else
-    skip "comparegaf" "akhal" "needs two GAF files"
-fi
-
-if [ -f "$GFA" ]; then
-    if [ -n "$REF" ]; then
-        measure "rank" "akhal" "$AKHAL rank '$GFA' '$WORK/akhal.ranked.gfa' --ref '$REF'" "backbone: $REF" "$WORK/akhal.ranked.gfa"
-    else
-        measure "rank" "akhal" "$AKHAL rank '$GFA' '$WORK/akhal.ranked.gfa'" "" "$WORK/akhal.ranked.gfa"
+    # the comparison needs the sorted graph, which --only may have skipped past;
+    # make it here rather than dropping the task, untimed since the sort has
+    # already been measured on its own
+    if [ ! -s "$SORTED" ] && [ -f "$GFA" ] && [ "$DRY_RUN" = 0 ]; then
+        "$AKHAL" sort "$GFA" "$SORTED" >/dev/null 2>&1
     fi
-    measure "annotate" "akhal" "$AKHAL annotate '$GFA' '$WORK/akhal.annot'" "" "$WORK/akhal.annot"
-    [ -s "$WORK/akhal.annot" ] && measure "annotget" "akhal" "$AKHAL annotget '$WORK/akhal.annot' > /dev/null" "dump every node's annotation" ""
+
+    if [ -f "$GFA" ] && [ -s "$SORTED" ]; then
+        measure "compare" "akhal" "$AKHAL compare gfa '$GFA' '$SORTED'" "the graph against its own sort output: must be identical" "" "0 1"
+        st=$(awk -F'\t' '$1=="compare" && $2=="akhal"{print $4}' "$RESULTS" | tail -1)
+        case "$st" in
+            "") ;;   # --only filtered the row out, so there is nothing to judge
+            0) echo "             correctness: PASS - sorting renumbered every node and the graph still compares identical" ;;
+            1) echo "             correctness: FAIL - the sorted graph differs from the original, see $LOGS/compare.akhal.log" ;;
+            *) echo "             correctness: could not be established (exit $st)" ;;
+        esac
+    else
+        skip "compare" "akhal" "needs the GFA and a successful sort"
+    fi
+
+    if [ -f "$GAF" ] && [ -f "$GAF_B" ]; then
+        measure "comparegaf" "akhal" "$AKHAL compare gaf '$GAF' '$GAF_B'" "${GAF_B_NOTE:-two different alignment sets}" "" "0 1"
+        st=$(awk -F'\t' '$1=="comparegaf" && $2=="akhal"{print $4}' "$RESULTS" | tail -1)
+        case "$st" in
+            0) echo "             the two GAF files place every read the same way" ;;
+            1) echo "             the two GAF files differ - the counts are in $LOGS/comparegaf.akhal.log" ;;
+        esac
+    else
+        skip "comparegaf" "akhal" "needs two GAF files"
+    fi
+
+    if [ -f "$GFA" ]; then
+        if [ -n "$REF" ]; then
+            measure "rank" "akhal" "$AKHAL rank '$GFA' '$WORK/akhal.ranked.gfa' --ref '$REF'" "backbone: $REF" "$WORK/akhal.ranked.gfa"
+        else
+            measure "rank" "akhal" "$AKHAL rank '$GFA' '$WORK/akhal.ranked.gfa'" "" "$WORK/akhal.ranked.gfa"
+        fi
+        measure "annotate" "akhal" "$AKHAL annotate '$GFA' '$WORK/akhal.annot'" "" "$WORK/akhal.annot"
+        [ -s "$WORK/akhal.annot" ] && measure "annotget" "akhal" "$AKHAL annotget '$WORK/akhal.annot' > /dev/null" "dump every node's annotation" ""
+    fi
 fi
 
 # the summary
@@ -660,7 +717,7 @@ fi
 
 printf 'total: %d s of benchmarking\n\n' "$(( $(date +%s) - STARTED ))"
 echo "results: $RESULTS"
-echo "logs:    $LOGS/"
+echo "logs:    $LOGS/ (*.log is each run's output, *.time the timer's own report)"
 echo "machine: $ENVFILE"
 
 if [ "$KEEP" = 0 ]; then
