@@ -7,18 +7,20 @@ allocates, nothing here logs, and nothing here can fail: every function either
 returns a value or writes through a buffer you already own. That is deliberate,
 so these can be called from the middle of a parser without an error path.
 
-Three groups: a pair of DNA routines used wherever a reverse strand has to be
-materialized, two string helpers, and the running-distribution accumulator
-both the graph and the alignment `stats` report with.
+Four groups: a pair of DNA routines used wherever a reverse strand has to be
+materialized, two string helpers, number formatting with thousands separators,
+and the running-distribution accumulator both the graph and the alignment
+`stats` report with.
 
 ```c
-#include "akhal/util.h"   // ak_complement, ak_revcomp, ak_ends_with, ak_str2int, ak_dist_t
+#include "akhal/util.h"   // ak_complement, ak_revcomp, ak_ends_with, ak_str2int, ak_format_*, ak_dist_t
 ```
 
 ## Contents
 
 - [Sequences](#sequences) - [`ak_complement`](#ak_complement), [`ak_revcomp`](#ak_revcomp)
 - [Strings](#strings) - [`ak_ends_with`](#ak_ends_with), [`ak_str2int`](#ak_str2int)
+- [Number formatting](#number-formatting) - [`ak_format_u64`](#ak_format_u64), [`ak_format_i64`](#ak_format_i64), [`ak_format_f64`](#ak_format_f64)
 - [Summary statistics](#summary-statistics) - [`ak_dist_t`](#ak_dist_t), [`ak_dist_add`](#ak_dist_add), [`ak_dist_variance`](#ak_dist_variance), [`ak_dist_sd`](#ak_dist_sd)
 
 ## Sequences
@@ -126,6 +128,47 @@ if (ak_str2int("120", &wrap_len))
 if (ak_str2int("120x", &wrap_len)) return 1;
 if (ak_str2int("", &wrap_len))     return 1;
 if (ak_str2int("99999999999999999999", &wrap_len)) return 1;
+```
+
+## Number formatting
+
+Thousands separators for output a person reads: `543020649` is a figure,
+`543,020,649` is a number. All three write into a buffer the caller owns and
+return it, so a call can sit inline in a `printf()` argument list; `AK_NUM_LEN`
+(48) is enough for any value. A single buffer serves one call at a time - two
+formatted numbers in the same `printf()` need two buffers, since the arguments
+are all evaluated before anything is printed.
+
+### `ak_format_u64`
+
+```c
+char *ak_format_u64(char *buf, uint64_t v);
+```
+
+`543020649` -> `543,020,649`; `18446744073709551615` -> `18,446,744,073,709,551,615`.
+
+### `ak_format_i64`
+
+```c
+char *ak_format_i64(char *buf, int64_t v);
+```
+
+The same with a sign: `-1234567` -> `-1,234,567`. `INT64_MIN` is handled.
+
+### `ak_format_f64`
+
+```c
+char *ak_format_f64(char *buf, double v, int prec);
+```
+
+Commas in the integer part, `prec` digits after the point (0..20), rounded the
+way `printf("%.*f")` rounds: `12345.678` at 2 -> `12,345.68`, `999.999` at 2
+-> `1,000.00`. NaN and infinities come out as `printf()` writes them.
+
+```c
+char b[AK_NUM_LEN], b2[AK_NUM_LEN];
+printf("%s segments, %s bp\n", ak_format_i64(b, st.n_seg), ak_format_u64(b2, st.n_bp));
+printf("mean length %s\n", ak_format_f64(b, st.seg_mean, 2));
 ```
 
 ## Summary statistics

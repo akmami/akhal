@@ -43,6 +43,40 @@ int ak_ends_with(const char *str, const char *suffix);
 int ak_str2int(const char *str, int *out);
 
 /**
+ * Number formatting with thousands separators, for readable output. Each
+ * writes into a buffer the caller owns and returns it, so the call can sit
+ * inline in a printf() argument list. AK_NUM_LEN is enough for any value.
+ */
+#define AK_NUM_LEN 48
+
+/**
+ * Format an unsigned integer with commas: 543020649 -> "543,020,649"
+ * @param buf Buffer of at least AK_NUM_LEN bytes
+ * @param v Value
+ * @return buf
+ */
+char *ak_format_u64(char *buf, uint64_t v);
+
+/**
+ * Format a signed integer with commas: -1234567 -> "-1,234,567"
+ * @param buf Buffer of at least AK_NUM_LEN bytes
+ * @param v Value
+ * @return buf
+ */
+char *ak_format_i64(char *buf, int64_t v);
+
+/**
+ * Format a real with commas in the integer part and a fixed number of
+ * decimals: 12345.678 with prec 2 -> "12,345.68". NaN and infinities are
+ * written as printf() would
+ * @param buf Buffer of at least AK_NUM_LEN bytes
+ * @param v Value
+ * @param prec Digits after the point, 0..20
+ * @return buf
+ */
+char *ak_format_f64(char *buf, double v, int prec);
+
+/**
  * Running summary of a distribution: count, mean, population variance and
  * extremes, accumulated one value at a time with Welford's update so nothing
  * has to be collected into an array first. Zero-initialize and feed values

@@ -202,6 +202,7 @@ int gfa_read_stats(const char *fn, gfa_stat_t *st, int flags) {
     ak_dist_t sl = {0}, ov = {0};
     ids_t segs = IDS_INIT, src = IDS_INIT, dst = IDS_INIT, steps = IDS_INIT;
     int64_t n_seg = 0, n_link = 0, n_path = 0, sr0 = 0;
+    uint64_t n_bp = 0;
     int has_sr = 0, rc = AK_OK;
     uint64_t max_id = 0;
 
@@ -218,6 +219,7 @@ int gfa_read_stats(const char *fn, gfa_stat_t *st, int flags) {
             const char *seq = p;
             while (*p && *p != '\t') p++;
             n_seg++;
+            n_bp += (uint64_t)(p - seq);
             ak_dist_add(&sl, (double)(p - seq));
 
             int32_t r = sr_tag(ks.s);
@@ -297,6 +299,7 @@ int gfa_read_stats(const char *fn, gfa_stat_t *st, int flags) {
     st->n_seg  = n_seg;
     st->n_link = n_link;
     st->n_path = n_path;
+    st->n_bp   = n_bp;
     st->has_sr = has_sr;
     st->seg_mean = sl.mean;
     st->seg_sd   = ak_dist_sd(&sl);

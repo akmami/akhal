@@ -1,6 +1,7 @@
 #include "akhal/util.h"
 
 #include <errno.h>
+#include <stdio.h>
 #include <limits.h>
 #include <math.h>
 #include <stdlib.h>
@@ -51,6 +52,54 @@ int ak_str2int(const char *str, int *out) {
 
     *out = (int)v;
     return 1;
+}
+
+// commas every three digits, written right to left from a small scratch of
+// plain digits; the sign, if any, goes on first
+static char *format_digits(char *buf, const char *digits, size_t n, int neg) {
+    char *o = buf;
+    if (neg) *o++ = '-';
+    for (size_t i = 0; i < n; i++) {
+        if (i && (n - i) % 3 == 0) *o++ = ',';
+        *o++ = digits[i];
+    }
+    *o = '\0';
+    return buf;
+}
+
+char *ak_format_u64(char *buf, uint64_t v) {
+    char d[24];
+    int n = snprintf(d, sizeof d, "%llu", (unsigned long long)v);
+    return format_digits(buf, d, (size_t)n, 0);
+}
+
+char *ak_format_i64(char *buf, int64_t v) {
+    // negate as unsigned so INT64_MIN does not overflow
+    uint64_t u = v < 0 ? (uint64_t)0 - (uint64_t)v : (uint64_t)v;
+    char d[24];
+    int n = snprintf(d, sizeof d, "%llu", (unsigned long long)u);
+    return format_digits(buf, d, (size_t)n, v < 0);
+}
+
+char *ak_format_f64(char *buf, double v, int prec) {
+    if (prec < 0) prec = 0;
+    if (prec > 20) prec = 20;
+    if (isnan(v) || isinf(v)) {
+        snprintf(buf, AK_NUM_LEN, "%f", v);
+        return buf;
+    }
+    // let printf do the rounding, then re-emit the integer part with commas
+    // and copy the fraction through untouched
+    char s[64];
+    snprintf(s, sizeof s, "%.*f", prec, v);
+    const char *p = s;
+    int neg = (*p == '-');
+    if (neg) p++;
+    const char *dot = strchr(p, '.');
+    size_t n = dot ? (size_t)(dot - p) : strlen(p);
+    format_digits(buf, p, n, neg);
+    if (dot) strcat(buf, dot);
+    return buf;
 }
 
 // Welford's online update: the mean and the sum of squared deviations are

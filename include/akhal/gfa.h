@@ -178,6 +178,7 @@ typedef struct {
     int64_t  n_seg;          // S lines
     int64_t  n_link;         // L lines
     int64_t  n_path;         // P lines
+    uint64_t n_bp;           // total sequence length: the sum of every segment's length
     int64_t  n_rank0;        // segments at rank 0; -1 when not derived
     int      has_sr;         // whether those SR tags were the file's own
 

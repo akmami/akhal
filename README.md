@@ -80,6 +80,7 @@ dwarfs the graph itself; a file with its own `SR` tags answers the rank
 question for free either way.
 
 - **Segment count**: Number of segments in the graph.
+- **Total sequence length**: Sum of all segment lengths, in bp.
 - **Rank 0 segment count**: Segments at rank 0, from the file's `SR` tags when it has them, otherwise derived from the P lines under `--ranks` (reported as n/a without it).
 - **Segment avg length**: Average segment length.
 - **Segment std length**: Standard deviation of segment lengths.

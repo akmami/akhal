@@ -530,6 +530,7 @@ Returns `AK_OK`, or a negative `AK_E*` code with the reason logged.
 | Field | Type | Notes |
 | --- | --- | --- |
 | `n_seg`, `n_link`, `n_path` | `int64_t` | lines of each kind |
+| `n_bp` | `uint64_t` | total sequence length, the sum of every segment's length |
 | `n_rank0` | `int64_t` | segments at rank 0; `-1` when not derived |
 | `has_sr` | `int` | whether the file carried its own `SR` tags |
 | `seg_mean`, `seg_sd`, `seg_min`, `seg_max` | `double`, `uint64_t` | segment length |

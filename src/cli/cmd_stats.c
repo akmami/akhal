@@ -30,29 +30,31 @@ static int stats_gfa(const char *fn, int flags) {
         ak_log(AK_LOG_WARN, "stats", "%lld id(s) named by an L or P line are defined by no S line", (long long)st.n_undefined);
     }
 
-    printf("Segment count: %lld\n", (long long)st.n_seg);
+    char b[AK_NUM_LEN];
+    printf("Segment count: %s\n", ak_format_i64(b, st.n_seg));
+    printf("Total sequence length: %s\n", ak_format_u64(b, st.n_bp));
     if (st.n_rank0 >= 0) {
-        printf("Rank 0 segment count: %lld\n", (long long)st.n_rank0);
-        printf("Rank 0< segment count: %lld\n", (long long)(st.n_seg - st.n_rank0));
+        printf("Rank 0 segment count: %s\n", ak_format_i64(b, st.n_rank0));
+        printf("Rank 0< segment count: %s\n", ak_format_i64(b, st.n_seg - st.n_rank0));
     } else {
         printf("Rank 0 segment count: n/a (no SR tags; pass --ranks to derive from P lines)\n");
     }
-    printf("Segment avg length: %f\n", st.seg_mean);
-    printf("Segment std length: %f\n", st.seg_sd);
-    printf("Segment min. length %llu\n", (unsigned long long)st.seg_min);
-    printf("Segment max. length %llu\n", (unsigned long long)st.seg_max);
-    printf("Link count: %lld\n", (long long)st.n_link);
-    printf("Link overlapping avg length: %f\n", st.ov_mean);
-    printf("Link overlapping std length: %f\n", st.ov_sd);
+    printf("Segment avg length: %s\n", ak_format_f64(b, st.seg_mean, 6));
+    printf("Segment std length: %s\n", ak_format_f64(b, st.seg_sd, 6));
+    printf("Segment min. length %s\n", ak_format_u64(b, st.seg_min));
+    printf("Segment max. length %s\n", ak_format_u64(b, st.seg_max));
+    printf("Link count: %s\n", ak_format_i64(b, st.n_link));
+    printf("Link overlapping avg length: %s\n", ak_format_f64(b, st.ov_mean, 6));
+    printf("Link overlapping std length: %s\n", ak_format_f64(b, st.ov_sd, 6));
     if (flags & GFA_STAT_DEGREES) {
-        printf("In degree avg: %f\n", st.in_mean);
-        printf("In degree std: %f\n", st.in_sd);
-        printf("Minimum in degree: %d\n", st.min_in);
-        printf("Maximum in degree: %d\n", st.max_in);
-        printf("Out degree avg: %f\n", st.out_mean);
-        printf("Out degree std: %f\n", st.out_sd);
-        printf("Minimum out degree: %d\n", st.min_out);
-        printf("Maximum out degree: %d\n", st.max_out);
+        printf("In degree avg: %s\n", ak_format_f64(b, st.in_mean, 6));
+        printf("In degree std: %s\n", ak_format_f64(b, st.in_sd, 6));
+        printf("Minimum in degree: %s\n", ak_format_i64(b, st.min_in));
+        printf("Maximum in degree: %s\n", ak_format_i64(b, st.max_in));
+        printf("Out degree avg: %s\n", ak_format_f64(b, st.out_mean, 6));
+        printf("Out degree std: %s\n", ak_format_f64(b, st.out_sd, 6));
+        printf("Minimum out degree: %s\n", ak_format_i64(b, st.min_out));
+        printf("Maximum out degree: %s\n", ak_format_i64(b, st.max_out));
     }
     return 0;
 }
@@ -67,14 +69,15 @@ static int stats_gfa(const char *fn, int flags) {
 // standard deviation as reals, and the extremes in the unit they were measured
 // in, so counts and lengths do not come out with a fractional part
 static void dist_print(const char *label, const ak_dist_t *d, int integral) {
-    printf("%s avg: %f\n", label, d->mean);
-    printf("%s std: %f\n", label, ak_dist_sd(d));
+    char b[AK_NUM_LEN];
+    printf("%s avg: %s\n", label, ak_format_f64(b, d->mean, 6));
+    printf("%s std: %s\n", label, ak_format_f64(b, ak_dist_sd(d), 6));
     if (integral) {
-        printf("%s min.: %lld\n", label, (long long)d->min);
-        printf("%s max.: %lld\n", label, (long long)d->max);
+        printf("%s min.: %s\n", label, ak_format_i64(b, (int64_t)d->min));
+        printf("%s max.: %s\n", label, ak_format_i64(b, (int64_t)d->max));
     } else {
-        printf("%s min.: %f\n", label, d->min);
-        printf("%s max.: %f\n", label, d->max);
+        printf("%s min.: %s\n", label, ak_format_f64(b, d->min, 6));
+        printf("%s max.: %s\n", label, ak_format_f64(b, d->max, 6));
     }
 }
 
@@ -297,13 +300,14 @@ static int stats_gaf(const char *fn, int want_cigar) {
         avg_best_ratio /= (double)reads.n;
     }
 
-    printf("Total alignments: %lld\n", (long long)n_aln);
-    printf("  Primary: %lld\n", (long long)n_primary);
-    printf("  Secondary: %lld\n", (long long)n_secondary);
-    printf("Reads with at least one alignment: %lld\n", (long long)reads.n);
-    printf("Total aligned bases: %lld\n", (long long)aligned_bases);
-    printf("Average highest sequence identity: %f\n", avg_best_ident);
-    printf("Average highest map ratio: %f\n", avg_best_ratio);
+    char b[AK_NUM_LEN];
+    printf("Total alignments: %s\n", ak_format_i64(b, n_aln));
+    printf("  Primary: %s\n", ak_format_i64(b, n_primary));
+    printf("  Secondary: %s\n", ak_format_i64(b, n_secondary));
+    printf("Reads with at least one alignment: %s\n", ak_format_i64(b, reads.n));
+    printf("Total aligned bases: %s\n", ak_format_i64(b, aligned_bases));
+    printf("Average highest sequence identity: %s\n", ak_format_f64(b, avg_best_ident, 6));
+    printf("Average highest map ratio: %s\n", ak_format_f64(b, avg_best_ratio, 6));
     dist_print("Mapping quality", &d_mapq, 1);
     dist_print("Sequence identity", &d_ident, 0);
     dist_print("Map ratio", &d_ratio, 0);
@@ -312,12 +316,13 @@ static int stats_gaf(const char *fn, int want_cigar) {
     dist_print("Path node count", &d_nodes, 1);
 
     if (want_cigar) {
+        char b2[AK_NUM_LEN];
         printf("Cigar string statistics:\n");
-        printf("  Total deletion regions: %lld (%lld >=%dbps)\n", (long long)cs.n_del, (long long)cs.n_del_large, STATS_LARGE_RUN);
-        printf("  Total insertion regions: %lld (%lld >=%dbps)\n", (long long)cs.n_ins, (long long)cs.n_ins_large, STATS_LARGE_RUN);
-        printf("  Total substitution regions: %lld (%lld >=%dbps)\n", (long long)cs.n_mis, (long long)cs.n_mis_large, STATS_LARGE_RUN);
-        printf("  Total match regions: %lld (%lld >=%dbps)\n", (long long)cs.n_mat, (long long)cs.n_mat_large, STATS_LARGE_RUN);
-        printf("  Total perfect alignments (exact match): %lld\n", (long long)cs.n_perfect);
+        printf("  Total deletion regions: %s (%s >=%dbps)\n", ak_format_i64(b, cs.n_del), ak_format_i64(b2, cs.n_del_large), STATS_LARGE_RUN);
+        printf("  Total insertion regions: %s (%s >=%dbps)\n", ak_format_i64(b, cs.n_ins), ak_format_i64(b2, cs.n_ins_large), STATS_LARGE_RUN);
+        printf("  Total substitution regions: %s (%s >=%dbps)\n", ak_format_i64(b, cs.n_mis), ak_format_i64(b2, cs.n_mis_large), STATS_LARGE_RUN);
+        printf("  Total match regions: %s (%s >=%dbps)\n", ak_format_i64(b, cs.n_mat), ak_format_i64(b2, cs.n_mat_large), STATS_LARGE_RUN);
+        printf("  Total perfect alignments (exact match): %s\n", ak_format_i64(b, cs.n_perfect));
     }
 
     printf("\n* Figures cover primary alignments with a mapping quality above 0\n");
