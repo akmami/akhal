@@ -18,50 +18,50 @@ KHASHL_MAP_INIT(KH_LOCAL, idxmap_t, idxmap, uint64_t, uint32_t, kh_hash_uint64, 
 
 static int reserve_seg(gfa_t *g) {
     if (g->n_seg < g->m_seg) return AK_OK;
-    int32_t m = g->m_seg ? g->m_seg << 1 : 1024;
-    gfa_seg_t *p = (gfa_seg_t *)realloc(g->seg, (size_t)m * sizeof(*p));
-    if (!p) return AK_ENOMEM;
-    g->seg = p;
-    g->m_seg = m;
+    int32_t m_seg = g->m_seg ? g->m_seg << 1 : 1024;
+    gfa_seg_t *seg = (gfa_seg_t *)realloc(g->seg, (size_t)m_seg * sizeof(gfa_seg_t));
+    if (!seg) return AK_ENOMEM;
+    g->seg = seg;
+    g->m_seg = m_seg;
     return AK_OK;
 }
 
-static int reserve_link(gfa_t *g) {
+static inline int reserve_link(gfa_t *g) {
     if (g->n_link < g->m_link) return AK_OK;
-    int32_t m = g->m_link ? g->m_link << 1 : 1024;
-    gfa_link_t *p = (gfa_link_t *)realloc(g->link, (size_t)m * sizeof(*p));
-    if (!p) return AK_ENOMEM;
-    g->link = p;
-    g->m_link = m;
+    int32_t m_link = g->m_link ? g->m_link << 1 : 1024;
+    gfa_link_t *link = (gfa_link_t *)realloc(g->link, (size_t)m_link * sizeof(gfa_link_t));
+    if (!link) return AK_ENOMEM;
+    g->link = link;
+    g->m_link = m_link;
     return AK_OK;
 }
 
 static int reserve_path(gfa_t *g) {
     if (g->n_path < g->m_path) return AK_OK;
-    int32_t m = g->m_path ? g->m_path << 1 : 16;
-    char **np = (char **)realloc(g->path, (size_t)m * sizeof(*np));
-    if (!np) return AK_ENOMEM;
-    g->path = np;
-    uint64_t *nl = (uint64_t *)realloc(g->path_len, (size_t)m * sizeof(*nl));
-    if (!nl) return AK_ENOMEM;
-    g->path_len = nl;
-    int32_t *no = (int32_t *)realloc(g->path_off, ((size_t)m + 1) * sizeof(*no));
-    if (!no) return AK_ENOMEM;
-    g->path_off = no;
-    g->m_path = m;
+    int32_t m_path = g->m_path ? g->m_path << 1 : 16;
+    char **path = (char **)realloc(g->path, (size_t)m_path * sizeof(char *));
+    if (!path) return AK_ENOMEM;
+    g->path = path;
+    uint64_t *path_len = (uint64_t *)realloc(g->path_len, (size_t)m_path * sizeof(uint64_t));
+    if (!path_len) return AK_ENOMEM;
+    g->path_len = path_len;
+    int32_t *path_off = (int32_t *)realloc(g->path_off, ((size_t)m_path + 1) * sizeof(int32_t));
+    if (!path_off) return AK_ENOMEM;
+    g->path_off = path_off;
+    g->m_path = m_path;
     return AK_OK;
 }
 
 static int reserve_pathseg(gfa_t *g) {
     if ((int64_t)g->n_path_seg < g->m_path_seg) return AK_OK;
-    int32_t m = g->m_path_seg ? g->m_path_seg << 1 : 4096;
-    uint32_t *ns = (uint32_t *)realloc(g->path_seg, (size_t)m * sizeof(*ns));
-    if (!ns) return AK_ENOMEM;
-    g->path_seg = ns;
-    char *no = (char *)realloc(g->path_ori, (size_t)m * sizeof(*no));
-    if (!no) return AK_ENOMEM;
-    g->path_ori = no;
-    g->m_path_seg = m;
+    int32_t m_path_seg = g->m_path_seg ? g->m_path_seg << 1 : 4096;
+    uint32_t *path_seg = (uint32_t *)realloc(g->path_seg, (size_t)m_path_seg * sizeof(uint32_t));
+    if (!path_seg) return AK_ENOMEM;
+    g->path_seg = path_seg;
+    char *path_ori = (char *)realloc(g->path_ori, (size_t)m_path_seg * sizeof(char));
+    if (!path_ori) return AK_ENOMEM;
+    g->path_ori = path_ori;
+    g->m_path_seg = m_path_seg;
     return AK_OK;
 }
 
@@ -72,10 +72,10 @@ static int reserve_pathseg(gfa_t *g) {
 // untouched pages. One realloc down to the exact count reclaims it, and
 // shrinking is cheap: glibc remaps rather than copies, about 5 ms per GB.
 // A failed shrink is not an error, since the oversized block is still valid.
-static void shrink(void **p, size_t n, size_t esz) {
-    if (!*p || n == 0) return;
-    void *q = realloc(*p, n * esz);
-    if (q) *p = q;
+static void shrink(void **ptr, size_t n, size_t esz) {
+    if (!*ptr || n == 0) return;
+    void *new_ptr = realloc(*ptr, n * esz);
+    if (new_ptr) *ptr = new_ptr;
 }
 
 // line handlers
@@ -119,9 +119,7 @@ static int handle_S(gfa_t *g, char *line, idxmap_t *h) {
     } else if (g->flags & GFA_SEQ) {
         if (gfa_seg_set_seq(g, s, tok, strlen(tok)) != AK_OK) return AK_ENOMEM;
     } else {
-        // The length still drives path layout, segment coordinates and the
-        // statistics, so it is recorded either way; only the bases are skipped
-        // - which is the whole saving, since they are what the arena holds.
+        // We store the length is still cheap and still needed, so it's recorded anyway.
         s->seq = NULL;
         s->len = (uint32_t)strlen(tok);
     }
@@ -137,7 +135,7 @@ static int handle_S(gfa_t *g, char *line, idxmap_t *h) {
             s->rank = atoi(val);
             g->has_sr = 1;   // the file ranks itself; nothing may overwrite it
         }
-        // SN is handled via path names; segment->ref_path is set there.
+        // SN is handled via path names; segment->ref_path is set there
     }
 
     int absent;
@@ -157,8 +155,7 @@ static int handle_L(gfa_t *g, char *line, idxmap_t *h, int flags) {
     uint64_t id1, id2;
     char st1, st2;
     size_t overlap = 0;
-    if (sscanf(line, "L\t%" SCNu64 "\t%c\t%" SCNu64 "\t%c\t%zuM",
-               &id1, &st1, &id2, &st2, &overlap) < 4) {
+    if (sscanf(line, "L\t%" SCNu64 "\t%c\t%" SCNu64 "\t%c\t%zuM", &id1, &st1, &id2, &st2, &overlap) < 4) {
         ak_log(AK_LOG_WARN, "gfa", "malformed L line");
         return AK_EFORMAT;
     }
@@ -177,9 +174,7 @@ static int handle_L(gfa_t *g, char *line, idxmap_t *h, int flags) {
         if (have1 && have2 && overlap > 0) {
             gfa_seg_t *a = &g->seg[kh_val(h, k1)];
             gfa_seg_t *b = &g->seg[kh_val(h, k2)];
-            if (a->seq && b->seq &&
-                overlap < a->len && overlap < b->len &&
-                strncmp(a->seq, b->seq + (b->len - overlap), overlap) != 0) {
+            if (a->seq && b->seq && overlap < a->len && overlap < b->len && strncmp(a->seq, b->seq + (b->len - overlap), overlap) != 0) {
                 ak_log(AK_LOG_WARN, "gfa", "overlap mismatch %lu -> %lu (len %lu)", (unsigned long)id1, (unsigned long)id2, (unsigned long)overlap);
             }
         }
@@ -200,79 +195,82 @@ static int handle_L(gfa_t *g, char *line, idxmap_t *h, int flags) {
     return AK_OK;
 }
 
-// parses one P line and lays out reference coordinates; without GFA_PATHS only
-// the occurrence count is maintained
+// parses one P line. Only called under GFA_PATH_NAMES
 static int handle_P(gfa_t *g, char *line, idxmap_t *h, int flags) {
     char *save;
-    char *tok = strtok_r(line, "\t", &save);        // 'P'
-    tok = strtok_r(NULL, "\t", &save);              // path name
+    strtok_r(line, "\t", &save);                    // 'P'
+    char *tok = strtok_r(NULL, "\t", &save);        // path name
     if (!tok) {
         ak_log(AK_LOG_WARN, "gfa", "P line without name");
         return AK_EFORMAT;
     }
 
-    char *name = NULL;
-    int32_t pi = -1;
-    if (flags & GFA_PATHS) {
-        if (reserve_path(g) != AK_OK) return AK_ENOMEM;
-        pi = g->n_path;
-        name = strdup(tok);
-        if (!name) return AK_ENOMEM;
-        g->path[pi] = name;
-        g->path_len[pi] = 0;
-        g->path_off[pi] = (int32_t)g->n_path_seg;   // start of this path's slice
-        g->n_path++;
-    }
+    if (reserve_path(g) != AK_OK) return AK_ENOMEM;
+    int32_t pi = g->n_path;
+    char *name = strdup(tok);
+    if (!name) return AK_ENOMEM;
+    g->path[pi] = name;
+    g->path_len[pi] = 0;
+    g->path_off[pi] = (int32_t)g->n_path_seg;       // start of this path's slice
+    g->n_path++;
 
-    tok = strtok_r(NULL, "\t", &save);              // comma list of segments
-    if (!tok) {
-        if (flags & GFA_PATHS) {
-            g->path_off[pi + 1] = (int32_t)g->n_path_seg;   // empty slice
-            ak_log(AK_LOG_WARN, "gfa", "path %s has no segments", name ? name : "?");
-        }
+    tok = strtok_r(NULL, "\t", &save);              // comma list of steps
+    if (!tok || tok[0] == '\0') {
+        g->path_off[pi + 1] = (int32_t)g->n_path_seg;   // empty slice
+        ak_log(AK_LOG_WARN, "gfa", "path %s has no segments", name);
         return AK_OK;
     }
 
-    char *sp;
-    char *seg_tok = strtok_r(tok, ",", &sp);
-    int32_t ref_pos = 0;
+    if (!(flags & GFA_PATHS)) {
+        // steps = commas + 1; nothing else about them is needed
+        uint64_t n = 1;
+        for (const char *p = strchr(tok, ','); p; p = strchr(p + 1, ',')) n++;
+        g->n_path_seg += n;
+        g->path_off[pi + 1] = (int32_t)g->n_path_seg;
+        return AK_OK;
+    }
 
-    while (seg_tok) {
-        // orientation suffix ('+'/'-'), stripped before the id is parsed
-        size_t len = strlen(seg_tok);
+    int32_t ref_pos = 0;
+    const char *p = tok;
+    for (;;) {
+        // "<id>[+|-]" up to the next ',' or the end of the list
+        char *end;
+        uint64_t sid = strtoull(p, &end, 10);
         char ori = '+';
-        if (len && (seg_tok[len - 1] == '+' || seg_tok[len - 1] == '-')) {
-            ori = seg_tok[len - 1];
-            seg_tok[len - 1] = '\0';
+        if (end != p && (*end == '+' || *end == '-')) ori = *end++;
+        while (*end == ' ' || *end == '\r') end++;   // stray trailing whitespace
+
+        if (end == p || (*end != ',' && *end != '\0')) {
+            ak_log(AK_LOG_WARN, "gfa", "malformed step '%.*s' in path %s", (int)strcspn(p, ","), p, name);
+            const char *next = strchr(p, ',');
+            if (!next) break;
+            p = next + 1;
+            continue;
         }
 
-        uint64_t sid = strtoull(seg_tok, NULL, 10);
         khint_t k = idxmap_get(h, sid);
         uint32_t si = (k < kh_end(h)) ? kh_val(h, k) : GFA_NIL;
-
-        if (si == GFA_NIL && (flags & (GFA_PATHS | GFA_VALIDATE))) {
-            ak_log(AK_LOG_WARN, "gfa", "segment %llu in path %s not found", (unsigned long long)sid, name ? name : "?");
+        if (si == GFA_NIL) {
+            ak_log(AK_LOG_WARN, "gfa", "segment %llu in path %s not found", (unsigned long long)sid, name);
         }
 
-        if (flags & GFA_PATHS) {
-            if (reserve_pathseg(g) != AK_OK) return AK_ENOMEM;
-            g->path_seg[g->n_path_seg] = si;
-            g->path_ori[g->n_path_seg] = ori;
-            if (si != GFA_NIL) {
-                gfa_seg_t *cur = &g->seg[si];
-                cur->ref_path = pi;
-                cur->start = ref_pos;
-                ref_pos += (int32_t)cur->len;
-                g->path_len[pi] += cur->len;
-            }
-        }
+        if (reserve_pathseg(g) != AK_OK) return AK_ENOMEM;
+        g->path_seg[g->n_path_seg] = si;
+        g->path_ori[g->n_path_seg] = ori;
         g->n_path_seg++;
-        seg_tok = strtok_r(NULL, ",", &sp);
+        if (si != GFA_NIL) {
+            gfa_seg_t *cur = &g->seg[si];
+            cur->ref_path = pi;
+            cur->start = ref_pos;
+            ref_pos += (int32_t)cur->len;
+            g->path_len[pi] += cur->len;
+        }
+
+        if (*end != ',') break;
+        p = end + 1;
     }
 
-    if (flags & GFA_PATHS) {
-        g->path_off[pi + 1] = (int32_t)g->n_path_seg;   // end of this path's slice
-    }
+    g->path_off[pi + 1] = (int32_t)g->n_path_seg;   // end of this path's slice
     return AK_OK;
 }
 
@@ -285,10 +283,8 @@ static int build_arcs(gfa_t *g) {
     g->arc     = (uint32_t *)malloc((size_t)g->n_link * sizeof(uint32_t));
     if (!g->arc_off || !g->arc) return AK_ENOMEM;
 
-    for (int32_t k = 0; k < g->n_link; k++)
-        g->arc_off[g->link[k].v + 1]++;
-    for (int32_t i = 0; i < g->n_seg; i++)
-        g->arc_off[i + 1] += g->arc_off[i];
+    for (int32_t k = 0; k < g->n_link; k++) g->arc_off[g->link[k].v + 1]++;
+    for (int32_t i = 0; i < g->n_seg; i++) g->arc_off[i + 1] += g->arc_off[i];
 
     int32_t *cursor = (int32_t *)malloc((size_t)g->n_seg * sizeof(int32_t));
     if (!cursor) return AK_ENOMEM;
@@ -337,13 +333,16 @@ gfa_t *gfa_read(const char *fn, int flags) {
         return NULL;
     }
     g->idx = h;
-    // the overlap check compares the bases either side of a join, so asking to
-    // validate implies asking for the sequences
+    // the overlap check compares the bases either side of a join, so asking to validate implies asking for the sequences
     if (flags & GFA_VALIDATE) flags |= GFA_SEQ;
     // the adjacency is an index over the edges, so it cannot be built without them
     if (flags & GFA_ARCS) flags |= GFA_LINKS;
     // degrees are counted over the edges, so the same holds for them
     if (flags & GFA_DEGREES) flags |= GFA_LINKS;
+    // the step arrays hang off the per-path offsets, so resolving the steps implies recording the paths
+    if (flags & GFA_PATHS) flags |= GFA_PATH_NAMES;
+    // everything but a bare path listing resolves ids against seg[]
+    if (flags & (GFA_LINKS | GFA_PATHS | GFA_SEQ | GFA_VALIDATE | GFA_ARCS | GFA_DEGREES)) flags |= GFA_SEGS;
     g->flags = flags;
 
     kstring_t ks = KS_INIT;
@@ -353,9 +352,11 @@ gfa_t *gfa_read(const char *fn, int flags) {
     while ((len = ak_getline(f, &ks)) >= 0) {
         if (len == 0) continue;
         switch (ks.s[0]) {
-            case 'S': rc = handle_S(g, ks.s, h); break;
-            case 'L': rc = handle_L(g, ks.s, h, flags); break;
-            case 'P': rc = handle_P(g, ks.s, h, flags); break;
+            // no line type is tokenized unless a flag asked for what it
+            // carries; GFA_SEGS is implied by everything but GFA_PATH_NAMES
+            case 'S': rc = (flags & GFA_SEGS) ? handle_S(g, ks.s, h) : AK_OK; break;
+            case 'L': rc = (flags & (GFA_LINKS | GFA_VALIDATE)) ? handle_L(g, ks.s, h, flags) : AK_OK; break;
+            case 'P': rc = (flags & GFA_PATH_NAMES) ? handle_P(g, ks.s, h, flags) : AK_OK; break;
             default:  rc = AK_OK; break;   // ignore H, W, comments, etc.
         }
         if (rc == AK_ENOMEM) break;   // only allocation failures are fatal
@@ -417,6 +418,12 @@ static int write_graph(const gfa_t *g, FILE *out, int tags) {
     // GFA but a silently different graph. Fail instead.
     if (g->n_seg > 0 && !(g->flags & GFA_SEQ)) {
         ak_log(AK_LOG_ERROR, "gfa", "graph was read without GFA_SEQ; its segments carry no sequence to write");
+        return AK_EINVAL;
+    }
+    // Likewise a graph that only kept path names would write every P line
+    // with an empty step list.
+    if (g->n_path > 0 && !(g->flags & GFA_PATHS)) {
+        ak_log(AK_LOG_ERROR, "gfa", "graph was read without GFA_PATHS; its paths carry no steps to write");
         return AK_EINVAL;
     }
 
@@ -548,7 +555,8 @@ int gfa_has_arc(const gfa_t *g, int32_t v, int32_t w) {
 
 // ordered segments of path k; see akhal/gfa.h
 int gfa_path_segs(const gfa_t *g, int32_t k, const uint32_t **segs) {
-    if (!g->path_off || k < 0 || k >= g->n_path) {
+    // path_seg is NULL when only GFA_PATH_NAMES was set
+    if (!g->path_off || !g->path_seg || k < 0 || k >= g->n_path) {
         *segs = NULL;
         return 0;
     }

@@ -21,8 +21,7 @@
  * contiguous slice. A single segment may belong to many paths, which is why
  * paths are their own arrays rather than a pointer hung off a segment.
  *
- * The single reader gfa_read() replaces the previously duplicated per-command
- * parsers. Callers select how much work to do with the GFA_* flags.
+ * Callers select how much work to do with the GFA_* flags.
  */
 
 #ifdef __cplusplus
@@ -35,14 +34,12 @@ extern "C" {
 // Nodes (S lines)
 
 typedef struct {
-    uint64_t id;             // segment id as it appears in the file
-    const char *seq;         // borrowed from the graph's arena, NULL if empty;
-                             // never free() it and never assign it directly -
-                             // gfa_seg_set_seq() is the only way to set it
-    uint32_t len;            // sequence length (cached strlen)
-    int32_t  rank;           // SR tag value, or -1 if the tag is absent
-    int32_t  start;          // reference offset (SO tag or path layout), -1 unplaced
-    int32_t  ref_path;       // index of the owning path in path[], -1 for none
+    uint64_t    id;          // segment id as it appears in the file
+    const char *seq;         // borrowed from the graph's arena, NULL if empty; gfa_seg_set_seq() is the only way to set it
+    uint32_t    len;         // sequence length (cached strlen)
+    int32_t     rank;        // SR tag value, or -1 if the tag is absent
+    int32_t     start;       // reference offset (SO tag or path layout), -1 unplaced
+    int32_t     ref_path;    // index of the owning path in path[], -1 for none
 } gfa_seg_t;
 
 /**
@@ -51,6 +48,7 @@ typedef struct {
  * Derived rather than stored - at 663 M segments a fourth 4-byte field is the
  * difference between a 40- and a 48-byte record. An unplaced segment carries
  * start == -1 and ends nowhere, which this reports as -1 rather than len-1
+ * 
  * @param s Segment to measure
  * @return The end offset, or -1 when the segment has no offset
  */
@@ -78,8 +76,7 @@ typedef struct {
     // Per-segment degrees, built when GFA_DEGREES is set: in_degree[i] and
     // out_degree[i] count the links entering and leaving segment index i.
     // Both have length n_seg, and both are NULL if not built.
-    int32_t    *in_degree;
-    int32_t    *out_degree;
+    int32_t    *in_degree, *out_degree;
 
     // edges
     gfa_link_t *link;
@@ -91,9 +88,9 @@ typedef struct {
     uint32_t   *arc;         // length n_link
     int32_t    *arc_off;     // length n_seg + 1
 
-    // paths (P lines), built when GFA_PATHS is set
+    // paths (P lines)
     char      **path;        // owned path names, length n_path
-    uint64_t   *path_len;    // total sequence length of each path
+    uint64_t   *path_len;    // total sequence length of each path (GFA_PATHS)
     int32_t     n_path, m_path;
 
     // Path membership in CSR form: the segments of path k are
@@ -103,7 +100,7 @@ typedef struct {
     uint32_t   *path_seg;    // length n_path_seg
     char       *path_ori;    // length n_path_seg ('+'/'-')
     int32_t     m_path_seg;
-    uint64_t    n_path_seg;  // total segment occurrences across all paths
+    uint64_t    n_path_seg;  // total steps across all paths
 
     // Backing store for every segment sequence. One allocation per few
     // megabytes instead of one per segment, so a graph with millions of
@@ -117,26 +114,24 @@ typedef struct {
 
 // Read flags
 
-#define GFA_LINKS    0x1     // record edges (link[])
-#define GFA_PATHS    0x2     // build path membership (CSR) and layout
-#define GFA_VALIDATE 0x4     // check overlap consistency + integrity
-#define GFA_SEQ      0x8     // copy segment sequences into the graph's arena
-#define GFA_ARCS     0x10    // also build the CSR out-adjacency (implies GFA_LINKS)
-#define GFA_DEGREES  0x20    // build in_degree/out_degree (implies GFA_LINKS)
+// S lines - segments
+#define GFA_SEGS       0x01  // parse S lines: seg[], lengths, tags and the id index (implied by every flag below except GFA_PATH_NAMES)
+#define GFA_SEQ        0x02  // also copy the bases into the graph's arena
 
-// What a caller wanting the whole graph asks for. Sequences dominate a large
-// graph - 562 MB of a chr22 graph's 2.3 GB, 20.8 GB of a whole-genome one - so
-// a command that only needs lengths, degrees or path structure can leave
-// GFA_SEQ out and skip the copy entirely. seg[].len is recorded either way.
-#define GFA_ALL      (GFA_LINKS | GFA_PATHS | GFA_SEQ | GFA_ARCS | GFA_DEGREES)
+// L lines - links
+#define GFA_LINKS      0x04  // record edges (link[])
+#define GFA_ARCS       0x08  // also build the CSR out-adjacency (implies GFA_LINKS)
+#define GFA_DEGREES    0x10  // also build in_degree/out_degree (implies GFA_LINKS)
 
-// GFA_LINKS on its own records the edges, which is all a scan over link[]
-// needs. GFA_DEGREES adds two int32 arrays of length n_seg (8 bytes per
-// segment) holding each segment's in- and out-degree; they were once fields of
-// gfa_seg_t but only gfa_stats(), gfa_toposort() and the FASTA tracers in
-// annot/call read them. The CSR on top of it - arc + arc_off, another
-// 145 MB on a chr22 graph and 5.4 GB on a whole-genome one - is what makes
-// gfa_arcs(), gfa_has_arc() and gfa_toposort() work, and only those need it.
+// P lines - paths
+#define GFA_PATH_NAMES 0x20  // record path names and step counts only; the steps are counted with one pass over the commas, never parsed
+#define GFA_PATHS      0x40  // resolve every step: membership (CSR), orientation and reference layout (implies GFA_PATH_NAMES)
+
+// checks
+#define GFA_VALIDATE   0x80  // overlap consistency + integrity (implies GFA_SEQ; path steps are checked only together with GFA_PATHS)
+
+// What a caller wanting the whole graph asks for
+#define GFA_ALL        (GFA_SEGS | GFA_SEQ | GFA_LINKS | GFA_ARCS | GFA_DEGREES | GFA_PATH_NAMES | GFA_PATHS)
 
 /**
  * Read an (r)GFA file into a freshly allocated graph
@@ -150,8 +145,9 @@ typedef struct {
  * P lines comes back with a rank-0 backbone, and one without them comes back
  * entirely rank 1. Read without GFA_PATHS there is nothing to derive from, and
  * ranks are left absent (-1)
+ * 
  * @param fn Path to the .gfa / .rgfa file
- * @param flags Bitwise OR of GFA_LINKS, GFA_PATHS, GFA_VALIDATE (may be 0)
+ * @param flags Bitwise OR of the GFA_* read flags; 0 reads an empty graph
  * @return The graph, or NULL on a fatal error (unreadable file, OOM)
  */
 gfa_t *gfa_read(const char *fn, int flags);
@@ -164,7 +160,7 @@ gfa_t *gfa_read(const char *fn, int flags);
  * defined elsewhere in the file.
  *
  * The length and overlap distributions are populations, not samples: the
- * standard deviations divide by n, matching ak_variance().
+ * standard deviations divide by n.
  *
  * The degree extremes cover only segments with a non-zero degree, so a graph
  * whose segments all stand alone reports -1 for all four rather than 0.
@@ -173,8 +169,7 @@ typedef struct {
     int64_t  n_seg;          // S lines
     int64_t  n_link;         // L lines
     int64_t  n_path;         // P lines
-    int64_t  n_rank0;        // segments at rank 0: from the file's own SR tags
-                             // when it has them, else the ones a P line visits
+    int64_t  n_rank0;        // segments at rank 0
     int      has_sr;         // whether those SR tags were the file's own
 
     double   seg_mean;       // segment length
@@ -184,7 +179,7 @@ typedef struct {
     double   ov_mean;        // link overlap
     double   ov_sd;
 
-    int32_t  min_in, max_in;     // degrees, over segments that have any; -1 for none
+    int32_t  min_in, max_in; // degrees, over segments that have any; -1 for none
     int32_t  min_out, max_out;
 
     int64_t  n_undefined;    // distinct ids an L or P line names that no S line defines
@@ -203,6 +198,7 @@ typedef struct {
  * apart to make the array wasteful are noticed and the file is summarized
  * through gfa_read() instead, so the answer is the same either way and only
  * the cost differs
+ * 
  * @param fn Path to the .gfa/.rgfa file
  * @param st Filled in on success; untouched on failure
  * @return AK_OK, or a negative AK_E* code, with the reason logged
@@ -258,6 +254,7 @@ void gfa_destroy(gfa_t *g);
 
 /**
  * Look up a segment's array index by id. O(1)
+ * 
  * @param g Graph to query
  * @param id Segment id
  * @return The array index, or -1 if absent
@@ -266,6 +263,7 @@ int32_t gfa_idx(const gfa_t *g, uint64_t id);
 
 /**
  * Look up a segment by id
+ * 
  * @param g Graph to query
  * @param id Segment id
  * @return Pointer to the segment, or NULL if absent
@@ -277,6 +275,7 @@ gfa_seg_t *gfa_get(const gfa_t *g, uint64_t id);
  *
  * Held as an index into path[] rather than a borrowed pointer, so nothing
  * dangles when the path block is rewritten and the record stays 40 bytes
+ * 
  * @param g Graph owning the segment
  * @param s Segment to ask about
  * @return The path name, or NULL when the segment belongs to none
@@ -336,6 +335,7 @@ static inline uint64_t gfa_path_len(const gfa_t *g, int32_t k) {
 
 /**
  * Out-edge traversal for a segment
+ * 
  * @param g Graph to query (must have been read with GFA_LINKS)
  * @param v Segment index whose out-edges are wanted
  * @param arcs Set to an array of link indices leaving v; feed gfa_link_at()
@@ -358,9 +358,21 @@ int gfa_has_arc(const gfa_t *g, int32_t v, int32_t w);
  * @param g Graph to query (must have been read with GFA_PATHS)
  * @param k Path index
  * @param segs Set to an array of segment indices; feed gfa_seg_at()
- * @return Number of segments in the path, or 0 if none / paths not built
+ * @return Number of segments in the path, or 0 (with *segs NULL) if none or
+ *         the steps were not built (GFA_PATH_NAMES alone)
  */
 int gfa_path_segs(const gfa_t *g, int32_t k, const uint32_t **segs);
+
+/**
+ * Number of steps in path k, known from GFA_PATH_NAMES on (no step arrays needed)
+ * @param g Graph to query
+ * @param k Path index
+ * @return The step count, or 0 if k is out of range or no path flag was set
+ */
+static inline int64_t gfa_path_n_steps(const gfa_t *g, int32_t k) {
+    if (!g->path_off || k < 0 || k >= g->n_path) return 0;
+    return (int64_t)g->path_off[k + 1] - g->path_off[k];
+}
 
 // Ranks
 
@@ -450,6 +462,16 @@ int gfa_toposort(const gfa_t *g, int32_t *order);
  */
 static inline int gfa_has_degrees(const gfa_t *g) {
     return g->in_degree != NULL && g->out_degree != NULL;
+}
+
+/**
+ * Whether the graph carries segments (read with GFA_SEGS or any flag implying
+ * it). Read with GFA_PATH_NAMES alone it does not, and seg[] must not be used
+ * @param g Graph to query
+ * @return Non-zero when seg[] and the segment accessors may be used
+ */
+static inline int gfa_has_segs(const gfa_t *g) {
+    return (g->flags & GFA_SEGS) != 0;
 }
 
 #ifdef __cplusplus
