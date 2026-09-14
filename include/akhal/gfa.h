@@ -148,6 +148,59 @@ typedef struct {
  */
 gfa_t *gfa_read(const char *fn, int flags);
 
+// Statistics without a graph
+
+/**
+ * What a summary pass over a file can say about it. Counts are of lines, so
+ * n_seg is S lines and n_link L lines, whether or not every id they name is
+ * defined elsewhere in the file.
+ *
+ * The length and overlap distributions are populations, not samples: the
+ * standard deviations divide by n, matching ak_variance().
+ *
+ * The degree extremes cover only segments with a non-zero degree, so a graph
+ * whose segments all stand alone reports -1 for all four rather than 0.
+ */
+typedef struct {
+    int64_t  n_seg;          // S lines
+    int64_t  n_link;         // L lines
+    int64_t  n_path;         // P lines
+    int64_t  n_rank0;        // segments at rank 0: from the file's own SR tags
+                             // when it has them, else the ones a P line visits
+    int      has_sr;         // whether those SR tags were the file's own
+
+    double   seg_mean;       // segment length
+    double   seg_sd;
+    uint64_t seg_min, seg_max;
+
+    double   ov_mean;        // link overlap
+    double   ov_sd;
+
+    int32_t  min_in, max_in;     // degrees, over segments that have any; -1 for none
+    int32_t  min_out, max_out;
+
+    int64_t  n_undefined;    // distinct ids an L or P line names that no S line defines
+} gfa_stat_t;
+
+/**
+ * Summarize a GFA in one streaming pass, without building a graph.
+ *
+ * Everything the summary needs is either a running total or one counter per
+ * segment id, so nothing is held but a small array indexed by id: no segment
+ * records, no link records, no id-to-index table, and no path block. On a
+ * whole-genome graph that is gigabytes rather than tens of them.
+ *
+ * The index wants ids that sit in a reasonably tight range - which every GFA
+ * writer produces, since they number segments from 1. Ids scattered far enough
+ * apart to make the array wasteful are noticed and the file is summarized
+ * through gfa_read() instead, so the answer is the same either way and only
+ * the cost differs
+ * @param fn Path to the .gfa/.rgfa file
+ * @param st Filled in on success; untouched on failure
+ * @return AK_OK, or a negative AK_E* code, with the reason logged
+ */
+int gfa_read_stats(const char *fn, gfa_stat_t *st);
+
 /**
  * Write a graph back out as GFA: an H line, one S per segment (with SR:i:
  * where a rank is set), one L per link, and one P per path

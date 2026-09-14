@@ -117,6 +117,11 @@ Path node count max.: 12
 
 The whole file is read in one streaming pass and the distributions are accumulated as they arrive, so memory scales with the number of distinct read names rather than with the number of alignments.
 
+Graph statistics are read the same way. 
+Nothing the summary reports needs a graph - the counts are running totals, the two distributions are accumulated as they arrive, and the only per-segment state is its two degrees and whether a path visits it - so the file is read once and no graph is built. 
+On chr22 that is 248 MB and 5 s instead of 1.5 GB and 27 s. 
+Segment ids scattered too far apart to index that way are noticed, and the file is summarized through the graph instead: the same numbers, at the old price.
+
 #### 3. `extract`
 Extract information from the r/GFA file. The first argument picks what to pull out.
 

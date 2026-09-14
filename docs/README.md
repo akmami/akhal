@@ -15,7 +15,7 @@ For the command-line tool, see the [main README](../README.md).
 
 | Module | What it gives you |
 | --- | --- |
-| [`gfa`](gfa.md) | The (r)GFA graph model - segments, links, paths - plus the reader and writer every command uses, traversal over the CSR adjacency, `SR` ranking, path-block rewriting and topological sort |
+| [`gfa`](gfa.md) | The (r)GFA graph model - segments, links, paths - plus the reader and writer every command uses, traversal over the CSR adjacency, `SR` ranking, path-block rewriting, topological sort and a streaming summary that builds no graph at all |
 | [`vg`](vg.md) | Reader for vg's native `.vg` format (compressed Protobuf), decoded straight from the wire format with only zlib |
 
 ### Sequence and alignment formats

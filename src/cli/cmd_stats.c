@@ -9,7 +9,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <limits.h>
 
 // read name -> index into the read array
 KHASHL_MAP_INIT(KH_LOCAL, rdmap_t, rdmap, const char *, uint32_t, kh_hash_str, kh_eq_str)
@@ -21,108 +20,32 @@ static void usage(void) {
 
 // graph statistics
 
-// min and max over segments with a non-zero degree; -1/-1 for an empty graph
-static void degree_range(const gfa_t *g, int in, int *min_out, int *max_out) {
-    if (gfa_n_seg(g) == 0) {
-        *min_out = -1;
-        *max_out = -1;
-        return;
-    }
-
-    int mn = INT_MAX, mx = 0;
-    for (int32_t i = 0; i < gfa_n_seg(g); i++) {
-        int d = in ? g->seg[i].in_degree : g->seg[i].out_degree;
-        if (d) {
-            if (d < mn) {
-                mn = d;
-            }
-            if (d > mx) {
-                mx = d;
-            }
-        }
-    }
-    *min_out = mn;
-    *max_out = mx;
-}
-
 // `stats` over an r/GFA graph
 static int stats_gfa(const char *fn) {
-    gfa_t *g = gfa_read(fn, GFA_LINKS | GFA_PATHS)   /* no GFA_SEQ: only seg[].len is used */;
-    if (!g) return 1;
+    // the summary needs counters, two distributions and two degrees per
+    // segment - none of which is a graph, so it does not build one
+    gfa_stat_t st;
+    if (gfa_read_stats(fn, &st) != AK_OK) return 1;
 
-    int32_t n_seg  = gfa_n_seg(g);
-    int32_t n_link = gfa_n_link(g);
-
-    // segment length distribution
-    double smean = 0.0, sstd = 0.0;
-    size_t smin = 0, smax = 0;
-    if (n_seg > 0) {
-        size_t *slen = (size_t *)malloc((size_t)n_seg * sizeof(size_t));
-        if (!slen) {
-            gfa_destroy(g);
-            ak_log(AK_LOG_ERROR, NULL, "out of memory");
-            return 1;
-        }
-        smin = smax = g->seg[0].len;
-        for (int32_t i = 0; i < n_seg; i++) {
-            size_t l = g->seg[i].len;
-            slen[i] = l;
-            if (l < smin) {
-                smin = l;
-            }
-            if (l > smax) {
-                smax = l;
-            }
-        }
-        smean = ak_mean(slen, (size_t)n_seg);
-        sstd  = ak_stddev(ak_variance(slen, (size_t)n_seg, smean));
-        free(slen);
+    if (st.n_undefined > 0) {
+        ak_log(AK_LOG_WARN, "stats", "%lld id(s) named by an L or P line are defined by no S line",
+               (long long)st.n_undefined);
     }
 
-    // link overlap distribution
-    double omean = 0.0, ostd = 0.0;
-    if (n_link > 0) {
-        size_t *ov = (size_t *)malloc((size_t)n_link * sizeof(size_t));
-        if (!ov) {
-            gfa_destroy(g);
-            ak_log(AK_LOG_ERROR, NULL, "out of memory");
-            return 1;
-        }
-        for (int32_t i = 0; i < n_link; i++) ov[i] = g->link[i].overlap;
-        omean = ak_mean(ov, (size_t)n_link);
-        ostd  = ak_stddev(ak_variance(ov, (size_t)n_link, omean));
-        free(ov);
-    }
-
-    int min_in, max_in, min_out, max_out;
-    degree_range(g, 1, &min_in, &max_in);
-    degree_range(g, 0, &min_out, &max_out);
-
-    // count the ranks themselves; path occurrences are a different number, and
-    // differ from it whenever a segment is visited by more than one path
-    int64_t n_rank0 = 0;
-    for (int32_t i = 0; i < n_seg; i++) {
-        if (gfa_seg_at(g, i)->rank == 0) {
-            n_rank0++;
-        }
-    }
-
-    printf("Segment count: %ld\n", (long)n_seg);
-    printf("Rank 0 segment count: %lld\n", (long long)n_rank0);
-    printf("Rank 0< segment count: %lld\n", (long long)((int64_t)n_seg - n_rank0));
-    printf("Segment avg length: %f\n", smean);
-    printf("Segment std length: %f\n", sstd);
-    printf("Segment min. length %lu\n", (unsigned long)smin);
-    printf("Segment max. length %lu\n", (unsigned long)smax);
-    printf("Link count: %ld\n", (long)n_link);
-    printf("Link overlapping avg length: %f\n", omean);
-    printf("Link overlapping std length: %f\n", ostd);
-    printf("Minimum in degree: %d\n", min_in);
-    printf("Maximum in degree: %d\n", max_in);
-    printf("Minimum out degree: %d\n", min_out);
-    printf("Maximum out degree: %d\n", max_out);
-
-    gfa_destroy(g);
+    printf("Segment count: %lld\n", (long long)st.n_seg);
+    printf("Rank 0 segment count: %lld\n", (long long)st.n_rank0);
+    printf("Rank 0< segment count: %lld\n", (long long)(st.n_seg - st.n_rank0));
+    printf("Segment avg length: %f\n", st.seg_mean);
+    printf("Segment std length: %f\n", st.seg_sd);
+    printf("Segment min. length %lu\n", (unsigned long)st.seg_min);
+    printf("Segment max. length %lu\n", (unsigned long)st.seg_max);
+    printf("Link count: %lld\n", (long long)st.n_link);
+    printf("Link overlapping avg length: %f\n", st.ov_mean);
+    printf("Link overlapping std length: %f\n", st.ov_sd);
+    printf("Minimum in degree: %d\n", st.min_in);
+    printf("Maximum in degree: %d\n", st.max_in);
+    printf("Minimum out degree: %d\n", st.min_out);
+    printf("Maximum out degree: %d\n", st.max_out);
     return 0;
 }
 
