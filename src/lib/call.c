@@ -162,6 +162,10 @@ call_ref_t *call_ref_fasta(const gfa_t *g, const fasta_t *fa, const char *seq_na
         ak_log(AK_LOG_ERROR, "call", "tracing a backbone requires the graph to be read with GFA_LINKS");
         return NULL;
     }
+    if (!gfa_has_degrees(g)) {
+        ak_log(AK_LOG_ERROR, "call", "tracing a backbone requires the graph to be read with GFA_DEGREES");
+        return NULL;
+    }
 
     const fasta_rec_t *fr = NULL;
     if (seq_name) {
@@ -207,7 +211,7 @@ call_ref_t *call_ref_fasta(const gfa_t *g, const fasta_t *fa, const char *seq_na
         if (!s->seq || s->len == 0) continue;
         size_t cl = (int64_t)s->len < L ? s->len : (size_t)L;
         if (memcmp(s->seq, S, cl) != 0) continue;
-        if (s->in_degree == 0) {
+        if (g->in_degree[i] == 0) {
             start = i;
             break;
         }

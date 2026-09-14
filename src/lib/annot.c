@@ -401,7 +401,11 @@ int64_t annot_build_vcf(annot_t *a, const gfa_t *g, int32_t ref_path, const char
 // annotate nodes by tracing FASTA sequences; see akhal/annot.h
 int64_t annot_build_fasta(annot_t *a, const gfa_t *g, const fasta_t *fa) {
     if (!g->arc_off) {
-        ak_log(AK_LOG_ERROR, "annot", "FASTA annotation requires the graph to be read with GFA_LINKS");
+        ak_log(AK_LOG_ERROR, "annot", "FASTA annotation requires the graph to be read with GFA_ARCS");
+        return AK_EINVAL;
+    }
+    if (!gfa_has_degrees(g)) {
+        ak_log(AK_LOG_ERROR, "annot", "FASTA annotation requires the graph to be read with GFA_DEGREES");
         return AK_EINVAL;
     }
 
@@ -419,7 +423,7 @@ int64_t annot_build_fasta(annot_t *a, const gfa_t *g, const fasta_t *fa) {
             if (!s->seq || s->len == 0) continue;
             size_t cl = (int64_t)s->len < L ? s->len : (size_t)L;
             if (memcmp(s->seq, S, cl) != 0) continue;
-            if (s->in_degree == 0) {
+            if (g->in_degree[i] == 0) {
                 start = i;
                 break;
             }

@@ -6,6 +6,7 @@
 #include "khashl.h"
 
 #include <stdlib.h>
+#include <inttypes.h>
 #include <string.h>
 #include <stdio.h>
 #include <math.h>
@@ -156,7 +157,7 @@ static int handle_L(gfa_t *g, char *line, idxmap_t *h, int flags) {
     uint64_t id1, id2;
     char st1, st2;
     size_t overlap = 0;
-    if (sscanf(line, "L\t%lu\t%c\t%lu\t%c\t%luM",
+    if (sscanf(line, "L\t%" SCNu64 "\t%c\t%" SCNu64 "\t%c\t%zuM",
                &id1, &st1, &id2, &st2, &overlap) < 4) {
         ak_log(AK_LOG_WARN, "gfa", "malformed L line");
         return AK_EFORMAT;
@@ -196,8 +197,6 @@ static int handle_L(gfa_t *g, char *line, idxmap_t *h, int flags) {
     g->link[g->n_link].to_orient   = (st2 == '-') ? '-' : '+';
     g->n_link++;
 
-    g->seg[v].out_degree++;
-    g->seg[w].in_degree++;
     return AK_OK;
 }
 
@@ -302,6 +301,20 @@ static int build_arcs(gfa_t *g) {
     return AK_OK;
 }
 
+static int build_degrees(gfa_t *g) {
+    if (g->n_seg <= 0) return AK_OK;
+
+    g->in_degree  = (int32_t *)calloc((size_t)g->n_seg, sizeof(int32_t));
+    g->out_degree = (int32_t *)calloc((size_t)g->n_seg, sizeof(int32_t));
+    if (!g->in_degree || !g->out_degree) return AK_ENOMEM;
+
+    for (int32_t k = 0; k < g->n_link; k++) {
+        g->out_degree[g->link[k].v]++;
+        g->in_degree[g->link[k].w]++;
+    }
+    return AK_OK;
+}
+
 // public API
 
 // read an (r)GFA into a graph; see akhal/gfa.h
@@ -327,9 +340,10 @@ gfa_t *gfa_read(const char *fn, int flags) {
     // the overlap check compares the bases either side of a join, so asking to
     // validate implies asking for the sequences
     if (flags & GFA_VALIDATE) flags |= GFA_SEQ;
-    // the adjacency is an index over the edges, so it cannot be built without
-    // them
+    // the adjacency is an index over the edges, so it cannot be built without them
     if (flags & GFA_ARCS) flags |= GFA_LINKS;
+    // degrees are counted over the edges, so the same holds for them
+    if (flags & GFA_DEGREES) flags |= GFA_LINKS;
     g->flags = flags;
 
     kstring_t ks = KS_INIT;
@@ -361,6 +375,14 @@ gfa_t *gfa_read(const char *fn, int flags) {
         if (build_arcs(g) != AK_OK) {
             gfa_destroy(g);
             ak_log(AK_LOG_ERROR, "gfa", "out of memory building adjacency");
+            return NULL;
+        }
+    }
+
+    if (flags & GFA_DEGREES) {
+        if (build_degrees(g) != AK_OK) {
+            gfa_destroy(g);
+            ak_log(AK_LOG_ERROR, "gfa", "out of memory building degrees");
             return NULL;
         }
     }
@@ -472,6 +494,8 @@ void gfa_destroy(gfa_t *g) {
     if (!g) return;
     ak_arena_destroy(&g->strs);   // every segment sequence, released in one go
     free(g->seg);
+    free(g->in_degree);
+    free(g->out_degree);
     free(g->link);
     free(g->arc);
     free(g->arc_off);
@@ -646,7 +670,7 @@ static int32_t sr_tag(const char *line) {
 
 // fall back to the graph when the ids defeat the index; the answer is the same
 static int stats_via_graph(const char *fn, gfa_stat_t *st) {
-    gfa_t *g = gfa_read(fn, GFA_LINKS | GFA_PATHS);
+    gfa_t *g = gfa_read(fn, GFA_LINKS | GFA_PATHS | GFA_DEGREES);
     if (!g) return AK_EOPEN;
 
     sdist_t sl = {0}, ov = {0};
@@ -669,13 +693,13 @@ static int stats_via_graph(const char *fn, gfa_stat_t *st) {
     for (int32_t i = 0; i < g->n_seg; i++) {
         const gfa_seg_t *s = &g->seg[i];
         if (s->rank == 0) st->n_rank0++;
-        if (s->in_degree) {
-            if (st->min_in < 0 || s->in_degree < st->min_in) st->min_in = s->in_degree;
-            if (s->in_degree > st->max_in) st->max_in = s->in_degree;
+        if (g->in_degree[i]) {
+            if (st->min_in < 0 || g->in_degree[i] < st->min_in) st->min_in = g->in_degree[i];
+            if (g->in_degree[i] > st->max_in) st->max_in = g->in_degree[i];
         }
-        if (s->out_degree) {
-            if (st->min_out < 0 || s->out_degree < st->min_out) st->min_out = s->out_degree;
-            if (s->out_degree > st->max_out) st->max_out = s->out_degree;
+        if (g->out_degree[i]) {
+            if (st->min_out < 0 || g->out_degree[i] < st->min_out) st->min_out = g->out_degree[i];
+            if (g->out_degree[i] > st->max_out) st->max_out = g->out_degree[i];
         }
     }
     st->n_undefined = 0;   // gfa_read() drops those lines rather than counting them
@@ -985,8 +1009,8 @@ int gfa_toposort(const gfa_t *g, int32_t *order) {
     }
     int32_t n = g->n_seg;
     if (n == 0) return 0;
-    if (!(g->flags & GFA_LINKS)) {
-        ak_log(AK_LOG_ERROR, "gfa", "toposort requires the graph to be read with GFA_LINKS");
+    if (!gfa_has_degrees(g)) {
+        ak_log(AK_LOG_ERROR, "gfa", "toposort needs the in-degrees; read with GFA_DEGREES");
         return AK_EINVAL;
     }
 
@@ -998,7 +1022,7 @@ int gfa_toposort(const gfa_t *g, int32_t *order) {
         return AK_ENOMEM;
     }
 
-    for (int32_t i = 0; i < n; i++) indeg[i] = g->seg[i].in_degree;
+    for (int32_t i = 0; i < n; i++) indeg[i] = g->in_degree[i];
 
     int hn = 0;
     for (int32_t i = 0; i < n; i++) {

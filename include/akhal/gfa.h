@@ -8,7 +8,7 @@
 #include "akhal/arena.h"
 
 /**
- * In-memory model of an (r)GFA assembly graph.
+ * In-memory model of an (r)GFA assembly/pangenome graph.
  *
  * Storage follows the "array + dict" design: every node (segment) and every
  * edge (link) lives in a contiguous array, and a hash table maps the external
@@ -42,8 +42,6 @@ typedef struct {
     uint32_t len;            // sequence length (cached strlen)
     int32_t  rank;           // SR tag value, or -1 if the tag is absent
     int32_t  start;          // reference offset (SO tag or path layout), -1 unplaced
-    int32_t  in_degree;      // populated when GFA_LINKS is set
-    int32_t  out_degree;     // populated when GFA_LINKS is set
     int32_t  ref_path;       // index of the owning path in path[], -1 for none
 } gfa_seg_t;
 
@@ -76,6 +74,12 @@ typedef struct {
     // nodes
     gfa_seg_t  *seg;
     int32_t     n_seg, m_seg;
+
+    // Per-segment degrees, built when GFA_DEGREES is set: in_degree[i] and
+    // out_degree[i] count the links entering and leaving segment index i.
+    // Both have length n_seg, and both are NULL if not built.
+    int32_t    *in_degree;
+    int32_t    *out_degree;
 
     // edges
     gfa_link_t *link;
@@ -113,20 +117,24 @@ typedef struct {
 
 // Read flags
 
-#define GFA_LINKS    0x1     // record edges, degrees, and out-adjacency
+#define GFA_LINKS    0x1     // record edges (link[])
 #define GFA_PATHS    0x2     // build path membership (CSR) and layout
 #define GFA_VALIDATE 0x4     // check overlap consistency + integrity
 #define GFA_SEQ      0x8     // copy segment sequences into the graph's arena
 #define GFA_ARCS     0x10    // also build the CSR out-adjacency (implies GFA_LINKS)
+#define GFA_DEGREES  0x20    // build in_degree/out_degree (implies GFA_LINKS)
 
 // What a caller wanting the whole graph asks for. Sequences dominate a large
 // graph - 562 MB of a chr22 graph's 2.3 GB, 20.8 GB of a whole-genome one - so
 // a command that only needs lengths, degrees or path structure can leave
 // GFA_SEQ out and skip the copy entirely. seg[].len is recorded either way.
-#define GFA_ALL      (GFA_LINKS | GFA_PATHS | GFA_SEQ | GFA_ARCS)
+#define GFA_ALL      (GFA_LINKS | GFA_PATHS | GFA_SEQ | GFA_ARCS | GFA_DEGREES)
 
-// GFA_LINKS on its own records the edges and each segment's degrees, which is
-// all a scan over link[] needs. The CSR on top of it - arc + arc_off, another
+// GFA_LINKS on its own records the edges, which is all a scan over link[]
+// needs. GFA_DEGREES adds two int32 arrays of length n_seg (8 bytes per
+// segment) holding each segment's in- and out-degree; they were once fields of
+// gfa_seg_t but only gfa_stats(), gfa_toposort() and the FASTA tracers in
+// annot/call read them. The CSR on top of it - arc + arc_off, another
 // 145 MB on a chr22 graph and 5.4 GB on a whole-genome one - is what makes
 // gfa_arcs(), gfa_has_arc() and gfa_toposort() work, and only those need it.
 
@@ -434,6 +442,15 @@ int gfa_add_path(gfa_t *g, const char *name, const uint32_t *segs, const char *o
  *         acyclic), or a negative AK_E* code on error
  */
 int gfa_toposort(const gfa_t *g, int32_t *order);
+
+/**
+ * Whether the graph carries per-segment degree arrays (read with GFA_DEGREES)
+ * @param g Graph to query
+ * @return Non-zero when in_degree and out_degree may be indexed
+ */
+static inline int gfa_has_degrees(const gfa_t *g) {
+    return g->in_degree != NULL && g->out_degree != NULL;
+}
 
 #ifdef __cplusplus
 }
