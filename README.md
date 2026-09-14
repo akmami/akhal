@@ -49,12 +49,24 @@ make install PREFIX=~/.local
 ### Commands
 
 #### 1. `parse`
-Validates an r/GFA file and ensures its correctness. It checks segments and links and makes sure that everything is consistent. It also checks the overlapings, if it is presented.
+Validates an r/GFA file. Four checks run by default, and each has a switch
+that drops it - along with whatever the reader would have had to hold for it,
+so a whole-genome file can be checked for what fits in memory.
 
 **Usage:**
 ```sh
-./akhal parse <r/GFA file>
+./akhal parse <r/GFA file> [--no-links] [--no-overlaps] [--no-paths] [--no-ranks]
 ```
+
+- **links** (`--no-links`): every `L` line names two segments that an `S` line defines. Costs only the segment index.
+- **overlaps** (`--no-overlaps`): where a link declares an overlap, the bases either side of the join agree. This loads every sequence, which is most of a graph's memory, and it builds on the link check since resolving an overlap resolves its ends.
+- **paths** (`--no-paths`): every `P` step names a defined segment, and consecutive steps are joined by a link. Needs the path steps and the link adjacency.
+- **ranks** (`--no-ranks`; `.rgfa` only): the number of rank-0 segments matches the number of path steps.
+
+Malformed lines are reported whichever checks run. Problems found inside the
+reader (unknown ids, overlap mismatches) are logged as warnings; the ones the
+command finds itself (path gaps, the rank count) are also counted, and a
+non-zero count makes the exit status 1.
 
 #### 2. `stats`
 Computes and outputs statistics about an r/GFA graph or a GAF alignment file. 

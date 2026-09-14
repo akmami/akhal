@@ -128,7 +128,7 @@ typedef struct {
 #define GFA_PATHS      0x40  // resolve every step: membership (CSR), orientation and reference layout (implies GFA_PATH_NAMES)
 
 // checks
-#define GFA_VALIDATE   0x80  // overlap consistency + integrity (implies GFA_SEQ; path steps are checked only together with GFA_PATHS)
+#define GFA_VALIDATE   0x80  // warn about L lines naming unknown segments and, when GFA_SEQ is also set, about overlap mismatches; path steps are checked under GFA_PATHS
 
 // What a caller wanting the whole graph asks for
 #define GFA_ALL        (GFA_SEGS | GFA_SEQ | GFA_LINKS | GFA_ARCS | GFA_DEGREES | GFA_PATH_NAMES | GFA_PATHS)

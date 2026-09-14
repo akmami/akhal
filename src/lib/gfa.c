@@ -332,8 +332,8 @@ gfa_t *gfa_read(const char *fn, int flags) {
         return NULL;
     }
     g->idx = h;
-    // the overlap check compares the bases either side of a join, so asking to validate implies asking for the sequences
-    if (flags & GFA_VALIDATE) flags |= GFA_SEQ;
+    // GFA_VALIDATE checks what is loaded: unknown ids always, overlaps only when the sequences are there to compare
+    // (GFA_SEQ), so a caller can check a whole-genome file's references without holding its bases
     // the adjacency is an index over the edges, so it cannot be built without them
     if (flags & GFA_ARCS) flags |= GFA_LINKS;
     // degrees are counted over the edges, so the same holds for them
