@@ -53,24 +53,28 @@ int ak_str2int(const char *str, int *out) {
     return 1;
 }
 
-double ak_mean(const size_t *a, size_t n) {
-    if (n == 0) return 0.0;
-    double sum = 0.0;
-    for (size_t i = 0; i < n; i++) sum += (double)a[i];
-    return sum / (double)n;
-}
-
-// population variance: divides by n, not n-1
-double ak_variance(const size_t *a, size_t n, double mean) {
-    if (n == 0) return 0.0;
-    double acc = 0.0;
-    for (size_t i = 0; i < n; i++) {
-        double d = (double)a[i] - mean;
-        acc += d * d;
+// Welford's online update: the mean and the sum of squared deviations are
+// carried along together, so one pass gives both without a second walk and
+// without the cancellation a naive sum-of-squares suffers on large values
+void ak_dist_add(ak_dist_t *d, double x) {
+    if (d->n == 0) {
+        d->min = d->max = x;
+    } else if (x < d->min) {
+        d->min = x;
+    } else if (x > d->max) {
+        d->max = x;
     }
-    return acc / (double)n;
+    d->n++;
+    double delta = x - d->mean;
+    d->mean += delta / (double)d->n;
+    d->m2   += delta * (x - d->mean);
 }
 
-double ak_stddev(double variance) {
-    return sqrt(variance);
+// population variance: divides by n, not n - 1
+double ak_dist_variance(const ak_dist_t *d) {
+    return d->n ? d->m2 / (double)d->n : 0.0;
+}
+
+double ak_dist_sd(const ak_dist_t *d) {
+    return sqrt(ak_dist_variance(d));
 }

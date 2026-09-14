@@ -52,41 +52,15 @@ static int stats_gfa(const char *fn) {
 // alignment statistics
 
 // A GAF is read in one streaming pass and can be arbitrarily large, so the
-// distributions are accumulated as they arrive rather than collected into an
-// array first the way the graph ones are. Welford's update keeps the running
-// mean and the sum of squared deviations without a second pass.
-typedef struct {
-    int64_t n;
-    double  mean, m2;
-    double  min, max;
-} dist_t;
-
-static void dist_add(dist_t *d, double x) {
-    if (d->n == 0) {
-        d->min = d->max = x;
-    } else if (x < d->min) {
-        d->min = x;
-    } else if (x > d->max) {
-        d->max = x;
-    }
-
-    d->n++;
-    double delta = x - d->mean;
-    d->mean += delta / (double)d->n;
-    d->m2 += delta * (x - d->mean);
-}
-
-// population standard deviation, the same definition ak_variance() uses
-static double dist_stddev(const dist_t *d) {
-    return d->n ? ak_stddev(d->m2 / (double)d->n) : 0.0;
-}
+// distributions are accumulated as they arrive (ak_dist_t) rather than
+// collected into an array first.
 
 // print a distribution the way the graph stats print theirs: the mean and the
 // standard deviation as reals, and the extremes in the unit they were measured
 // in, so counts and lengths do not come out with a fractional part
-static void dist_print(const char *label, const dist_t *d, int integral) {
+static void dist_print(const char *label, const ak_dist_t *d, int integral) {
     printf("%s avg: %f\n", label, d->mean);
-    printf("%s std: %f\n", label, dist_stddev(d));
+    printf("%s std: %f\n", label, ak_dist_sd(d));
     if (integral) {
         printf("%s min.: %lld\n", label, (long long)d->min);
         printf("%s max.: %lld\n", label, (long long)d->max);
@@ -248,8 +222,8 @@ static int stats_gaf(const char *fn, int want_cigar) {
     }
 
     int64_t n_aln = 0, n_primary = 0, n_secondary = 0, aligned_bases = 0;
-    dist_t d_mapq = {0}, d_ident = {0}, d_ratio = {0};
-    dist_t d_qlen = {0}, d_block = {0}, d_nodes = {0};
+    ak_dist_t d_mapq = {0}, d_ident = {0}, d_ratio = {0};
+    ak_dist_t d_qlen = {0}, d_block = {0}, d_nodes = {0};
     cigar_stat_t cs = {0};
 
     gaf_rec_t rec;
@@ -273,12 +247,12 @@ static int stats_gaf(const char *fn, int want_cigar) {
         double ident = rec.block_len > 0 ? (double)rec.matches / (double)rec.block_len : 0.0;
 
         aligned_bases += rec.matches;
-        dist_add(&d_mapq, (double)rec.mapq);
-        dist_add(&d_ident, ident);
-        dist_add(&d_ratio, ratio);
-        dist_add(&d_qlen, (double)rec.qlen);
-        dist_add(&d_block, (double)rec.block_len);
-        dist_add(&d_nodes, (double)path_nodes(rec.path ? rec.path : ""));
+        ak_dist_add(&d_mapq, (double)rec.mapq);
+        ak_dist_add(&d_ident, ident);
+        ak_dist_add(&d_ratio, ratio);
+        ak_dist_add(&d_qlen, (double)rec.qlen);
+        ak_dist_add(&d_block, (double)rec.block_len);
+        ak_dist_add(&d_nodes, (double)path_nodes(rec.path ? rec.path : ""));
 
         if (want_cigar) {
             if (rec.cigar) {

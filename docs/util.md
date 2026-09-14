@@ -7,19 +7,19 @@ allocates, nothing here logs, and nothing here can fail: every function either
 returns a value or writes through a buffer you already own. That is deliberate,
 so these can be called from the middle of a parser without an error path.
 
-Two groups: a pair of DNA routines used wherever a reverse strand has to be
-materialized, and the mean/variance/stddev trio the `stats` command reports
-with.
+Three groups: a pair of DNA routines used wherever a reverse strand has to be
+materialized, two string helpers, and the running-distribution accumulator
+both the graph and the alignment `stats` report with.
 
 ```c
-#include "akhal/util.h"   // ak_complement, ak_revcomp, ak_ends_with, ak_str2int, ak_mean/ak_variance/ak_stddev
+#include "akhal/util.h"   // ak_complement, ak_revcomp, ak_ends_with, ak_str2int, ak_dist_t
 ```
 
 ## Contents
 
 - [Sequences](#sequences) - [`ak_complement`](#ak_complement), [`ak_revcomp`](#ak_revcomp)
 - [Strings](#strings) - [`ak_ends_with`](#ak_ends_with), [`ak_str2int`](#ak_str2int)
-- [Summary statistics](#summary-statistics) - [`ak_mean`](#ak_mean), [`ak_variance`](#ak_variance), [`ak_stddev`](#ak_stddev)
+- [Summary statistics](#summary-statistics) - [`ak_dist_t`](#ak_dist_t), [`ak_dist_add`](#ak_dist_add), [`ak_dist_variance`](#ak_dist_variance), [`ak_dist_sd`](#ak_dist_sd)
 
 ## Sequences
 
@@ -130,87 +130,74 @@ if (ak_str2int("99999999999999999999", &wrap_len)) return 1;
 
 ## Summary statistics
 
-These three are meant to be used together, in order: `ak_mean()` over the array,
-that mean into `ak_variance()`, that variance into `ak_stddev()`. The mean is
-passed in rather than recomputed so a caller that already has it does not walk
-the array twice.
+One accumulator, `ak_dist_t`, fed one value at a time. It keeps the count, the
+running mean, the sum of squared deviations (Welford's update, so a single
+pass gives the variance without a second walk and without the cancellation a
+naive sum of squares suffers on large values) and the extremes. Nothing is
+collected into an array, which is what lets `gfa_read_stats()` and the GAF
+side of `akhal stats` summarize files far larger than memory.
 
-All of them take `const size_t *`, not `double *` - they are written for the
-counts and lengths the rest of the library deals in. `n == 0` is safe in both
-array functions and yields `0.0`, so an empty graph needs no special case.
+Values are `double`: the library feeds it counts and lengths, which are exact
+up to 2^53, and the alignment stats feed it ratios.
 
-### `ak_mean`
+### `ak_dist_t`
 
 ```c
-double ak_mean(const size_t *a, size_t n);
+typedef struct {
+    int64_t n;           // values seen
+    double  mean;        // running mean
+    double  m2;          // sum of squared deviations from the running mean
+    double  min, max;    // extremes; meaningless while n == 0
+} ak_dist_t;
 ```
 
-Arithmetic mean of `n` values, accumulated in `double`. Returns `0.0` when `n`
-is 0, which is a stand-in for "undefined" rather than a real mean - check `n`
-yourself if the distinction matters.
+Zero-initialize it (`ak_dist_t d = {0};`) and it is ready. `mean` is always
+current, so it can be read directly; `min` and `max` hold whatever the first
+value was once `n > 0`, and are unspecified before that - check `n` first.
+
+### `ak_dist_add`
 
 ```c
-size_t lens[] = { 100, 250, 175, 400, 75 };
-size_t n = sizeof(lens) / sizeof(lens[0]);
-
-// Values are size_t and are cast to double one at a time as they are summed.
-double mean = ak_mean(lens, n);
-printf("mean length %.2f over %lu value(s)\n", mean, (unsigned long)n);
-
-// n == 0 short-circuits before touching the pointer, so this is safe even
-// with a NULL array - but 0.0 is not distinguishable from a genuine mean of 0.
-printf("empty: %.2f\n", ak_mean(NULL, 0));
+void ak_dist_add(ak_dist_t *d, double x);
 ```
 
-### `ak_variance`
+Folds one value in. Order does not matter for the result beyond floating
+point rounding.
 
 ```c
-double ak_variance(const size_t *a, size_t n, double mean);
+ak_dist_t lens = {0};
+for (int32_t i = 0; i < g->n_seg; i++) ak_dist_add(&lens, (double)g->seg[i].len);
+
+printf("%lld segments, mean %.2f, min %llu, max %llu\n",
+       (long long)lens.n, lens.mean,
+       (unsigned long long)lens.min, (unsigned long long)lens.max);
+```
+
+### `ak_dist_variance`
+
+```c
+double ak_dist_variance(const ak_dist_t *d);
 ```
 
 **Population** variance: the sum of squared deviations divided by `n`, not by
-`n - 1`. It trusts the `mean` you pass and never recomputes it, so passing the
-mean of a different array silently produces a meaningless number. Returns `0.0`
-when `n` is 0.
+`n - 1`. Returns `0.0` on an empty accumulator, and a single value has
+variance `0.0` rather than a division by zero.
+
+### `ak_dist_sd`
 
 ```c
-size_t lens[] = { 100, 250, 175, 400, 75 };
-size_t n = sizeof(lens) / sizeof(lens[0]);
-
-// The mean must be the mean of this same array and this same n.
-double mean = ak_mean(lens, n);
-double var  = ak_variance(lens, n, mean);
-
-printf("mean %.2f, variance %.2f\n", mean, var);
-
-// Dividing by n rather than n - 1 means a single value has variance 0.0
-// instead of a division by zero.
-printf("one value: %.2f\n", ak_variance(lens, 1, ak_mean(lens, 1)));
+double ak_dist_sd(const ak_dist_t *d);
 ```
 
-### `ak_stddev`
+`sqrt()` of `ak_dist_variance()`, so `0.0` on an empty accumulator and never
+NaN.
 
 ```c
-double ak_stddev(double variance);
-```
+ak_dist_t depth = {0};
+double vals[] = { 3, 5, 4, 9, 4, 6 };
+for (size_t i = 0; i < 6; i++) ak_dist_add(&depth, vals[i]);
 
-`sqrt()` of the value it is given, and nothing else - it never sees the array.
-It performs no domain check, so a negative argument would produce NaN;
-`ak_variance()` never returns one.
-
-```c
-size_t depths[] = { 3, 5, 4, 9, 4, 6 };
-size_t n = sizeof(depths) / sizeof(depths[0]);
-
-// The three calls chain: array -> mean -> variance -> standard deviation.
-double mean = ak_mean(depths, n);
-double sd   = ak_stddev(ak_variance(depths, n, mean));
-
-printf("depth %.2f +/- %.2f\n", mean, sd);
-
-// Since it is only sqrt(), it is equally usable on a variance computed
-// elsewhere - but feed it nothing negative.
-printf("sd of 6.25 is %.2f\n", ak_stddev(6.25));
+printf("depth %.2f +/- %.2f\n", depth.mean, ak_dist_sd(&depth));
 ```
 
 ---

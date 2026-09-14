@@ -43,28 +43,38 @@ int ak_ends_with(const char *str, const char *suffix);
 int ak_str2int(const char *str, int *out);
 
 /**
- * Arithmetic mean of an array of values
- * @param a Array of values
- * @param n Number of values; 0 is safe
- * @return The mean, or 0.0 when n is 0
+ * Running summary of a distribution: count, mean, population variance and
+ * extremes, accumulated one value at a time with Welford's update so nothing
+ * has to be collected into an array first. Zero-initialize and feed values
+ * with ak_dist_add(); every query is safe on an empty accumulator.
  */
-double ak_mean(const size_t *a, size_t n);
+typedef struct {
+    int64_t n;           // values seen
+    double  mean;        // running mean
+    double  m2;          // sum of squared deviations from the running mean
+    double  min, max;    // extremes; meaningless while n == 0
+} ak_dist_t;
 
 /**
- * Population variance of an array of values
- * @param a Array of values
- * @param n Number of values; 0 is safe
- * @param mean Precomputed mean of the array (see ak_mean)
- * @return The variance, or 0.0 when n is 0
+ * Add one value to a running distribution
+ * @param d Accumulator, zero-initialized before the first call
+ * @param x The value
  */
-double ak_variance(const size_t *a, size_t n, double mean);
+void ak_dist_add(ak_dist_t *d, double x);
 
 /**
- * Standard deviation derived from a variance
- * @param variance A variance value (see ak_variance)
- * @return The square root of variance
+ * Population variance (divides by n, not n - 1) of the values seen so far
+ * @param d Accumulator
+ * @return The variance, or 0.0 while fewer than one value has been added
  */
-double ak_stddev(double variance);
+double ak_dist_variance(const ak_dist_t *d);
+
+/**
+ * Population standard deviation of the values seen so far
+ * @param d Accumulator
+ * @return sqrt of ak_dist_variance(), so 0.0 on an empty accumulator
+ */
+double ak_dist_sd(const ak_dist_t *d);
 
 #ifdef __cplusplus
 }

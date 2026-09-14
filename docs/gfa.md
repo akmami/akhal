@@ -1,6 +1,6 @@
 # `gfa` - (r)GFA graph model, reader and traversal
 
-Source: [`src/lib/gfa.c`](../src/lib/gfa.c) &middot; Header: [`include/akhal/gfa.h`](../include/akhal/gfa.h)
+Source: [`src/lib/gfa.c`](../src/lib/gfa.c), [`src/lib/gfa_st.c`](../src/lib/gfa_st.c) &middot; Header: [`include/akhal/gfa.h`](../include/akhal/gfa.h)
 
 The in-memory model of an assembly graph, and the single reader every command
 uses. Storage follows the "array + dict" design: segments and links live in
@@ -534,7 +534,7 @@ Returns `AK_OK`, or a negative `AK_E*` code with the reason logged.
 | `n_undefined` | `int64_t` | distinct ids an `L` or `P` line names that no `S` line defines |
 
 Three things are worth knowing about the numbers. 
-The standard deviations are population figures, dividing by n, which is what [`ak_variance`](util.md#ak_variance) does. 
+The standard deviations are population figures, dividing by n, which is what [`ak_dist_variance`](util.md#ak_dist_variance) does. 
 The degree extremes cover only segments with a non-zero degree, so a graph of unlinked segments reports `-1` for all four rather than `0`. 
 And `n_rank0` comes from the file's own `SR` tags when it has them - those are authoritative, and the `P` lines are then not consulted for it at all.
 
