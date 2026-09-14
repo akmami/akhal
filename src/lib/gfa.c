@@ -558,22 +558,6 @@ int gfa_path_segs(const gfa_t *g, int32_t k, const uint32_t **segs) {
 
 // ranks
 
-// rank against a caller-supplied backbone; see akhal/gfa.h
-int64_t gfa_rank_mark(gfa_t *g, const uint8_t *on) {
-    if (!on) return AK_EINVAL;
-
-    int64_t n0 = 0;
-    for (int32_t i = 0; i < g->n_seg; i++) {
-        if (on[i]) {
-            g->seg[i].rank = 0;
-            n0++;
-        } else {
-            g->seg[i].rank = 1;
-        }
-    }
-    return n0;
-}
-
 // rank against the graph's own paths; see akhal/gfa.h
 int64_t gfa_rank_paths(gfa_t *g) {
     if (!(g->flags & GFA_PATHS)) {
@@ -605,6 +589,22 @@ int64_t gfa_rank_paths(gfa_t *g) {
         ak_log(AK_LOG_DEBUG, "gfa", "no paths to rank against; all %d segment(s) left at rank 1", g->n_seg);
     } else {
         ak_log(AK_LOG_DEBUG, "gfa", "%lld segment(s) at rank 0 over %d path(s), %lld at rank 1", (long long)n0, g->n_path, (long long)((int64_t)g->n_seg - n0));
+    }
+    return n0;
+}
+
+// rank against a caller-supplied backbone; see akhal/gfa.h
+int64_t gfa_rank_mark(gfa_t *g, const uint8_t *on) {
+    if (!on) return AK_EINVAL;
+
+    int64_t n0 = 0;
+    for (int32_t i = 0; i < g->n_seg; i++) {
+        if (on[i]) {
+            g->seg[i].rank = 0;
+            n0++;
+        } else {
+            g->seg[i].rank = 1;
+        }
     }
     return n0;
 }

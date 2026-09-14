@@ -62,12 +62,25 @@ The extension picks which: `.gfa`/`.rgfa` report on the graph, `.gaf` on the ali
 
 **Usage:**
 ```sh
-./akhal stats <r/GFA file>
+./akhal stats <r/GFA file> [--no-degrees] [--ranks]
 ./akhal stats <GAF file> [--cigar]
 ```
 
 ##### Graph statistics
+The graph is never loaded: the file is read once and the counts and length
+distributions are running totals. Two figures are properties of the whole
+file rather than of any line and cost memory to answer, so each has a switch.
+Degrees are computed by default: the segment and link ids are kept as flat
+arrays, about 4 bytes per S line and 8 per L line, and sorted in place at the
+end so the degrees can be read off as run lengths - roughly 8 GB on a graph of
+700 million segments and links, whatever the ids look like; `--no-degrees`
+skips that and the pass holds nothing. `--ranks` (off by default) also keeps
+every P-line step, which on a file that carries all its haplotypes as P lines
+dwarfs the graph itself; a file with its own `SR` tags answers the rank
+question for free either way.
+
 - **Segment count**: Number of segments in the graph.
+- **Rank 0 segment count**: Segments at rank 0, from the file's `SR` tags when it has them, otherwise derived from the P lines under `--ranks` (reported as n/a without it).
 - **Segment avg length**: Average segment length.
 - **Segment std length**: Standard deviation of segment lengths.
 - **Segment min length**: Minimum segment length.
@@ -75,10 +88,10 @@ The extension picks which: `.gfa`/`.rgfa` report on the graph, `.gaf` on the ali
 - **Link count**: Number of links between segments.
 - **Link overlapping avg length**: Average length of overlapping links.
 - **Link overlapping std length**: Standard deviation of link overlap lengths.
-- **Minimum in degree**: Minimum number of incoming links.
-- **Maximum in degree**: Maximum number of incoming links.
-- **Minimum out degree**: Minimum number of outgoing links.
-- **Maximum out degree**: Maximum number of outgoing links.
+- **In degree avg / std**, **Minimum / Maximum in degree**: Incoming links per segment, over segments that have any (omitted under `--no-degrees`).
+- **Out degree avg / std**, **Minimum / Maximum out degree**: The same for outgoing links (omitted under `--no-degrees`).
+
+Ids named by an L line (or, under `--ranks`, a P line) that no S line defines are counted and reported as a warning; under `--no-degrees` without `--ranks` nothing is checked.
 
 ##### Alignment statistics
 Everything below the alignment counts describes *primary* alignments with a mapping quality above 0, which is the population `gaftools stat` reports on as well. 

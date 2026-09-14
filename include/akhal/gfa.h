@@ -154,22 +154,31 @@ gfa_t *gfa_read(const char *fn, int flags);
 
 // Statistics without a graph
 
+// What gfa_read_stats() should work out beyond the streaming totals. Each
+// costs memory in proportion to the file (see below); neither is needed for
+// the counts and the length / overlap distributions.
+#define GFA_STAT_DEGREES 0x1   // in- and out-degree distributions, and n_undefined
+#define GFA_STAT_RANKS   0x2   // n_rank0 from the P lines when the file has no SR tags
+
 /**
  * What a summary pass over a file can say about it. Counts are of lines, so
  * n_seg is S lines and n_link L lines, whether or not every id they name is
  * defined elsewhere in the file.
  *
- * The length and overlap distributions are populations, not samples: the
- * standard deviations divide by n.
+ * The distributions are populations, not samples: the standard deviations
+ * divide by n. The degree distributions cover only segments with a non-zero
+ * degree, so a graph whose segments all stand alone reports -1 for the four
+ * extremes rather than 0.
  *
- * The degree extremes cover only segments with a non-zero degree, so a graph
- * whose segments all stand alone reports -1 for all four rather than 0.
+ * A figure that was not asked for is -1: n_rank0 when the file has no SR
+ * tags and GFA_STAT_RANKS was off, and n_undefined and the degree extremes
+ * when GFA_STAT_DEGREES was off.
  */
 typedef struct {
     int64_t  n_seg;          // S lines
     int64_t  n_link;         // L lines
     int64_t  n_path;         // P lines
-    int64_t  n_rank0;        // segments at rank 0
+    int64_t  n_rank0;        // segments at rank 0; -1 when not derived
     int      has_sr;         // whether those SR tags were the file's own
 
     double   seg_mean;       // segment length
@@ -179,35 +188,45 @@ typedef struct {
     double   ov_mean;        // link overlap
     double   ov_sd;
 
-    int32_t  min_in, max_in; // degrees, over segments that have any; -1 for none
+    double   in_mean, in_sd;     // degrees, over segments that have any
+    double   out_mean, out_sd;
+    int32_t  min_in, max_in;     // -1 for none
     int32_t  min_out, max_out;
 
-    int64_t  n_undefined;    // distinct ids an L or P line names that no S line defines
+    int64_t  n_undefined;    // distinct ids an L or P line names that no S line defines; -1 when not checked
 } gfa_stat_t;
 
 /**
  * Summarize a GFA in one streaming pass, without building a graph.
  *
- * Everything the summary needs is either a running total or one counter per
- * segment id, so nothing is held but a small array indexed by id: no segment
- * records, no link records, no id-to-index table, and no path block. On a
- * whole-genome graph that is gigabytes rather than tens of them.
+ * The counts and the length and overlap distributions are running totals and
+ * cost nothing per line. The rest are properties of the whole file - a
+ * degree is how many L lines name a segment, "undefined" is named but never
+ * defined, "rank 0" without SR tags is named by some P line - and are
+ * answered from flat arrays of ids: appended as the lines stream past, sorted in
+ * place afterwards, and read off as run lengths and merges. An array costs
+ * 4 bytes per entry, or 8 once an id exceeds 32 bits, regardless of how the
+ * ids are numbered.
  *
- * The index wants ids that sit in a reasonably tight range - which every GFA
- * writer produces, since they number segments from 1. Ids scattered far enough
- * apart to make the array wasteful are noticed and the file is summarized
- * through gfa_read() instead, so the answer is the same either way and only
- * the cost differs
- * 
- * @param fn Path to the .gfa/.rgfa file
- * @param st Filled in on success; untouched on failure
- * @return AK_OK, or a negative AK_E* code, with the reason logged
+ * GFA_STAT_DEGREES keeps three arrays: the S ids, the L sources and the L
+ * targets - about 4 * (n_seg + 2 * n_link) bytes, so 8 GB on a graph of 700
+ * million segments and links. GFA_STAT_RANKS keeps the S ids and every P
+ * step, which on a file carrying all haplotypes as P lines is far larger than
+ * the graph itself; a file that ranks itself with SR tags needs nothing, and
+ * answers n_rank0 with either setting. Without either flag the pass holds
+ * nothing but the line buffer.
+ *
+ * @param fn Path to the .gfa / .rgfa file
+ * @param st Filled in on success
+ * @param flags Bitwise OR of GFA_STAT_DEGREES and GFA_STAT_RANKS, or 0
+ * @return AK_OK, or a negative AK_E* code (unreadable file, OOM)
  */
-int gfa_read_stats(const char *fn, gfa_stat_t *st);
+int gfa_read_stats(const char *fn, gfa_stat_t *st, int flags);
 
 /**
  * Write a graph back out as GFA: an H line, one S per segment (with SR:i:
  * where a rank is set), one L per link, and one P per path
+ * 
  * @param g Graph to emit
  * @param out Destination stream
  * @return AK_OK, or AK_EIO if the stream went bad
@@ -222,6 +241,7 @@ int gfa_write(const gfa_t *g, FILE *out);
  * buffer to it directly would be freed twice, and free()ing it would corrupt
  * the arena. An empty sequence leaves the segment with seq == NULL and len 0,
  * which is what the reader records for an S line carrying none
+ * 
  * @param g Graph owning the segment
  * @param s Segment to set, obtained from gfa_seg_at()
  * @param seq Bytes to copy; may be NULL when len is 0
@@ -238,6 +258,7 @@ int gfa_seg_set_seq(gfa_t *g, gfa_seg_t *s, const char *seq, size_t len);
  * Each tag is emitted only where the segment carries it, so one left without a
  * name or an offset (a NULL `ref_name`, a negative `start`) simply comes out
  * with the tags it does have. See rgfa_build(), which works those out
+ * 
  * @param g Graph to emit
  * @param out Destination stream
  * @return AK_OK, or AK_EIO if the stream went bad
@@ -246,6 +267,7 @@ int gfa_write_rgfa(const gfa_t *g, FILE *out);
 
 /**
  * Release a graph and everything it owns. Safe to call with NULL
+ * 
  * @param g Graph to destroy
  */
 void gfa_destroy(gfa_t *g);
@@ -355,6 +377,7 @@ int gfa_has_arc(const gfa_t *g, int32_t v, int32_t w);
 /**
  * Ordered segments of a path. The matching orientation chars are in
  * g->path_ori at the same offset; an entry may be GFA_NIL for an unresolved id
+ * 
  * @param g Graph to query (must have been read with GFA_PATHS)
  * @param k Path index
  * @param segs Set to an array of segment indices; feed gfa_seg_at()
@@ -365,6 +388,7 @@ int gfa_path_segs(const gfa_t *g, int32_t k, const uint32_t **segs);
 
 /**
  * Number of steps in path k, known from GFA_PATH_NAMES on (no step arrays needed)
+ * 
  * @param g Graph to query
  * @param k Path index
  * @return The step count, or 0 if k is out of range or no path flag was set
@@ -390,6 +414,7 @@ static inline int64_t gfa_path_n_steps(const gfa_t *g, int32_t k) {
  * Existing SR values are overwritten. gfa_read() calls this itself when the
  * file carried no SR tags, so calling it explicitly is how you re-rank a graph
  * whose tags you want to replace. Requires GFA_PATHS
+ * 
  * @param g Graph to rank, modified in place
  * @return Number of segments left at rank 0, or a negative AK_E* code
  */
@@ -400,6 +425,7 @@ int64_t gfa_rank_paths(gfa_t *g);
  * is set, rank 1 everywhere else. This is the general form of
  * gfa_rank_paths(), for a backbone that did not come from the P lines - a
  * traced reference sequence, for instance (see call_ref_fasta)
+ * 
  * @param g Graph to rank, modified in place
  * @param on Flags of length gfa_n_seg(g); non-zero marks a backbone segment
  * @return Number of segments set to rank 0, or a negative AK_E* code
@@ -414,6 +440,7 @@ int64_t gfa_rank_mark(gfa_t *g, const uint8_t *on);
  * Segments refer to their path by index, so this resets every ref_path to -1
  * rather than leaving one pointing at a path that no longer exists.
  * The segments themselves, and their ranks, are untouched
+ * 
  * @param g Graph to modify
  */
 void gfa_clear_paths(gfa_t *g);
@@ -427,6 +454,7 @@ void gfa_clear_paths(gfa_t *g);
  * externally supplied reference the graph's backbone - mark the ranks, then
  * install the walk that produced them in place of the old P lines.
  * Requires GFA_PATHS
+ * 
  * @param g Graph to modify
  * @param name Name for the new path; copied
  * @param segs Ordered segment indices; GFA_NIL entries are skipped
@@ -447,6 +475,7 @@ int gfa_add_path(gfa_t *g, const char *name, const uint32_t *segs, const char *o
  * is always a full permutation of 0..n_seg-1.
  *
  * Requires the graph was read with GFA_LINKS
+ * 
  * @param g Graph to order
  * @param order Caller-allocated array of length n_seg; filled with segment
  *              indices in topological order
@@ -457,6 +486,7 @@ int gfa_toposort(const gfa_t *g, int32_t *order);
 
 /**
  * Whether the graph carries per-segment degree arrays (read with GFA_DEGREES)
+ * 
  * @param g Graph to query
  * @return Non-zero when in_degree and out_degree may be indexed
  */
@@ -467,6 +497,7 @@ static inline int gfa_has_degrees(const gfa_t *g) {
 /**
  * Whether the graph carries segments (read with GFA_SEGS or any flag implying
  * it). Read with GFA_PATH_NAMES alone it does not, and seg[] must not be used
+ * 
  * @param g Graph to query
  * @return Non-zero when seg[] and the segment accessors may be used
  */

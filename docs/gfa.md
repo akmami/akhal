@@ -511,13 +511,17 @@ gfa_destroy(g);
 ## Statistics without a graph
 
 Summarizing a file does not need one. 
-The counts are running totals, the two distributions are Welford's online mean and variance, and the only per-segment state is two degrees and three bits - so `gfa_read_stats()` reads the file once and keeps nothing else: no segment records, no link records, no id-to-index table, no path block. 
-On chr22 that is 248 MB and 5 s where [`gfa_read`](#gfa_read) plus the old counting was 1.5 GB and 27 s; on a whole-genome graph it is the difference between gigabytes and tens of them.
+The counts are running totals and the distributions are Welford's online mean and variance ([`ak_dist_t`](util.md#ak_dist_t)), so the streaming part of `gfa_read_stats()` holds nothing but the line buffer. 
+Three figures are properties of the file as a whole rather than of any line - a segment's degree is how many `L` lines name it, "undefined" is named but never defined, and without `SR` tags "rank 0" is named by some `P` line - and those are answered from flat **id arrays** rather than tables: the ids are appended to flat arrays as the lines stream past, radix-sorted in place once the file is read (klib's `KRADIX_SORT_INIT`, which needs no scratch buffer), and read off as run lengths and merges. 
+An array costs 4 bytes per entry, or 8 once an id exceeds 32 bits, whatever the numbering looks like, so scattered ids cost exactly what dense ones do and there is no fallback path.
 
 ### `gfa_read_stats`
 
 ```c
-int gfa_read_stats(const char *fn, gfa_stat_t *st);
+#define GFA_STAT_DEGREES 0x1   // degree distributions and n_undefined
+#define GFA_STAT_RANKS   0x2   // n_rank0 from the P lines when the file has no SR tags
+
+int gfa_read_stats(const char *fn, gfa_stat_t *st, int flags);
 ```
 
 Fills `st` from one pass over `fn`. 
@@ -526,25 +530,27 @@ Returns `AK_OK`, or a negative `AK_E*` code with the reason logged.
 | Field | Type | Notes |
 | --- | --- | --- |
 | `n_seg`, `n_link`, `n_path` | `int64_t` | lines of each kind |
-| `n_rank0` | `int64_t` | segments at rank 0 |
+| `n_rank0` | `int64_t` | segments at rank 0; `-1` when not derived |
 | `has_sr` | `int` | whether the file carried its own `SR` tags |
 | `seg_mean`, `seg_sd`, `seg_min`, `seg_max` | `double`, `uint64_t` | segment length |
 | `ov_mean`, `ov_sd` | `double` | link overlap |
-| `min_in`, `max_in`, `min_out`, `max_out` | `int32_t` | degrees, `-1` when no segment has one |
-| `n_undefined` | `int64_t` | distinct ids an `L` or `P` line names that no `S` line defines |
+| `in_mean`, `in_sd`, `out_mean`, `out_sd` | `double` | degrees, over segments that have any |
+| `min_in`, `max_in`, `min_out`, `max_out` | `int32_t` | degree extremes, `-1` when no segment has one |
+| `n_undefined` | `int64_t` | distinct ids an `L` or `P` line names that no `S` line defines; `-1` when not checked |
+
+What each flag costs. 
+`GFA_STAT_DEGREES` keeps three arrays - the `S` ids, the `L` sources and the `L` targets - about `4 * (n_seg + 2 * n_link)` bytes, so 8 GB on a graph of 700 million segments and links, and it is what fills the degree fields and `n_undefined`. 
+`GFA_STAT_RANKS` keeps the `S` ids and every `P` step, which on a file carrying all its haplotypes as `P` lines is far larger than the graph itself; a file that ranks itself with `SR` tags needs nothing and answers `n_rank0` with either setting, since those tags are authoritative and the `P` lines are then not consulted. 
+With `flags == 0` the pass holds nothing per line, and the fields the flags would fill are `-1`.
 
 Three things are worth knowing about the numbers. 
-The standard deviations are population figures, dividing by n, which is what [`ak_dist_variance`](util.md#ak_dist_variance) does. 
-The degree extremes cover only segments with a non-zero degree, so a graph of unlinked segments reports `-1` for all four rather than `0`. 
-And `n_rank0` comes from the file's own `SR` tags when it has them - those are authoritative, and the `P` lines are then not consulted for it at all.
-
-The per-segment state is one array indexed by `id - lo`, where `lo` is the smallest id seen, so a chunk numbered from forty million costs no more than one numbered from one. 
-Ids scattered far enough apart to make that array wasteful are noticed, and the file is summarized through `gfa_read()` instead - the same answer, at the old price. 
-Nothing else about the call changes, so a caller never has to know which path ran.
+The standard deviations are population figures, dividing by n. 
+The degree figures cover only segments with a non-zero degree, so a graph of unlinked segments reports `-1` for the four extremes rather than `0`; an `L` line naming an undefined id still counts toward its defined endpoint's degree, as it does toward `n_link`. 
+And `n_rank0` without `SR` tags counts defined segments only, the same set [`gfa_rank_paths`](#gfa_rank_paths) can mark.
 
 ```c
 gfa_stat_t st;
-if (gfa_read_stats("graph.gfa", &st) != AK_OK) return 1;
+if (gfa_read_stats("graph.gfa", &st, GFA_STAT_DEGREES) != AK_OK) return 1;
 
 printf("%lld segment(s), %lld link(s)\n", (long long)st.n_seg, (long long)st.n_link);
 printf("segment length: mean %.2f, sd %.2f, %llu..%llu\n",

@@ -15,37 +15,45 @@ KHASHL_MAP_INIT(KH_LOCAL, rdmap_t, rdmap, const char *, uint32_t, kh_hash_str, k
 
 // print the stats usage line
 static void usage(void) {
-    ak_log(AK_LOG_ERROR, NULL, "usage: akhal stats <r/GFA|GAF> [--cigar]");
+    ak_log(AK_LOG_ERROR, NULL, "usage: akhal stats <r/GFA|GAF> [--no-degrees] [--ranks] [--cigar]");
 }
 
 // graph statistics
 
 // `stats` over an r/GFA graph
-static int stats_gfa(const char *fn) {
-    // the summary needs counters, two distributions and two degrees per
-    // segment - none of which is a graph, so it does not build one
+static int stats_gfa(const char *fn, int flags) {
+    // the summary is a streaming pass plus, when asked, sorted columns of ids - never a graph
     gfa_stat_t st;
-    if (gfa_read_stats(fn, &st) != AK_OK) return 1;
+    if (gfa_read_stats(fn, &st, flags) != AK_OK) return 1;
 
     if (st.n_undefined > 0) {
-        ak_log(AK_LOG_WARN, "stats", "%lld id(s) named by an L or P line are defined by no S line",
-               (long long)st.n_undefined);
+        ak_log(AK_LOG_WARN, "stats", "%lld id(s) named by an L or P line are defined by no S line", (long long)st.n_undefined);
     }
 
     printf("Segment count: %lld\n", (long long)st.n_seg);
-    printf("Rank 0 segment count: %lld\n", (long long)st.n_rank0);
-    printf("Rank 0< segment count: %lld\n", (long long)(st.n_seg - st.n_rank0));
+    if (st.n_rank0 >= 0) {
+        printf("Rank 0 segment count: %lld\n", (long long)st.n_rank0);
+        printf("Rank 0< segment count: %lld\n", (long long)(st.n_seg - st.n_rank0));
+    } else {
+        printf("Rank 0 segment count: n/a (no SR tags; pass --ranks to derive from P lines)\n");
+    }
     printf("Segment avg length: %f\n", st.seg_mean);
     printf("Segment std length: %f\n", st.seg_sd);
-    printf("Segment min. length %lu\n", (unsigned long)st.seg_min);
-    printf("Segment max. length %lu\n", (unsigned long)st.seg_max);
+    printf("Segment min. length %llu\n", (unsigned long long)st.seg_min);
+    printf("Segment max. length %llu\n", (unsigned long long)st.seg_max);
     printf("Link count: %lld\n", (long long)st.n_link);
     printf("Link overlapping avg length: %f\n", st.ov_mean);
     printf("Link overlapping std length: %f\n", st.ov_sd);
-    printf("Minimum in degree: %d\n", st.min_in);
-    printf("Maximum in degree: %d\n", st.max_in);
-    printf("Minimum out degree: %d\n", st.min_out);
-    printf("Maximum out degree: %d\n", st.max_out);
+    if (flags & GFA_STAT_DEGREES) {
+        printf("In degree avg: %f\n", st.in_mean);
+        printf("In degree std: %f\n", st.in_sd);
+        printf("Minimum in degree: %d\n", st.min_in);
+        printf("Maximum in degree: %d\n", st.max_in);
+        printf("Out degree avg: %f\n", st.out_mean);
+        printf("Out degree std: %f\n", st.out_sd);
+        printf("Minimum out degree: %d\n", st.min_out);
+        printf("Maximum out degree: %d\n", st.max_out);
+    }
     return 0;
 }
 
@@ -326,10 +334,15 @@ static int stats_gaf(const char *fn, int want_cigar) {
 int cmd_stats(int argc, char **argv) {
     const char *fn = NULL;
     int want_cigar = 0;
+    int gfa_flags = GFA_STAT_DEGREES;   // degrees by default; ranks on request
 
     for (int i = 2; i < argc; i++) {
         if (!strcmp(argv[i], "--cigar")) {
             want_cigar = 1;
+        } else if (!strcmp(argv[i], "--no-degrees") || !strcmp(argv[i], "--no-degree")) {
+            gfa_flags &= ~GFA_STAT_DEGREES;
+        } else if (!strcmp(argv[i], "--ranks") || !strcmp(argv[i], "--rank")) {
+            gfa_flags |= GFA_STAT_RANKS;
         } else if (argv[i][0] == '-') {
             ak_log(AK_LOG_ERROR, NULL, "unknown option: %s", argv[i]);
             usage();
@@ -353,7 +366,7 @@ int cmd_stats(int argc, char **argv) {
         if (want_cigar) {
             ak_log(AK_LOG_WARN, NULL, "--cigar only applies to GAF input; ignoring it");
         }
-        return stats_gfa(fn);
+        return stats_gfa(fn, gfa_flags);
     }
 
     ak_log(AK_LOG_ERROR, NULL, "expected a .gfa, .rgfa or .gaf file: %s", fn);
