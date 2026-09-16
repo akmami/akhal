@@ -3,19 +3,43 @@
 #include "akhal/error.h"
 #include "cli.h"
 
+#include "khashl.h"
+
 #include <stdio.h>
 #include <string.h>
 
 // What `parse` checks. All are on by default; each --no-* switch drops one,
-// and with it whatever gfa_read() would have had to load for it
+// and with it whatever gfa_read() would have had to load for it. --basic
+// keeps the structural checks and drops the rest.
 #define CHECK_LINKS    0x1   // L lines naming segments no S line defines
 #define CHECK_OVERLAPS 0x2   // the bases either side of an overlap agree (loads every sequence; implies CHECK_LINKS)
-#define CHECK_PATHS    0x4   // P steps name defined segments and consecutive steps share a link
+#define CHECK_PATHS    0x4   // P steps name defined segments and consecutive steps are joined by a link; reused path names are pointed out
 #define CHECK_RANKS    0x8   // rGFA only: rank-0 segments match the path steps
 #define CHECK_ALL      (CHECK_LINKS | CHECK_OVERLAPS | CHECK_PATHS | CHECK_RANKS)
+#define CHECK_BASIC    (CHECK_LINKS | CHECK_PATHS)
+
+// path name -> index of the first path that carried it
+KHASHL_MAP_INIT(KH_LOCAL, pathmap_t, pathmap, const char *, int32_t, kh_hash_str, kh_eq_str)
 
 static void usage(void) {
-    ak_log(AK_LOG_ERROR, NULL, "usage: akhal parse <r/GFA> [--no-links] [--no-overlaps] [--no-paths] [--no-ranks]");
+    ak_log(AK_LOG_ERROR, NULL, "usage: akhal parse <r/GFA> [--basic] [--no-links] [--no-overlaps] [--no-paths] [--no-ranks]");
+}
+
+// P lines sharing a name
+static void check_path_names(const gfa_t *g) {
+    pathmap_t *h = pathmap_init();
+    if (!h) return;
+    long dup = 0;
+    for (int32_t k = 0; k < gfa_n_path(g); k++) {
+        int absent;
+        khint_t it = pathmap_put(h, gfa_path_name(g, k), &absent);
+        if (absent) kh_val(h, it) = k;
+        else dup++;
+    }
+    if (dup > 0) {
+        ak_log(AK_LOG_WARN, "parse", "%ld of %d P lines reuse a name already given to another path (%d distinct name(s)); fine for a path written as fragments, otherwise a problem", dup, gfa_n_path(g), (int)kh_size(h));
+    }
+    pathmap_destroy(h);
 }
 
 // `parse` entry point; see cli.h
@@ -24,7 +48,9 @@ int cmd_parse(int argc, char **argv) {
     int checks = CHECK_ALL;
 
     for (int i = 2; i < argc; i++) {
-        if (!strcmp(argv[i], "--no-links")) {
+        if (!strcmp(argv[i], "--basic")) {
+            checks = CHECK_BASIC;
+        } else if (!strcmp(argv[i], "--no-links")) {
             checks &= ~CHECK_LINKS;
         } else if (!strcmp(argv[i], "--no-overlaps")) {
             checks &= ~CHECK_OVERLAPS;
@@ -70,20 +96,24 @@ int cmd_parse(int argc, char **argv) {
 
     long issues = 0;
 
-    // consecutive path segments must be connected by a link
+    // consecutive path steps must be joined by a link, on the strand the path walks them: "2-,1-" is a valid walk of "L 1 + 2 +"
     if (checks & CHECK_PATHS) {
         for (int32_t k = 0; k < gfa_n_path(g); k++) {
             const uint32_t *segs;
             int n = gfa_path_segs(g, k, &segs);
+            const char *ori = g->path_ori + g->path_off[k];
             for (int i = 1; i < n; i++) {
                 uint32_t a = segs[i - 1], b = segs[i];
                 if (a == GFA_NIL || b == GFA_NIL) continue;
-                if (!gfa_has_arc(g, (int32_t)a, (int32_t)b)) {
-                    ak_log(AK_LOG_WARN, "parse", "no link %lu -> %lu present in path %s", (unsigned long)gfa_seg_at(g, (int32_t)a)->id, (unsigned long)gfa_seg_at(g, (int32_t)b)->id, gfa_path_name(g, k));
+                if (!gfa_has_link(g, (int32_t)a, ori[i - 1], (int32_t)b, ori[i])) {
+                    ak_log(AK_LOG_WARN, "parse", "no link %llu%c -> %llu%c present in path %s",
+                           (unsigned long long)gfa_seg_at(g, (int32_t)a)->id, ori[i - 1],
+                           (unsigned long long)gfa_seg_at(g, (int32_t)b)->id, ori[i], gfa_path_name(g, k));
                     issues++;
                 }
             }
         }
+        check_path_names(g);
     }
 
     // rGFA: rank-0 segment count vs path occurrence count

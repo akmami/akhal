@@ -55,13 +55,15 @@ so a whole-genome file can be checked for what fits in memory.
 
 **Usage:**
 ```sh
-./akhal parse <r/GFA file> [--no-links] [--no-overlaps] [--no-paths] [--no-ranks]
+./akhal parse <r/GFA file> [--basic] [--no-links] [--no-overlaps] [--no-paths] [--no-ranks]
 ```
 
 - **links** (`--no-links`): every `L` line names two segments that an `S` line defines. Costs only the segment index.
 - **overlaps** (`--no-overlaps`): where a link declares an overlap, the bases either side of the join agree. This loads every sequence, which is most of a graph's memory, and it builds on the link check since resolving an overlap resolves its ends.
-- **paths** (`--no-paths`): every `P` step names a defined segment, and consecutive steps are joined by a link. Needs the path steps and the link adjacency.
+- **paths** (`--no-paths`): every `P` step names a defined segment, and consecutive steps are joined by a link on the strand the path walks them - `2-,1-` is a valid walk of `L 1 + 2 +`. Needs the path steps and the link adjacency. P lines that reuse a name are pointed out but not counted, since several writers emit one P line per fragment of a path.
 - **ranks** (`--no-ranks`; `.rgfa` only): the number of rank-0 segments matches the number of path steps.
+
+`--basic` keeps only the links and paths checks. That is what `odgi validate` (path connectivity) and `vg validate` (that, plus edge endpoints and path names) verify, so it is the setting to compare against them; the overlap and rank checks have no counterpart there.
 
 Malformed lines are reported whichever checks run. Problems found inside the
 reader (unknown ids, overlap mismatches) are logged as warnings; the ones the

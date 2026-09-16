@@ -20,7 +20,7 @@ contiguous slice.
 
 - [Reading and releasing](#reading-and-releasing) - [`gfa_read`](#gfa_read), [`gfa_write`](#gfa_write), [`gfa_seg_set_seq`](#gfa_seg_set_seq), [`gfa_destroy`](#gfa_destroy)
 - [Lookup and accessors](#lookup-and-accessors) - [`gfa_idx`](#gfa_idx), [`gfa_get`](#gfa_get), [counts and element accessors](#counts-and-element-accessors)
-- [Traversal](#traversal) - [`gfa_arcs`](#gfa_arcs), [`gfa_has_arc`](#gfa_has_arc), [`gfa_path_segs`](#gfa_path_segs)
+- [Traversal](#traversal) - [`gfa_arcs`](#gfa_arcs), [`gfa_has_arc`](#gfa_has_arc), [`gfa_has_link`](#gfa_has_link), [`gfa_path_segs`](#gfa_path_segs)
 - [Ranks](#ranks) - [`gfa_rank_paths`](#gfa_rank_paths), [`gfa_rank_mark`](#gfa_rank_mark)
 - [Rewriting the path block](#rewriting-the-path-block) - [`gfa_clear_paths`](#gfa_clear_paths), [`gfa_add_path`](#gfa_add_path)
 - [Ordering](#ordering) - [`gfa_toposort`](#gfa_toposort)
@@ -307,6 +307,32 @@ if (!g) return 1;
 int32_t v = gfa_idx(g, 3), w = gfa_idx(g, 5);
 if (v >= 0 && w >= 0 && gfa_has_arc(g, v, w))
     printf("3 -> 5 exists\n");
+
+gfa_destroy(g);
+```
+
+### `gfa_has_link`
+
+```c
+int gfa_has_link(const gfa_t *g, int32_t v, char ov, int32_t w, char ow);
+```
+
+Tests for an oriented join `v(ov) -> w(ow)`, the way a path walks it. 
+`gfa_has_arc()` only asks whether some `L` line was stored as `v -> w`; that is the wrong question for a path step pair, because an `L` line states one strand of a join and implies the other. 
+The pair `2-,1-` legitimately walks the line `L 1 + 2 +`, and `gfa_has_link(g, 2, '-', 1, '-')` says so, while a pair with the right ids and the wrong orientations is refused. 
+Requires `GFA_ARCS`; O(out-degree of `v` + out-degree of `w`).
+
+```c
+gfa_t *g = gfa_read("graph.gfa", GFA_ARCS | GFA_PATHS);
+if (!g) return 1;
+
+// every consecutive pair of a path must be a join the graph has
+const uint32_t *segs;
+int n = gfa_path_segs(g, 0, &segs);
+const char *ori = g->path_ori + g->path_off[0];
+for (int i = 1; i < n; i++)
+    if (!gfa_has_link(g, (int32_t)segs[i - 1], ori[i - 1], (int32_t)segs[i], ori[i]))
+        printf("step %d of path %s has no link\n", i, gfa_path_name(g, 0));
 
 gfa_destroy(g);
 ```

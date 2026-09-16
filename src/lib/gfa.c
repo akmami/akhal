@@ -544,6 +544,23 @@ int gfa_has_arc(const gfa_t *g, int32_t v, int32_t w) {
     return 0;
 }
 
+// whether the oriented join v(ov) -> w(ow) is in the graph; see akhal/gfa.h
+int gfa_has_link(const gfa_t *g, int32_t v, char ov, int32_t w, char ow) {
+    const uint32_t *a;
+    int n = gfa_arcs(g, v, &a);
+    for (int k = 0; k < n; k++) {
+        const gfa_link_t *e = &g->link[a[k]];
+        if ((int32_t)e->w == w && e->from_orient == ov && e->to_orient == ow) return 1;
+    }
+    char cv = ov == '+' ? '-' : '+', cw = ow == '+' ? '-' : '+';
+    n = gfa_arcs(g, w, &a);
+    for (int k = 0; k < n; k++) {
+        const gfa_link_t *e = &g->link[a[k]];
+        if ((int32_t)e->w == v && e->from_orient == cw && e->to_orient == cv) return 1;
+    }
+    return 0;
+}
+
 // ordered segments of path k; see akhal/gfa.h
 int gfa_path_segs(const gfa_t *g, int32_t k, const uint32_t **segs) {
     // path_seg is NULL when only GFA_PATH_NAMES was set

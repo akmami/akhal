@@ -368,12 +368,28 @@ int gfa_arcs(const gfa_t *g, int32_t v, const uint32_t **arcs);
 
 /**
  * Test for a directed link v -> w. Requires GFA_LINKS. O(out-degree of v)
+ * 
  * @param g Graph to query
  * @param v Source segment index
  * @param w Destination segment index
  * @return 1 if the link exists, else 0
  */
 int gfa_has_arc(const gfa_t *g, int32_t v, int32_t w);
+
+/**
+ * Test for an oriented join v(ov) -> w(ow), the way a path walks it. An L
+ * line states one strand of a join and implies the other, so this is
+ * satisfied by "L v ov w ow" and equally by its complement "L w !ow v !ov".
+ * Requires GFA_ARCS. O(out-degree of v + out-degree of w)
+ * 
+ * @param g Graph to query
+ * @param v Source segment index
+ * @param ov Orientation v is walked in, '+' or '-'
+ * @param w Destination segment index
+ * @param ow Orientation w is walked in, '+' or '-'
+ * @return 1 if the join exists on either strand, else 0
+ */
+int gfa_has_link(const gfa_t *g, int32_t v, char ov, int32_t w, char ow);
 
 /**
  * Ordered segments of a path. The matching orientation chars are in
