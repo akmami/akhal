@@ -30,3 +30,7 @@ THREADS=1
 
 # runs per measurement; the median is reported. 3 is a reasonable floor for numbers you intend to publish, 1 for a quick look
 REPEATS=1
+
+# seconds a single run may take before it is killed and its row reads "timeout"; 0 lifts the limit.
+# One day by default - the whole-genome graph puts some tools past that
+TIMEOUT=86400

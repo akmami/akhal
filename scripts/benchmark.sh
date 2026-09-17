@@ -10,6 +10,7 @@
 #   --out DIR         where results, logs and scratch go (default: out)
 #   --threads N       threads for the tools that take them (default: 1)
 #   --repeats N       runs per measurement, median reported (default: 1)
+#   --timeout SECS    give up on a run after this long (default: 86400, one day; 0 = never)
 #   --only REGEX      run only the tasks whose name matches
 #   --tools LIST      which tools to measure, comma or space separated
 #   --install         fetch the missing competitors into <out>/bin first
@@ -19,7 +20,7 @@
 #
 # Settings, all overridable in the config file:
 #
-#   AKHAL   GFA   VG_FILE   GAF   GAF_B   READS   REF   OUTDIR  THREADS  REPEATS  TOOLS
+#   AKHAL   GFA   VG_FILE   GAF   GAF_B   READS   REF   OUTDIR  THREADS  REPEATS  TIMEOUT  TOOLS
 #
 # The defaults assume the layout described in the README:
 #
@@ -46,6 +47,7 @@ REF=""
 OUTDIR="out"
 THREADS=1
 REPEATS=1
+TIMEOUT=86400
 
 TOOLS="all"
 
@@ -70,6 +72,7 @@ while [ $# -gt 0 ]; do
         --out)     OUTDIR=$2; shift 2 ;;
         --threads) THREADS=$2; shift 2 ;;
         --repeats) REPEATS=$2; shift 2 ;;
+        --timeout) TIMEOUT=$2; shift 2 ;;
         --only)    ONLY=$2; shift 2 ;;
         --tools)   TOOLS=$2; shift 2 ;;
         --install) DO_INSTALL=1; shift ;;
@@ -154,6 +157,21 @@ esac
 have() { 
     command -v "$1" >/dev/null 2>&1; 
 }
+
+# a run that outlives the budget is killed - the whole process group, so a
+# pipeline goes with it - and its row says "timeout". GNU timeout is
+# coreutils on linux and gtimeout from brew's coreutils on a mac
+TIMEOUT_BIN=""
+if [ "${TIMEOUT:-0}" -gt 0 ] 2>/dev/null; then
+    if have timeout; then TIMEOUT_BIN="timeout"
+    elif have gtimeout; then TIMEOUT_BIN="gtimeout"
+    fi
+    if [ -n "$TIMEOUT_BIN" ]; then
+        echo "budget: $TIMEOUT s per run ($TIMEOUT_BIN)"
+    else
+        echo "budget: none - no timeout binary found (coreutils); runs are not limited"
+    fi
+fi
 
 # was this tool asked for? 
 want() {
@@ -287,6 +305,7 @@ echo
     fi
     echo "threads: $THREADS"
     echo "repeats: $REPEATS"
+    echo "timeout: ${TIMEOUT}s"
     echo "tools:   $TOOLS"
     echo
     want akhal    && echo "akhal:    $("$AKHAL" --version 2>&1 | head -1)"
@@ -358,20 +377,29 @@ measure() {
     : > "$log"
     : > "$timelog"
 
+    # what actually runs: the command under the budget, if there is one.
+    # -k gives a stubborn process a minute after TERM before it gets KILL
+    local -a run
+    if [ -n "$TIMEOUT_BIN" ]; then
+        run=("$TIMEOUT_BIN" -k 60 "$TIMEOUT" bash -c "$cmd")
+    else
+        run=(bash -c "$cmd")
+    fi
+
     local i w r
     for i in $(seq 1 "$REPEATS"); do
         printf '== run %s of %s: %s\n' "$i" "$REPEATS" "$cmd" >> "$timelog"
         w="" r="NA"
         case "$TIME_MODE" in
             gnu)
-                "$TIME_BIN" -v -o "$tf" bash -c "$cmd" >>"$log" 2>>"$log"
+                "$TIME_BIN" -v -o "$tf" "${run[@]}" >>"$log" 2>>"$log"
                 rc=$?
                 cat "$tf" >> "$timelog"
                 w=$(awk -F': ' '/Elapsed \(wall clock\)/{print $NF}' "$tf" | to_seconds)
                 r=$(awk '/Maximum resident set size/{printf "%.3f\n", $NF/1024}' "$tf")
                 ;;
             bsd)
-                "$TIME_BIN" -l bash -c "$cmd" >>"$log" 2>"$tf"
+                "$TIME_BIN" -l "${run[@]}" >>"$log" 2>"$tf"
                 rc=$?
                 cat "$tf" >> "$log"
                 cat "$tf" >> "$timelog"
@@ -381,7 +409,7 @@ measure() {
             *)
                 local t0 t1
                 t0=$(now)
-                bash -c "$cmd" >>"$log" 2>>"$log"
+                "${run[@]}" >>"$log" 2>>"$log"
                 rc=$?
                 t1=$(now)
                 w=$(awk -v a="$t0" -v b="$t1" 'BEGIN{printf "%.3f\n", b-a}')
@@ -391,6 +419,14 @@ measure() {
         printf 'exit status: %s\n\n' "$rc" >> "$timelog"
         walls="$walls$w"
         rsss="$rsss$r"
+        # 124 is timeout's own code for a run it had to stop (137 if it
+        # needed KILL); whatever the run wrote by then is not a result
+        if [ -n "$TIMEOUT_BIN" ] && { [ "$rc" = 124 ] || [ "$rc" = 137 ]; }; then
+            status="timeout"
+            printf 'killed after %s s\n\n' "$TIMEOUT" >> "$timelog"
+            [ -n "$out" ] && rm -f "$out"
+            break
+        fi
         if ! printf '%s' " $accept " | grep -q " $rc "; then
             status="failed"
             break
@@ -409,7 +445,11 @@ measure() {
     fi
 
     row "$task" "$tool" "$status" "$rc" "$wall" "$rss" "$bytes" "$note" "$cmd"
-    printf '  %-10s %-9s %8ss  %8s MB  %s\n' "$task" "$tool" "$wall" "$rss" "$status(exit $rc)"
+    if [ "$status" = "timeout" ]; then
+        printf '  %-10s %-9s %8s   %8s MB  timeout: killed after %s s\n' "$task" "$tool" ">$TIMEOUT" "$rss"  "$TIMEOUT"
+    else
+        printf '  %-10s %-9s %8ss  %8s MB  %s\n' "$task" "$tool" "$wall" "$rss" "$status(exit $rc)"
+    fi
     [ "$status" != "ok" ] && printf '             see %s\n' "$log"
     return 0
 }
