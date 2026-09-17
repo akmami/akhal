@@ -558,9 +558,11 @@ Returns `AK_OK`, or a negative `AK_E*` code with the reason logged.
 | `n_seg`, `n_link`, `n_path` | `int64_t` | lines of each kind |
 | `n_bp` | `uint64_t` | total sequence length, the sum of every segment's length |
 | `n_rank0` | `int64_t` | segments at rank 0; `-1` when not derived |
+| `n_bp_rank0` | `uint64_t` | their sequence length; `0` unless the file carried `SR` tags |
+| `max_rank` | `int32_t` | deepest `SR` tag in the file; `-1` when it carried none |
 | `has_sr` | `int` | whether the file carried its own `SR` tags |
 | `seg_mean`, `seg_sd`, `seg_min`, `seg_max` | `double`, `uint64_t` | segment length |
-| `ov_mean`, `ov_sd` | `double` | link overlap |
+| `ov_mean`, `ov_sd`, `ov_min`, `ov_max` | `double`, `uint64_t` | link overlap |
 | `in_mean`, `in_sd`, `out_mean`, `out_sd` | `double` | degrees, over segments that have any |
 | `min_in`, `max_in`, `min_out`, `max_out` | `int32_t` | degree extremes, `-1` when no segment has one |
 | `n_undefined` | `int64_t` | distinct ids an `L` or `P` line names that no `S` line defines; `-1` when not checked |

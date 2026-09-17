@@ -180,6 +180,8 @@ typedef struct {
     int64_t  n_path;         // P lines
     uint64_t n_bp;           // total sequence length: the sum of every segment's length
     int64_t  n_rank0;        // segments at rank 0; -1 when not derived
+    uint64_t n_bp_rank0;     // their sequence length; 0 unless the file carried SR tags
+    int32_t  max_rank;       // deepest SR tag in the file; -1 when it carried none
     int      has_sr;         // whether those SR tags were the file's own
 
     double   seg_mean;       // segment length
@@ -188,6 +190,7 @@ typedef struct {
 
     double   ov_mean;        // link overlap
     double   ov_sd;
+    uint64_t ov_min, ov_max;
 
     double   in_mean, in_sd;     // degrees, over segments that have any
     double   out_mean, out_sd;

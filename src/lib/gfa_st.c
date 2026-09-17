@@ -202,7 +202,8 @@ int gfa_read_stats(const char *fn, gfa_stat_t *st, int flags) {
     ak_dist_t sl = {0}, ov = {0};
     ids_t segs = IDS_INIT, src = IDS_INIT, dst = IDS_INIT, steps = IDS_INIT;
     int64_t n_seg = 0, n_link = 0, n_path = 0, sr0 = 0;
-    uint64_t n_bp = 0;
+    int32_t max_rank = -1;
+    uint64_t n_bp = 0, bp0 = 0;
     int has_sr = 0, rc = AK_OK;
     uint64_t max_id = 0;
 
@@ -225,7 +226,11 @@ int gfa_read_stats(const char *fn, gfa_stat_t *st, int flags) {
             int32_t r = sr_tag(ks.s);
             if (r >= 0) {
                 has_sr = 1;
-                if (r == 0) sr0++;
+                if (r > max_rank) max_rank = r;
+                if (r == 0) {
+                    sr0++;
+                    bp0 += (uint64_t)(p - seq);
+                }
             }
             if (want_deg || want_rank) {
                 if (id > max_id) max_id = id;
@@ -264,8 +269,6 @@ int gfa_read_stats(const char *fn, gfa_stat_t *st, int flags) {
 
         } else if (p[0] == 'P' && p[1] == '\t') {
             n_path++;
-            // the steps are only walked when rank 0 has to be derived from
-            // them; a file that ranks itself needs nothing but the line count
             if (!want_rank || has_sr) continue;
             p += 2;
             while (*p && *p != '\t') p++;                // past the name
@@ -307,6 +310,10 @@ int gfa_read_stats(const char *fn, gfa_stat_t *st, int flags) {
     st->seg_max  = n_seg ? (uint64_t)sl.max : 0;
     st->ov_mean  = ov.mean;
     st->ov_sd    = ak_dist_sd(&ov);
+    st->ov_min   = n_link ? (uint64_t)ov.min : 0;
+    st->ov_max   = n_link ? (uint64_t)ov.max : 0;
+    st->max_rank = max_rank;
+    st->n_bp_rank0 = bp0;
     st->n_rank0  = has_sr ? sr0 : -1;               // -1: not derived
     st->n_undefined = -1;                           // -1: not checked
     st->in_mean = st->out_mean = st->in_sd = st->out_sd = 0.0;

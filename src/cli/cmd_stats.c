@@ -39,13 +39,22 @@ static int stats_gfa(const char *fn, int flags) {
     } else {
         printf("Rank 0 segment count: n/a (no SR tags; pass --ranks to derive from P lines)\n");
     }
+    // only a file with its own SR tags says how deep its ranks go, or how much sequence sits on the backbone
+    if (st.has_sr) {
+        printf("Rank 0 sequence length: %s\n", ak_format_u64(b, st.n_bp_rank0));
+        printf("Max rank: %s\n", ak_format_i64(b, st.max_rank));
+    }
     printf("Segment avg length: %s\n", ak_format_f64(b, st.seg_mean, 6));
     printf("Segment std length: %s\n", ak_format_f64(b, st.seg_sd, 6));
     printf("Segment min. length %s\n", ak_format_u64(b, st.seg_min));
     printf("Segment max. length %s\n", ak_format_u64(b, st.seg_max));
     printf("Link count: %s\n", ak_format_i64(b, st.n_link));
+    printf("Links per segment: %s\n", ak_format_f64(b, st.n_seg ? (double)st.n_link / (double)st.n_seg : 0.0, 6));
     printf("Link overlapping avg length: %s\n", ak_format_f64(b, st.ov_mean, 6));
     printf("Link overlapping std length: %s\n", ak_format_f64(b, st.ov_sd, 6));
+    printf("Link overlapping min. length %s\n", ak_format_u64(b, st.ov_min));
+    printf("Link overlapping max. length %s\n", ak_format_u64(b, st.ov_max));
+    printf("Path count: %s\n", ak_format_i64(b, st.n_path));
     if (flags & GFA_STAT_DEGREES) {
         printf("In degree avg: %s\n", ak_format_f64(b, st.in_mean, 6));
         printf("In degree std: %s\n", ak_format_f64(b, st.in_sd, 6));
@@ -55,6 +64,9 @@ static int stats_gfa(const char *fn, int flags) {
         printf("Out degree std: %s\n", ak_format_f64(b, st.out_sd, 6));
         printf("Minimum out degree: %s\n", ak_format_i64(b, st.min_out));
         printf("Maximum out degree: %s\n", ak_format_i64(b, st.max_out));
+    }
+    if (st.n_undefined >= 0) {
+        printf("Undefined segment count: %s\n", ak_format_i64(b, st.n_undefined));
     }
     return 0;
 }

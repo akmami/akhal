@@ -96,17 +96,22 @@ question for free either way.
 - **Segment count**: Number of segments in the graph.
 - **Total sequence length**: Sum of all segment lengths, in bp.
 - **Rank 0 segment count**: Segments at rank 0, from the file's `SR` tags when it has them, otherwise derived from the P lines under `--ranks` (reported as n/a without it).
+- **Rank 0 sequence length**, **Max rank**: The bp on the backbone and the deepest `SR` tag. Only a file carrying its own `SR` tags reports these.
 - **Segment avg length**: Average segment length.
 - **Segment std length**: Standard deviation of segment lengths.
 - **Segment min length**: Minimum segment length.
 - **Segment max length**: Maximum segment length.
 - **Link count**: Number of links between segments.
+- **Links per segment**: `links / segments`, over every segment. Unlike the degree figures below it needs no per-segment state, so it stands whatever the switches.
 - **Link overlapping avg length**: Average length of overlapping links.
 - **Link overlapping std length**: Standard deviation of link overlap lengths.
+- **Link overlapping min./max. length**: The extremes of the same distribution.
+- **Path count**: Number of `P` lines.
 - **In degree avg / std**, **Minimum / Maximum in degree**: Incoming links per segment, over segments that have any (omitted under `--no-degrees`).
 - **Out degree avg / std**, **Minimum / Maximum out degree**: The same for outgoing links (omitted under `--no-degrees`).
+- **Undefined segment count**: Distinct ids an `L` or `P` line names that no `S` line defines (omitted under `--no-degrees`).
 
-Ids named by an L line (or, under `--ranks`, a P line) that no S line defines are counted and reported as a warning; under `--no-degrees` without `--ranks` nothing is checked.
+Those undefined ids are also reported as a warning when there are any; under `--no-degrees` without `--ranks` nothing is checked and the line is omitted.
 
 ##### Alignment statistics
 Everything below the alignment counts describes *primary* alignments with a mapping quality above 0, which is the population `gaftools stat` reports on as well. 
