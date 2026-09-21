@@ -395,16 +395,16 @@ measure() {
                 "$TIME_BIN" -v -o "$tf" "${run[@]}" >>"$log" 2>>"$log"
                 rc=$?
                 cat "$tf" >> "$timelog"
-                w=$(awk -F': ' '/Elapsed \(wall clock\)/{print $NF}' "$tf" | to_seconds)
-                r=$(awk '/Maximum resident set size/{printf "%.3f\n", $NF/1024}' "$tf")
+                w=$(awk -F': ' '/Elapsed \(wall clock\)/{print $NF}' "$tf" | to_seconds | awk '{printf "%.4f\n", $1/60}')
+                r=$(awk '/Maximum resident set size/{printf "%.4f\n", $NF/1024/1024}' "$tf")
                 ;;
             bsd)
                 "$TIME_BIN" -l "${run[@]}" >>"$log" 2>"$tf"
                 rc=$?
                 cat "$tf" >> "$log"
                 cat "$tf" >> "$timelog"
-                w=$(awk '/^ *real/{print $1}' "$tf" | tail -1)
-                r=$(awk '/maximum resident set size/{printf "%.3f\n", $1/1048576}' "$tf")
+                w=$(awk '/^ *real/{print $1}' "$tf" | tail -1 | awk '{printf "%.4f\n", $1/60}')
+                r=$(awk '/maximum resident set size/{printf "%.4f\n", $1/1073741824}' "$tf")
                 ;;
             *)
                 local t0 t1
@@ -412,8 +412,8 @@ measure() {
                 "${run[@]}" >>"$log" 2>>"$log"
                 rc=$?
                 t1=$(now)
-                w=$(awk -v a="$t0" -v b="$t1" 'BEGIN{printf "%.3f\n", b-a}')
-                printf 'no timer installed; wall clock taken from the shell: %s s\n' "$w" >> "$timelog"
+                w=$(awk -v a="$t0" -v b="$t1" 'BEGIN{printf "%.4f\n", (b-a)/60}')
+                printf 'no timer installed; wall clock taken from the shell: %s min\n' "$w" >> "$timelog"
                 ;;
         esac
         printf 'exit status: %s\n\n' "$rc" >> "$timelog"
@@ -446,9 +446,11 @@ measure() {
 
     row "$task" "$tool" "$status" "$rc" "$wall" "$rss" "$bytes" "$note" "$cmd"
     if [ "$status" = "timeout" ]; then
-        printf '  %-10s %-9s %8s   %8s MB  timeout: killed after %s s\n' "$task" "$tool" ">$TIMEOUT" "$rss"  "$TIMEOUT"
+        local timeout_min
+        timeout_min=$(awk -v t="$TIMEOUT" 'BEGIN{printf "%.2f", t/60}')
+        printf '  %-10s %-9s %8s   %8s GB  timeout: killed after %s m\n' "$task" "$tool" ">${timeout_min}m" "$rss" "$timeout_min"
     else
-        printf '  %-10s %-9s %8ss  %8s MB  %s\n' "$task" "$tool" "$wall" "$rss" "$status(exit $rc)"
+        printf '  %-10s %-9s %8sm %8sGB  %s\n' "$task" "$tool" "$wall" "$rss" "$status(exit $rc)"
     fi
     [ "$status" != "ok" ] && printf '             see %s\n' "$log"
     return 0
