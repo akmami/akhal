@@ -115,23 +115,47 @@ typedef struct {
 // Read flags
 
 // S lines - segments
-#define GFA_SEGS       0x01  // parse S lines: seg[], lengths, tags and the id index (implied by every flag below except GFA_PATH_NAMES)
+#define GFA_SEGS       0x01  // parse S lines: seg[], lengths and tags (implied by every flag below except GFA_PATH_NAMES)
 #define GFA_SEQ        0x02  // also copy the bases into the graph's arena
+#define GFA_IDX        0x04  // index the segments by id, for gfa_idx() and gfa_get() (implied by GFA_LINKS, GFA_PATHS and GFA_VALIDATE, which resolve ids as they read)
 
 // L lines - links
-#define GFA_LINKS      0x04  // record edges (link[])
-#define GFA_ARCS       0x08  // also build the CSR out-adjacency (implies GFA_LINKS)
-#define GFA_DEGREES    0x10  // also build in_degree/out_degree (implies GFA_LINKS)
+#define GFA_LINKS      0x08  // record edges (link[])
+#define GFA_ARCS       0x10  // also build the CSR out-adjacency (implies GFA_LINKS)
+#define GFA_DEGREES    0x20  // also build in_degree/out_degree (implies GFA_LINKS)
 
 // P lines - paths
-#define GFA_PATH_NAMES 0x20  // record path names and step counts only; the steps are counted with one pass over the commas, never parsed
-#define GFA_PATHS      0x40  // resolve every step: membership (CSR), orientation and reference layout (implies GFA_PATH_NAMES)
+#define GFA_PATH_NAMES 0x40  // record path names and step counts only; the steps are counted with one pass over the commas, never parsed
+#define GFA_PATHS      0x80  // resolve every step: membership (CSR), orientation and reference layout (implies GFA_PATH_NAMES)
 
 // checks
-#define GFA_VALIDATE   0x80  // warn about L lines naming unknown segments and, when GFA_SEQ is also set, about overlap mismatches; path steps are checked under GFA_PATHS
+#define GFA_VALIDATE   0x100  // warn about L lines naming unknown segments and, when GFA_SEQ is also set, about overlap mismatches; path steps are checked under GFA_PATHS
 
 // What a caller wanting the whole graph asks for
-#define GFA_ALL        (GFA_SEGS | GFA_SEQ | GFA_LINKS | GFA_ARCS | GFA_DEGREES | GFA_PATH_NAMES | GFA_PATHS)
+#define GFA_ALL        (GFA_IDX | GFA_SEGS | GFA_SEQ | GFA_LINKS | GFA_ARCS | GFA_DEGREES | GFA_PATH_NAMES | GFA_PATHS)
+
+
+/**
+ * Release the parts of a graph named by `what`, which takes the same GFA_*
+ * flags gfa_read() does.
+ *
+ * A command that reads a graph, works through it in stages and writes it back
+ * holds its whole peak for the whole run otherwise: the bases are dead once
+ * the S lines are out, the adjacency once the sort is done, the index as soon
+ * as the reader returns. Dropping each as it falls out of use is what keeps a
+ * whole-genome graph inside the memory of the machine reading it.
+ *
+ * Dropping clears those flags from g->flags, so gfa_has_degrees() and the
+ * GFA_SEQ check in gfa_write() answer truthfully afterwards, and gfa_idx()
+ * returns -1 once the index is gone. Dropping GFA_LINKS takes the adjacency
+ * with it, and GFA_PATH_NAMES the path steps. Dropping something twice, or
+ * something that was never read, is a no-op. gfa_destroy() still frees
+ * whatever is left
+ *
+ * @param g Graph to strip, modified in place; NULL is a no-op
+ * @param what Bitwise OR of GFA_SEQ, GFA_LINKS, GFA_ARCS, GFA_DEGREES, GFA_PATHS, GFA_PATH_NAMES and GFA_IDX
+ */
+void gfa_drop(gfa_t *g, int what);
 
 /**
  * Read an (r)GFA file into a freshly allocated graph
@@ -280,19 +304,23 @@ void gfa_destroy(gfa_t *g);
 
 /**
  * Look up a segment's array index by id. O(1)
+ *
+ * Requires GFA_IDX - which GFA_LINKS, GFA_PATHS and GFA_VALIDATE imply, since
+ * they resolve ids while reading. Read without it, or after gfa_drop() has
+ * taken the index away, every id answers -1, the same as an absent one
  * 
  * @param g Graph to query
  * @param id Segment id
- * @return The array index, or -1 if absent
+ * @return The array index, or -1 if absent or the graph carries no index
  */
 int32_t gfa_idx(const gfa_t *g, uint64_t id);
 
 /**
- * Look up a segment by id
+ * Look up a segment by id. Requires GFA_IDX, as gfa_idx() does
  * 
  * @param g Graph to query
  * @param id Segment id
- * @return Pointer to the segment, or NULL if absent
+ * @return Pointer to the segment, or NULL if absent or the graph carries no index
  */
 gfa_seg_t *gfa_get(const gfa_t *g, uint64_t id);
 
@@ -494,7 +522,9 @@ int gfa_add_path(gfa_t *g, const char *name, const uint32_t *segs, const char *o
  * cycles are appended after the acyclic prefix, also by sequence, so `order`
  * is always a full permutation of 0..n_seg-1.
  *
- * Requires the graph was read with GFA_LINKS
+ * Requires GFA_ARCS. The in-degrees are taken from GFA_DEGREES when the
+ * graph carries them and counted from the links when it does not, so a
+ * caller that wants nothing else from them can leave that flag out
  * 
  * @param g Graph to order
  * @param order Caller-allocated array of length n_seg; filled with segment

@@ -137,12 +137,14 @@ static int handle_S(gfa_t *g, char *line, idxmap_t *h) {
         // SN is handled via path names; segment->ref_path is set there
     }
 
-    int absent;
-    khint_t k = idxmap_put(h, s->id, &absent);
-    if (absent) {
-        kh_val(h, k) = (uint32_t)g->n_seg;
-    } else {
-        ak_log(AK_LOG_WARN, "gfa", "duplicate segment id %llu", (unsigned long long)s->id);
+    if (g->flags & GFA_IDX) {
+        int absent;
+        khint_t k = idxmap_put(h, s->id, &absent);
+        if (absent) {
+            kh_val(h, k) = (uint32_t)g->n_seg;
+        } else {
+            ak_log(AK_LOG_WARN, "gfa", "duplicate segment id %llu", (unsigned long long)s->id);
+        }
     }
 
     g->n_seg++;
@@ -276,11 +278,14 @@ static int handle_P(gfa_t *g, char *line, idxmap_t *h, int flags) {
 // CSR out-adjacency
 
 static int build_arcs(gfa_t *g) {
-    if (g->n_seg <= 0 || g->n_link <= 0) return AK_OK;
+    if (g->n_seg <= 0) return AK_OK;
 
     g->arc_off = (int32_t *)calloc((size_t)g->n_seg + 1, sizeof(int32_t));
+    if (!g->arc_off) return AK_ENOMEM;
+    if (g->n_link <= 0) return AK_OK;
+
     g->arc     = (uint32_t *)malloc((size_t)g->n_link * sizeof(uint32_t));
-    if (!g->arc_off || !g->arc) return AK_ENOMEM;
+    if (!g->arc) return AK_ENOMEM;
 
     for (int32_t k = 0; k < g->n_link; k++) g->arc_off[g->link[k].v + 1]++;
     for (int32_t i = 0; i < g->n_seg; i++) g->arc_off[i + 1] += g->arc_off[i];
@@ -324,14 +329,6 @@ gfa_t *gfa_read(const char *fn, int flags) {
         return NULL;
     }
 
-    idxmap_t *h = idxmap_init();
-    if (!h) {
-        free(g);
-        ak_close(f);
-        ak_log(AK_LOG_ERROR, "gfa", "out of memory");
-        return NULL;
-    }
-    g->idx = h;
     // GFA_VALIDATE checks what is loaded: unknown ids always, overlaps only when the sequences are there to compare
     // (GFA_SEQ), so a caller can check a whole-genome file's references without holding its bases
     // the adjacency is an index over the edges, so it cannot be built without them
@@ -340,9 +337,25 @@ gfa_t *gfa_read(const char *fn, int flags) {
     if (flags & GFA_DEGREES) flags |= GFA_LINKS;
     // the step arrays hang off the per-path offsets, so resolving the steps implies recording the paths
     if (flags & GFA_PATHS) flags |= GFA_PATH_NAMES;
+    // an L line resolves both its ends through the index, and so does a path step once it is
+    // resolved rather than merely counted - those are what need it built while the file is read
+    if (flags & (GFA_LINKS | GFA_VALIDATE | GFA_PATHS)) flags |= GFA_IDX;
     // everything but a bare path listing resolves ids against seg[]
-    if (flags & (GFA_LINKS | GFA_PATHS | GFA_SEQ | GFA_VALIDATE | GFA_ARCS | GFA_DEGREES)) flags |= GFA_SEGS;
+    if (flags & (GFA_IDX | GFA_LINKS | GFA_PATHS | GFA_SEQ | GFA_VALIDATE | GFA_ARCS | GFA_DEGREES)) flags |= GFA_SEGS;
     g->flags = flags;
+
+    // On a whole-genome graph the index rivals the segments for size, so it is built only when it was asked for - left out
+    idxmap_t *h = NULL;
+    if (flags & GFA_IDX) {
+        h = idxmap_init();
+        if (!h) {
+            free(g);
+            ak_close(f);
+            ak_log(AK_LOG_ERROR, "gfa", "out of memory");
+            return NULL;
+        }
+    }
+    g->idx = h;
 
     kstring_t ks = KS_INIT;
     int rc = AK_OK;
@@ -511,9 +524,71 @@ void gfa_destroy(gfa_t *g) {
     free(g);
 }
 
+// release the parts named by `what`; see akhal/gfa.h
+void gfa_drop(gfa_t *g, int what) {
+    if (!g) return;
+
+    if (what & GFA_SEQ) {
+        // the bases live in one arena, so they go in one call - but every
+        // segment points into it, and a dangling seq is worse than no seq
+        ak_arena_destroy(&g->strs);
+        for (int32_t i = 0; i < g->n_seg; i++) g->seg[i].seq = NULL;
+    }
+    if (what & GFA_ARCS) {
+        free(g->arc);
+        free(g->arc_off);
+        g->arc = NULL;
+        g->arc_off = NULL;
+    }
+    if (what & GFA_DEGREES) {
+        free(g->in_degree);
+        free(g->out_degree);
+        g->in_degree = NULL;
+        g->out_degree = NULL;
+    }
+    if (what & GFA_LINKS) {
+        free(g->link);
+        g->link = NULL;
+        g->n_link = g->m_link = 0;
+        what |= GFA_ARCS;               // an index over edges that are gone
+        free(g->arc);
+        free(g->arc_off);
+        g->arc = NULL;
+        g->arc_off = NULL;
+    }
+    if (what & GFA_PATHS) {
+        free(g->path_seg);
+        free(g->path_ori);
+        g->path_seg = NULL;
+        g->path_ori = NULL;
+        g->m_path_seg = 0;
+    }
+    if (what & GFA_PATH_NAMES) {
+        if (g->path) {
+            for (int32_t i = 0; i < g->n_path; i++) free(g->path[i]);
+            free(g->path);
+            g->path = NULL;
+        }
+        free(g->path_len);
+        free(g->path_off);
+        g->path_len = NULL;
+        g->path_off = NULL;
+        g->n_path = g->m_path = 0;
+        g->n_path_seg = 0;
+    }
+    if (what & GFA_IDX) {
+        idxmap_destroy((idxmap_t *)g->idx);
+        g->idx = NULL;
+    }
+
+    // what the graph no longer carries, it was no longer read with
+    g->flags &= ~what;
+}
+
 // segment index for an id, or -1 if absent
 int32_t gfa_idx(const gfa_t *g, uint64_t id) {
     idxmap_t *h = (idxmap_t *)g->idx;
+    if (!h) return -1;                  // dropped with gfa_drop(g, GFA_IDX)
     khint_t k = idxmap_get(h, id);
     return (k < kh_end(h)) ? (int32_t)kh_val(h, k) : -1;
 }
@@ -684,8 +759,10 @@ int gfa_add_path(gfa_t *g, const char *name, const uint32_t *segs, const char *o
 
 // topological sort
 
-// ordering by sequence content rather than id keeps the result independent of
-// the input's node numbering; a NULL/empty sequence sorts first
+/**
+ * @brief ordering by sequence content rather than id keeps the result independent of
+ * the input's node numbering; a NULL/empty sequence sorts first
+ */
 static int seq_lt(const gfa_t *g, int32_t a, int32_t b) {
     const char *sa = g->seg[a].seq ? g->seg[a].seq : "";
     const char *sb = g->seg[b].seq ? g->seg[b].seq : "";
@@ -729,7 +806,7 @@ static int32_t heap_pop(const gfa_t *g, int32_t *heap, int *hn) {
     return top;
 }
 
-// topological order with alphabetical id tie-break; see akhal/gfa.h
+// topological order with sequence content being tie-break; see akhal/gfa.h
 int gfa_toposort(const gfa_t *g, int32_t *order) {
     if (!g->arc_off) {
         ak_log(AK_LOG_ERROR, "gfa", "toposort needs the CSR adjacency; read with GFA_ARCS");
@@ -737,12 +814,11 @@ int gfa_toposort(const gfa_t *g, int32_t *order) {
     }
     int32_t n = g->n_seg;
     if (n == 0) return 0;
-    if (!gfa_has_degrees(g)) {
-        ak_log(AK_LOG_ERROR, "gfa", "toposort needs the in-degrees; read with GFA_DEGREES");
-        return AK_EINVAL;
-    }
 
-    int32_t *indeg = (int32_t *)malloc((size_t)n * sizeof(int32_t));
+    // The sort consumes the in-degrees as it goes, so it works on a copy
+    // either way; a graph read without GFA_DEGREES is counted here instead,
+    // which spares the caller the graph's two arrays for the sake of this one
+    int32_t *indeg = (int32_t *)calloc((size_t)n, sizeof(int32_t));
     int32_t *heap  = (int32_t *)malloc((size_t)n * sizeof(int32_t));
     if (!indeg || !heap) {
         free(indeg);
@@ -750,7 +826,11 @@ int gfa_toposort(const gfa_t *g, int32_t *order) {
         return AK_ENOMEM;
     }
 
-    for (int32_t i = 0; i < n; i++) indeg[i] = g->in_degree[i];
+    if (gfa_has_degrees(g)) {
+        for (int32_t i = 0; i < n; i++) indeg[i] = g->in_degree[i];
+    } else {
+        for (int32_t k = 0; k < g->n_link; k++) indeg[g->link[k].w]++;
+    }
 
     int hn = 0;
     for (int32_t i = 0; i < n; i++) {
@@ -775,7 +855,7 @@ int gfa_toposort(const gfa_t *g, int32_t *order) {
 
     int32_t acyclic = placed;
     if (placed < n) {
-        // remaining nodes are inside cycles; append them alphabetically
+        // remaining nodes are inside cycles; append them based in sequence content (to make deterministic)
         for (int32_t i = 0; i < n; i++) {
             if (indeg[i] > 0) {
                 heap_push(g, heap, &hn, i);

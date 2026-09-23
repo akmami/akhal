@@ -88,9 +88,14 @@ external key to an array index. Anything cross-referencing a record does so by
 index, not by pointer, so the arrays stay reallocatable.
 
 **Reading only what you asked for.** [`gfa_read`](gfa.md#gfa_read) takes flags
-(`GFA_LINKS`, `GFA_PATHS`, `GFA_VALIDATE`) and skips the work you did not
-request. A function that needs one says so and returns an error when it is
-missing, rather than quietly returning empty results.
+(`GFA_SEGS`, `GFA_SEQ`, `GFA_IDX`, `GFA_LINKS`, `GFA_ARCS`, `GFA_DEGREES`,
+`GFA_PATH_NAMES`, `GFA_PATHS`, `GFA_VALIDATE`) and skips the work you did not
+request - a line type nothing asked about is never tokenized, and a structure
+nothing asked for is never built, down to the id index. A function that needs
+one says so and returns an error when it is missing, rather than quietly
+returning empty results. [`gfa_drop`](gfa.md#gfa_drop) takes the same flags
+back the other way, so a command that works in stages can release each part as
+it falls out of use instead of holding its peak to the end.
 
 **The file wins on ranks.** rGFA's `SR:i:` tag marks the reference backbone as
 rank 0. A file that carries those tags is authoritative and the reader never

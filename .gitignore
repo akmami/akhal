@@ -8,3 +8,4 @@ data
 bin
 share
 scripts/benchmark.conf
+out

@@ -8,9 +8,7 @@
 #include <stdio.h>
 #include <string.h>
 
-// What `parse` checks. All are on by default; each --no-* switch drops one,
-// and with it whatever gfa_read() would have had to load for it. --basic
-// keeps the structural checks and drops the rest.
+
 #define CHECK_LINKS    0x1   // L lines naming segments no S line defines
 #define CHECK_OVERLAPS 0x2   // the bases either side of an overlap agree (loads every sequence; implies CHECK_LINKS)
 #define CHECK_PATHS    0x4   // P steps name defined segments and consecutive steps are joined by a link; reused path names are pointed out
@@ -81,10 +79,10 @@ int cmd_parse(int argc, char **argv) {
     if (!is_rgfa) checks &= ~CHECK_RANKS;   // nothing to compare against
     if (checks & CHECK_OVERLAPS) checks |= CHECK_LINKS;
 
-    // read only what the requested checks need: the link and overlap checks
-    // run inside gfa_read() under GFA_VALIDATE, the overlap one only once the
-    // sequences are loaded; the path checks need the steps and the adjacency;
-    // the rank check needs the steps
+    // read only what the requested checks need: 
+    //  1) the link and overlap checks run inside gfa_read() under GFA_VALIDATE, the overlap one only once the sequences are loaded; 
+    //  2) the path checks need the steps (in path) and the adjacency;
+    //  3) the rank check needs the steps (in path)
     int flags = GFA_SEGS;
     if (checks & CHECK_LINKS)    flags |= GFA_LINKS | GFA_VALIDATE;
     if (checks & CHECK_OVERLAPS) flags |= GFA_LINKS | GFA_VALIDATE | GFA_SEQ;

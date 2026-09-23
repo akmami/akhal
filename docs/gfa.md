@@ -18,7 +18,7 @@ contiguous slice.
 
 ## Contents
 
-- [Reading and releasing](#reading-and-releasing) - [`gfa_read`](#gfa_read), [`gfa_write`](#gfa_write), [`gfa_seg_set_seq`](#gfa_seg_set_seq), [`gfa_destroy`](#gfa_destroy)
+- [Reading and releasing](#reading-and-releasing) - [`gfa_read`](#gfa_read), [`gfa_write`](#gfa_write), [`gfa_seg_set_seq`](#gfa_seg_set_seq), [`gfa_drop`](#gfa_drop), [`gfa_destroy`](#gfa_destroy)
 - [Lookup and accessors](#lookup-and-accessors) - [`gfa_idx`](#gfa_idx), [`gfa_get`](#gfa_get), [counts and element accessors](#counts-and-element-accessors)
 - [Traversal](#traversal) - [`gfa_arcs`](#gfa_arcs), [`gfa_has_arc`](#gfa_has_arc), [`gfa_has_link`](#gfa_has_link), [`gfa_path_segs`](#gfa_path_segs)
 - [Ranks](#ranks) - [`gfa_rank_paths`](#gfa_rank_paths), [`gfa_rank_mark`](#gfa_rank_mark)
@@ -28,16 +28,29 @@ contiguous slice.
 
 ## Read flags
 
-`gfa_read()` only does the work you ask for. Pass the bitwise OR of:
+`gfa_read()` only does the work you ask for: a line type nothing asked about is never tokenized, and a structure nothing asked for is never built. 
+Pass the bitwise OR of:
 
 | Flag | Effect | Fills |
 | --- | --- | --- |
-| `GFA_LINKS` | record edges, degrees and out-adjacency | `link`, `arc`, `arc_off`, `in_degree`, `out_degree` |
-| `GFA_PATHS` | build path membership and reference layout | `path`, `path_len`, `path_off`, `path_seg`, `path_ori` |
+| `GFA_SEGS` | parse `S` lines: ids, lengths and tags | `seg` |
+| `GFA_SEQ` | also copy the bases into the graph's arena | `seg[].seq`, `strs` |
+| `GFA_IDX` | index the segments by id | `idx` |
+| `GFA_LINKS` | record edges | `link` |
+| `GFA_ARCS` | also build the CSR out-adjacency | `arc`, `arc_off` |
+| `GFA_DEGREES` | also count each segment's degrees | `in_degree`, `out_degree` |
+| `GFA_PATH_NAMES` | record path names and step counts only | `path`, `path_off` |
+| `GFA_PATHS` | resolve every step: membership and reference layout | `path_len`, `path_seg`, `path_ori`, `seg[].start`, `seg[].ref_path` |
 | `GFA_VALIDATE` | check overlap consistency and integrity | nothing; reports through `ak_log()` |
 
-Passing `0` reads segments only. A function that needs a flag says so, and
-returns an error rather than misbehaving when it is missing.
+`GFA_ALL` is every one of them but `GFA_VALIDATE`.
+
+A flag that needs another implies it, so you can ask for what you want rather than what it rests on: `GFA_ARCS` and `GFA_DEGREES` imply `GFA_LINKS`, `GFA_PATHS` implies `GFA_PATH_NAMES`, and everything but a bare path listing implies `GFA_SEGS`. 
+`GFA_IDX` is implied by `GFA_LINKS`, `GFA_PATHS` and `GFA_VALIDATE`, which resolve ids as they read - so it is worth naming yourself only when you want [`gfa_idx`](#gfa_idx) or [`gfa_get`](#gfa_get) on a graph that asked for none of those. 
+It is not free: on chr22 the index is 400 MB and 2.1 s of a 3.6 s read, and on a whole-genome graph it rivals the segments.
+
+Passing `0` reads an empty graph. 
+A function that needs a flag says so, and returns an error rather than misbehaving when it is missing.
 
 `GFA_NIL` (`UINT32_MAX`) marks a path entry whose segment id was not found in
 the file. Every loop over a path's segments must skip it.
@@ -141,6 +154,41 @@ if (masked) {
 gfa_destroy(g);
 ```
 
+### `gfa_drop`
+
+```c
+void gfa_drop(gfa_t *g, int what);
+```
+
+Releases the parts of a graph named by `what`, which takes the same `GFA_*` flags [`gfa_read`](#gfa_read) does. 
+Dropping clears those bits from `g->flags`, so [`gfa_has_degrees`](#gfa_has_degrees) and the `GFA_SEQ` check in [`gfa_write`](#gfa_write) answer truthfully afterwards and [`gfa_idx`](#gfa_idx) returns `-1` once the index is gone. 
+Dropping `GFA_LINKS` takes the adjacency with it, and `GFA_PATH_NAMES` the path steps. 
+Dropping something twice, or something that was never read, is a no-op, and [`gfa_destroy`](#gfa_destroy) still frees whatever is left.
+
+A command that reads a graph, works through it in stages and writes it back otherwise holds its whole peak for its whole run, which on a whole-genome graph is the difference between fitting in memory and not. 
+The bases are dead once the `S` lines are out, the adjacency once a sort is done, the index as soon as the reader returns - and the index alone is worth about as much as the segments.
+
+```c
+gfa_t *g = gfa_read("graph.gfa", GFA_SEGS | GFA_SEQ | GFA_LINKS | GFA_ARCS | GFA_PATHS);
+if (!g) return 1;
+
+gfa_drop(g, GFA_IDX);              // nothing below looks a segment up by id
+
+int32_t *order = malloc((size_t)gfa_n_seg(g) * sizeof(int32_t));
+gfa_toposort(g, order);
+gfa_drop(g, GFA_ARCS);             // the adjacency was the sort's
+
+write_segments(g, order);
+gfa_drop(g, GFA_SEQ);              // the bases are written
+
+write_links(g);
+gfa_drop(g, GFA_LINKS);
+
+write_paths(g);
+free(order);
+gfa_destroy(g);
+```
+
 ### `gfa_destroy`
 
 ```c
@@ -184,8 +232,13 @@ Turns a segment id as written in the file into its array index, in O(1)
 through the hash table. Returns `-1` when the id is absent. Indices, not ids,
 are what the rest of the API takes.
 
+Requires `GFA_IDX`, which `GFA_LINKS`, `GFA_PATHS` and `GFA_VALIDATE` imply.
+Read without it - or after [`gfa_drop`](#gfa_drop) has taken the index away -
+every id answers `-1`, indistinguishable from one that really is absent, so
+ask for `GFA_IDX` explicitly when none of those three is in the read.
+
 ```c
-gfa_t *g = gfa_read("graph.gfa", GFA_LINKS);
+gfa_t *g = gfa_read("graph.gfa", GFA_LINKS);   // implies GFA_IDX
 if (!g) return 1;
 
 // Segment ids come from the file and need not be contiguous; array indices
@@ -208,9 +261,11 @@ gfa_seg_t *gfa_get(const gfa_t *g, uint64_t id);
 
 The same lookup, but returning the segment itself, or `NULL` when the id is
 absent. Use this when you want the node's fields and not its position.
+It needs `GFA_IDX` for the same reason [`gfa_idx`](#gfa_idx) does.
 
 ```c
-gfa_t *g = gfa_read("graph.gfa", 0);
+// nothing here resolves ids while reading, so the index is asked for by name
+gfa_t *g = gfa_read("graph.gfa", GFA_SEGS | GFA_SEQ | GFA_IDX);
 if (!g) return 1;
 
 gfa_seg_t *s = gfa_get(g, 42);

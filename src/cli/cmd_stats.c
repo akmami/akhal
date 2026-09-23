@@ -137,8 +137,7 @@ static int reads_add(reads_t *t, const char *name, double ratio, double ident) {
 
     if (reads_grow(t) != AK_OK) return AK_ENOMEM;
 
-    // the record's own copy becomes the key, since the caller's name belongs to
-    // a reusable gaf_rec_t that the next read frees
+    // the record's own copy becomes the key, since the caller's name belongs to a reusable gaf_rec_t that the next read frees
     char *own = strdup(name);
     if (!own) return AK_ENOMEM;
 
@@ -220,8 +219,7 @@ static void cigar_count(const char *cg, cigar_stat_t *cs) {
     }
 }
 
-// oriented nodes in a path string; a stable path name carries no '>' or '<',
-// and is one target rather than none
+// oriented nodes in a path string; a stable path name carries no '>' or '<', and is one target rather than none
 static int64_t path_nodes(const char *p) {
     int64_t n = 0;
     for (; *p; p++) {

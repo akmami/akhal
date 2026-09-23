@@ -330,8 +330,13 @@ Topologically sorts a graph and renumbers its nodes `1..N` in the sorted order. 
 
 **Usage:**
 ```sh
-./akhal sort <input .gfa file> [output .gfa file]
+./akhal sort <input .gfa file> [output .gfa file] [--no-renumber]
 ```
+
+`--no-renumber` reorders the file without touching the ids: the S block still
+comes out in sorted order and the L block still follows it, but every line
+carries the id it came in with, so anything else that already refers to these
+nodes keeps working.
 
 Note: If no output file is given, the sorted GFA is written to standard output.
 
