@@ -134,6 +134,10 @@ typedef struct {
 // What a caller wanting the whole graph asks for
 #define GFA_ALL        (GFA_IDX | GFA_SEGS | GFA_SEQ | GFA_LINKS | GFA_ARCS | GFA_DEGREES | GFA_PATH_NAMES | GFA_PATHS)
 
+// Reporting rather than building, which is why these sit well clear of the flags above: nothing they ask for ends up in the graph
+#define GFA_VERBOSE    0x1000 // report how long the read took and what the process is holding after it
+#define GFA_FOOTPRINT  0x2000 // also break that down by part of the graph, which costs a walk over the path names (implies GFA_VERBOSE)
+
 
 /**
  * Release the parts of a graph named by `what`, which takes the same GFA_*

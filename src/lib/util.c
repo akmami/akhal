@@ -1,6 +1,12 @@
 #include "akhal/util.h"
 
 #include <errno.h>
+#include <sys/resource.h>
+#include <unistd.h>
+#if defined(__APPLE__)
+#include <mach/mach.h>
+#endif
+#include <time.h>
 #include <stdio.h>
 #include <limits.h>
 #include <math.h>
@@ -100,6 +106,57 @@ char *ak_format_f64(char *buf, double v, int prec) {
     format_digits(buf, p, n, neg);
     if (dot) strcat(buf, dot);
     return buf;
+}
+
+char *ak_format_bytes(char *buf, uint64_t bytes) {
+    static const char *unit[] = { "B", "KB", "MB", "GB", "TB", "PB" };
+    double v = (double)bytes;
+    int u = 0;
+    while (v >= 1024.0 && u < 5) {
+        v /= 1024.0;
+        u++;
+    }
+    // whole bytes below the first step up; a fraction of one is noise
+    if (u == 0) snprintf(buf, AK_NUM_LEN, "%llu B", (unsigned long long)bytes);
+    else        snprintf(buf, AK_NUM_LEN, "%.3f %s", v, unit[u]);
+    return buf;
+}
+
+double ak_realtime(void) {
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) return 0.0;
+    return (double)ts.tv_sec + (double)ts.tv_nsec / 1e9;
+}
+
+size_t ak_peak_rss(void) {
+    struct rusage ru;
+    if (getrusage(RUSAGE_SELF, &ru) != 0) return 0;
+    // ru_maxrss is kilobytes on Linux and bytes on the BSDs, macOS included
+#ifdef __APPLE__
+    return (size_t)ru.ru_maxrss;
+#else
+    return (size_t)ru.ru_maxrss * 1024;
+#endif
+}
+
+size_t ak_rss(void) {
+#if defined(__APPLE__)
+    mach_task_basic_info_data_t info;
+    mach_msg_type_number_t n = MACH_TASK_BASIC_INFO_COUNT;
+    if (task_info(mach_task_self(), MACH_TASK_BASIC_INFO, (task_info_t)&info, &n) != KERN_SUCCESS) return 0;
+    return (size_t)info.resident_size;
+#elif defined(__linux__)
+    // field 2 of statm is the resident page count
+    FILE *f = fopen("/proc/self/statm", "r");
+    if (!f) return 0;
+    long total = 0, res = 0;
+    int ok = (fscanf(f, "%ld %ld", &total, &res) == 2);
+    fclose(f);
+    long page = sysconf(_SC_PAGESIZE);
+    return (ok && res > 0 && page > 0) ? (size_t)res * (size_t)page : 0;
+#else
+    return 0;
+#endif
 }
 
 // Welford's online update: the mean and the sum of squared deviations are

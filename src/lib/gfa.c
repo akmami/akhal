@@ -2,6 +2,7 @@
 #include "akhal/io.h"
 #include "akhal/kstr.h"
 #include "akhal/error.h"
+#include "akhal/util.h"
 
 #include "khashl.h"
 
@@ -315,10 +316,63 @@ static int build_degrees(gfa_t *g) {
     return AK_OK;
 }
 
+// what the id index costs: one packed key/value bucket per slot, plus the bitmap that says which slots are in use
+static size_t idx_bytes(const gfa_t *g) {
+    const idxmap_t *h = (const idxmap_t *)g->idx;
+    if (!h || !h->keys) return 0;
+    size_t n_buckets = (size_t)1 << h->bits;
+    return n_buckets * sizeof(idxmap_t_m_bucket_t) + (size_t)__kh_fsize(n_buckets) * sizeof(khint32_t);
+}
+
+// report what the read took; see GFA_VERBOSE in akhal/gfa.h
+static void log_cost(const char *fn, double secs) {
+    char b[AK_NUM_LEN], c[AK_NUM_LEN];
+    size_t rss = ak_rss(), peak = ak_peak_rss();
+    if (rss || peak) {
+        ak_log(AK_LOG_INFO, "gfa", "read %s in %.2f s, %s resident, %s peak", fn, secs, ak_format_bytes(b, rss), ak_format_bytes(c, peak));
+    } else {
+        ak_log(AK_LOG_INFO, "gfa", "read %s in %.2f s", fn, secs);
+    }
+}
+
+// break that down by part; see GFA_FOOTPRINT in akhal/gfa.h
+static void log_footprint(const gfa_t *g) {
+    size_t segs  = (size_t)g->m_seg * sizeof(gfa_seg_t);
+    size_t seqs  = ak_arena_bytes(&g->strs);
+    size_t links = (size_t)g->m_link * sizeof(gfa_link_t);
+    size_t arcs  = (g->arc ? (size_t)g->n_link * sizeof(*g->arc) : 0) + (g->arc_off ? ((size_t)g->n_seg + 1) * sizeof(*g->arc_off) : 0);
+    size_t degs  = g->in_degree ? (size_t)g->n_seg * sizeof(*g->in_degree) * 2 : 0;
+    size_t steps = (size_t)g->m_path_seg * (sizeof(*g->path_seg) + sizeof(*g->path_ori));
+    size_t idx   = idx_bytes(g);
+
+    size_t paths = 0;
+    if (g->path) {
+        paths = (size_t)g->m_path * (sizeof(*g->path) + sizeof(*g->path_len)) + ((size_t)g->m_path + 1) * sizeof(*g->path_off);
+        for (int32_t i = 0; i < g->n_path; i++) paths += strlen(g->path[i]) + 1;
+    }
+
+    size_t total = segs + seqs + links + arcs + degs + paths + steps + idx;
+    char b[AK_NUM_LEN], c[AK_NUM_LEN];
+
+    ak_log(AK_LOG_INFO, "gfa", "  segments    %14s  %10s", ak_format_i64(b, g->n_seg), ak_format_bytes(c, segs));
+    if (seqs)  ak_log(AK_LOG_INFO, "gfa", "  sequences   %14s  %10s", "", ak_format_bytes(c, seqs));
+    if (links) ak_log(AK_LOG_INFO, "gfa", "  links       %14s  %10s", ak_format_i64(b, g->n_link), ak_format_bytes(c, links));
+    if (arcs)  ak_log(AK_LOG_INFO, "gfa", "  adjacency   %14s  %10s", "", ak_format_bytes(c, arcs));
+    if (degs)  ak_log(AK_LOG_INFO, "gfa", "  degrees     %14s  %10s", "", ak_format_bytes(c, degs));
+    if (paths) ak_log(AK_LOG_INFO, "gfa", "  paths       %14s  %10s", ak_format_i64(b, g->n_path), ak_format_bytes(c, paths));
+    if (steps) ak_log(AK_LOG_INFO, "gfa", "  path steps  %14s  %10s", ak_format_u64(b, g->n_path_seg), ak_format_bytes(c, steps));
+    if (idx)   ak_log(AK_LOG_INFO, "gfa", "  id index    %14s  %10s", "", ak_format_bytes(c, idx));
+    ak_log(AK_LOG_INFO, "gfa", "  graph total %14s  %10s", "", ak_format_bytes(c, total));
+}
+
 // public API
 
 // read an (r)GFA into a graph; see akhal/gfa.h
 gfa_t *gfa_read(const char *fn, int flags) {
+    // a breakdown with no line saying what it cost to get is half a report
+    if (flags & GFA_FOOTPRINT) flags |= GFA_VERBOSE;
+    double t0 = (flags & GFA_VERBOSE) ? ak_realtime() : 0.0;
+
     ak_file *f = ak_open(fn);
     if (!f) return NULL;
 
@@ -419,6 +473,10 @@ gfa_t *gfa_read(const char *fn, int flags) {
     shrink((void **)&g->path_seg, (size_t)g->n_path_seg, sizeof(*g->path_seg));
     shrink((void **)&g->path_ori, (size_t)g->n_path_seg, sizeof(*g->path_ori));
     g->m_path_seg = (int32_t)g->n_path_seg;
+
+    // after the shrink, so the sizes reported are what is held rather than what the doubling had briefly claimed
+    if (flags & GFA_VERBOSE)   log_cost(fn, ak_realtime() - t0);
+    if (flags & GFA_FOOTPRINT) log_footprint(g);
 
     return g;
 }

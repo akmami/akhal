@@ -330,13 +330,21 @@ Topologically sorts a graph and renumbers its nodes `1..N` in the sorted order. 
 
 **Usage:**
 ```sh
-./akhal sort <input .gfa file> [output .gfa file] [--no-renumber]
+./akhal sort <input .gfa file> [output .gfa file] [--no-renumber] [--verbose] [--footprint]
 ```
 
 `--no-renumber` reorders the file without touching the ids: the S block still
 comes out in sorted order and the L block still follows it, but every line
 carries the id it came in with, so anything else that already refers to these
 nodes keeps working.
+
+`--verbose` reports how long reading the graph took and what the process holds
+afterwards. `--footprint` adds a breakdown of that by part - segments,
+sequences, links, adjacency, paths, steps, id index - which is the question a
+resident-size reading cannot answer, since the allocator keeps what it frees
+and a process's total says nothing about which structure it went to. A part
+the flags did not ask for has no line, so the breakdown doubles as a check
+that the read is only doing what it means to.
 
 Note: If no output file is given, the sorted GFA is written to standard output.
 

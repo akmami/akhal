@@ -42,12 +42,41 @@ Pass the bitwise OR of:
 | `GFA_PATH_NAMES` | record path names and step counts only | `path`, `path_off` |
 | `GFA_PATHS` | resolve every step: membership and reference layout | `path_len`, `path_seg`, `path_ori`, `seg[].start`, `seg[].ref_path` |
 | `GFA_VALIDATE` | check overlap consistency and integrity | nothing; reports through `ak_log()` |
+| `GFA_VERBOSE` | report how long the read took and what is resident after it | nothing; reports through `ak_log()` |
+| `GFA_FOOTPRINT` | also break that down by part of the graph | nothing; reports through `ak_log()` |
 
 `GFA_ALL` is every one of them but `GFA_VALIDATE`.
 
 A flag that needs another implies it, so you can ask for what you want rather than what it rests on: `GFA_ARCS` and `GFA_DEGREES` imply `GFA_LINKS`, `GFA_PATHS` implies `GFA_PATH_NAMES`, and everything but a bare path listing implies `GFA_SEGS`. 
 `GFA_IDX` is implied by `GFA_LINKS`, `GFA_PATHS` and `GFA_VALIDATE`, which resolve ids as they read - so it is worth naming yourself only when you want [`gfa_idx`](#gfa_idx) or [`gfa_get`](#gfa_get) on a graph that asked for none of those. 
 It is not free: on chr22 the index is 400 MB and 2.1 s of a 3.6 s read, and on a whole-genome graph it rivals the segments.
+
+The last two build nothing - they ask the reader to say what it cost. They sit at `0x1000` and `0x2000`, well clear of the flags above, because they are the ones that do not name a part of the graph.
+
+`GFA_VERBOSE` is the cheap one: a single line with the wall time, what the process holds once the read is done, and its high-water mark.
+
+```
+[INFO] (gfa) read chr22.gfa in 7.88 s, 1.856 GB resident, 1.922 GB peak
+```
+
+Both figures are the process, not the graph. The peak includes the doubling slack the shrink has since handed back, and neither falls by as much as a free does, because the allocator keeps what it frees for reuse - drop a 388 MB index and resident size does not move. That is the limit of what a resident reading can tell you, and the reason for the second flag.
+
+`GFA_FOOTPRINT` adds the breakdown, and implies `GFA_VERBOSE` so the line above still comes first. Each size is counted from that array's own capacity, after the shrink, so it says what the structure costs rather than what the process happens to be holding:
+
+```
+[INFO] (gfa)   segments        17,872,082  545.413 MB
+[INFO] (gfa)   sequences                   535.938 MB
+[INFO] (gfa)   links           18,435,326  281.301 MB
+[INFO] (gfa)   adjacency                   138.502 MB
+[INFO] (gfa)   paths                  503   12.775 KB
+[INFO] (gfa)   path steps       2,113,198   10.077 MB
+[INFO] (gfa)   id index                    388.000 MB
+[INFO] (gfa)   graph total                   1.855 GB
+```
+
+On chr22 that total lands within a megabyte of the resident size on the line above, which is what makes the attribution worth trusting. It costs one walk over the path names, and nothing else.
+
+A part the flags did not ask for has no line, so the breakdown doubles as a check that a read is only doing what you meant it to - the absence of `degrees` above is `sort` leaving `GFA_DEGREES` out.
 
 Passing `0` reads an empty graph. 
 A function that needs a flag says so, and returns an error rather than misbehaving when it is missing.

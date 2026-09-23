@@ -28,17 +28,21 @@ static void sort_links(gfa_link_t *link, int32_t n_link, int32_t n_seg) {
 }
 
 static void usage(void) {
-    ak_log(AK_LOG_ERROR, NULL, "usage: akhal sort <in.gfa> [out.gfa] [--no-renumber]");
+    ak_log(AK_LOG_ERROR, NULL, "usage: akhal sort <in.gfa> [out.gfa] [--no-renumber] [--verbose] [--footprint]");
 }
 
 // `sort` entry point; see cli.h
 int cmd_sort(int argc, char **argv) {
     const char *in = NULL, *out_fn = NULL;
-    int renumber = 1;
+    int renumber = 1, report = 0;
 
     for (int i = 2; i < argc; i++) {
         if (!strcmp(argv[i], "--no-renumber")) {
             renumber = 0;
+        } else if (!strcmp(argv[i], "--verbose")) {
+            report |= GFA_VERBOSE;
+        } else if (!strcmp(argv[i], "--footprint")) {
+            report |= GFA_FOOTPRINT;
         } else if (argv[i][0] == '-') {
             ak_log(AK_LOG_ERROR, NULL, "unknown option: %s", argv[i]);
             usage();
@@ -65,7 +69,7 @@ int cmd_sort(int argc, char **argv) {
         return 1;
     }
 
-    gfa_t *g = gfa_read(in, GFA_SEGS | GFA_SEQ | GFA_LINKS | GFA_ARCS | GFA_PATHS);
+    gfa_t *g = gfa_read(in, GFA_SEGS | GFA_SEQ | GFA_LINKS | GFA_ARCS | GFA_PATHS | report);
     if (!g) return 1;
 
     int32_t n = gfa_n_seg(g), n_link = gfa_n_link(g), n_path = gfa_n_path(g);

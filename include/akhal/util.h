@@ -77,6 +77,40 @@ char *ak_format_i64(char *buf, int64_t v);
 char *ak_format_f64(char *buf, double v, int prec);
 
 /**
+ * Format a byte count the way a person reads it: 1536 -> "1.5 KB",
+ * 2199023255552 -> "2.0 TB". Powers of 1024, one decimal above the first unit
+ * @param buf Buffer of at least AK_NUM_LEN bytes
+ * @param bytes Value
+ * @return buf
+ */
+char *ak_format_bytes(char *buf, uint64_t bytes);
+
+// Process measurements, for code that reports what it cost
+
+/**
+ * Seconds from a monotonic clock, for timing a span. The origin is arbitrary,
+ * so only differences mean anything
+ * @return The reading, or 0.0 where no monotonic clock is available
+ */
+double ak_realtime(void);
+
+/**
+ * Peak resident set size of this process so far, in bytes - the high-water
+ * mark, not what is held right now, so it never falls
+ * @return The peak, or 0 where it cannot be read
+ */
+size_t ak_peak_rss(void);
+
+/**
+ * Resident set size of this process right now, in bytes. Unlike the peak this
+ * can fall - but only as far as the allocator lets it, since a freed block it
+ * keeps for reuse stays resident, so this measures what the process holds
+ * rather than what any one structure in it costs
+ * @return The size, or 0 where it cannot be read
+ */
+size_t ak_rss(void);
+
+/**
  * Running summary of a distribution: count, mean, population variance and
  * extremes, accumulated one value at a time with Welford's update so nothing
  * has to be collected into an array first. Zero-initialize and feed values

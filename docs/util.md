@@ -20,7 +20,8 @@ and the running-distribution accumulator both the graph and the alignment
 
 - [Sequences](#sequences) - [`ak_complement`](#ak_complement), [`ak_revcomp`](#ak_revcomp)
 - [Strings](#strings) - [`ak_ends_with`](#ak_ends_with), [`ak_str2int`](#ak_str2int)
-- [Number formatting](#number-formatting) - [`ak_format_u64`](#ak_format_u64), [`ak_format_i64`](#ak_format_i64), [`ak_format_f64`](#ak_format_f64)
+- [Number formatting](#number-formatting) - [`ak_format_u64`](#ak_format_u64), [`ak_format_i64`](#ak_format_i64), [`ak_format_f64`](#ak_format_f64), [`ak_format_bytes`](#ak_format_bytes)
+- [Process measurements](#process-measurements) - [`ak_realtime`](#ak_realtime), [`ak_peak_rss`](#ak_peak_rss), [`ak_rss`](#ak_rss)
 - [Summary statistics](#summary-statistics) - [`ak_dist_t`](#ak_dist_t), [`ak_dist_add`](#ak_dist_add), [`ak_dist_variance`](#ak_dist_variance), [`ak_dist_sd`](#ak_dist_sd)
 
 ## Sequences
@@ -170,6 +171,62 @@ char b[AK_NUM_LEN], b2[AK_NUM_LEN];
 printf("%s segments, %s bp\n", ak_format_i64(b, st.n_seg), ak_format_u64(b2, st.n_bp));
 printf("mean length %s\n", ak_format_f64(b, st.seg_mean, 2));
 ```
+
+### `ak_format_bytes`
+
+```c
+char *ak_format_bytes(char *buf, uint64_t bytes);
+```
+
+A byte count the way a person reads it, in powers of 1024 with one decimal:
+`1536` -> `1.5 KB`, `2199023255552` -> `2.0 TB`. Below the first step up it
+prints whole bytes, since a fraction of a byte is noise.
+
+## Process measurements
+
+Two readings for code that reports what it cost - what
+[`gfa_read`](gfa.md#gfa_read) uses under `GFA_VERBOSE`. Neither can fail in a
+way a caller must handle: where the value is unavailable they return zero.
+
+### `ak_realtime`
+
+```c
+double ak_realtime(void);
+```
+
+Seconds from a monotonic clock, which no clock adjustment can move backwards.
+The origin is arbitrary, so only the difference between two readings means
+anything.
+
+```c
+double t0 = ak_realtime();
+do_the_work();
+printf("%.2f s\n", ak_realtime() - t0);
+```
+
+### `ak_peak_rss`
+
+```c
+size_t ak_peak_rss(void);
+```
+
+The high-water mark of this process's resident set, in bytes - not what is
+held right now, so it never falls, and so it answers "how much did this need"
+rather than "how much is left". `getrusage` reports it in kilobytes on Linux
+and bytes on the BSDs; this returns bytes on both.
+
+### `ak_rss`
+
+```c
+size_t ak_rss(void);
+```
+
+What the process holds right now, in bytes - `/proc/self/statm` on Linux,
+`task_info` on macOS, `0` anywhere else. Unlike the peak this can fall, but
+only as far as the allocator lets it: a freed block it keeps for reuse stays
+resident, so this measures the process rather than any structure in it. To
+attribute cost to a structure, count it - which is what
+[`gfa_read`](gfa.md#gfa_read) does under `GFA_FOOTPRINT`.
 
 ## Summary statistics
 
