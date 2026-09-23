@@ -518,25 +518,35 @@ int gfa_add_path(gfa_t *g, const char *name, const uint32_t *segs, const char *o
 
 // Ordering
 
+// What gfa_toposort() breaks a tie in the ready set with. The two answer
+// different questions, and the choice costs rather more than it looks:
+enum {
+    GFA_TIE_SEQ = 0,   // by sequence content, alphabetically; a NULL/empty sequence sorts first
+    GFA_TIE_ID  = 1    // by the segment id the file gave
+};
+
 /**
  * Topologically order the segments (Kahn's algorithm on the directed graph
- * given by the links). Ties in the ready set are broken by node sequence
- * content, alphabetically, so the ordering does not depend on the input's node
- * numbering (a NULL/empty sequence sorts first). Any nodes that remain inside
- * cycles are appended after the acyclic prefix, also by sequence, so `order`
- * is always a full permutation of 0..n_seg-1.
+ * given by the links). Ties in the ready set are broken as `tie` says, and any
+ * nodes that remain inside cycles are appended after the acyclic prefix, tied
+ * the same way, so `order` is always a full permutation of 0..n_seg-1.
  *
  * Requires GFA_ARCS. The in-degrees are taken from GFA_DEGREES when the
  * graph carries them and counted from the links when it does not, so a
- * caller that wants nothing else from them can leave that flag out
+ * caller that wants nothing else from them can leave that flag out.
+ * GFA_TIE_SEQ additionally requires GFA_SEQ; asked for on a graph that
+ * carries no bases it warns and falls back to GFA_TIE_ID, since every tie
+ * would otherwise compare equal and the order would be the arbitrary one the
+ * heap happened to leave
  * 
  * @param g Graph to order
  * @param order Caller-allocated array of length n_seg; filled with segment
  *              indices in topological order
+ * @param tie GFA_TIE_SEQ or GFA_TIE_ID
  * @return The number of nodes placed before any cycle (n_seg if the graph is
  *         acyclic), or a negative AK_E* code on error
  */
-int gfa_toposort(const gfa_t *g, int32_t *order);
+int gfa_toposort(const gfa_t *g, int32_t *order, int tie);
 
 /**
  * Whether the graph carries per-segment degree arrays (read with GFA_DEGREES)

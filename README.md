@@ -326,12 +326,20 @@ $ ./akhal compact graph.gfa
 ```
 
 #### 6. `sort`
-Topologically sorts a graph and renumbers its nodes `1..N` in the sorted order. Ordering uses Kahn's algorithm; ties in the ready set (the "hops") are broken alphabetically by node **sequence content**, so the result is independent of the input's node numbering — two graphs identical in topology and content sort the same way. Nodes in cycles, if any, are appended after the acyclic prefix. The sorted graph is re-emitted with the new ids (S/L/P lines remapped, link orientation and overlap preserved).
+Topologically sorts a graph and renumbers its nodes `1..N` in the sorted order. Ordering uses Kahn's algorithm; ties in the ready set (the "hops") are broken by node **sequence content** by default, so the result is independent of the input's node numbering — two graphs identical in topology and content sort the same way — or by **segment id** under `--tie id`. Nodes in cycles, if any, are appended after the acyclic prefix. The sorted graph is re-emitted with the new ids (S/L/P lines remapped, link orientation and overlap preserved).
 
 **Usage:**
 ```sh
-./akhal sort <input .gfa file> [output .gfa file] [--no-renumber] [--verbose] [--footprint]
+./akhal sort <input .gfa file> [output .gfa file] [--tie seq|id] [--no-renumber] [--verbose] [--footprint]
 ```
+
+`--tie` picks what breaks a tie in the ready set. `seq`, the default, orders
+tied nodes by their sequence content, so the result is a property of the graph
+rather than of the file that carried it: two graphs identical in topology and
+content sort the same way whatever their nodes were numbered, which is what
+lets a sort be compared against its own input. `id` uses the file's own
+numbering instead, which is reproducible only across files numbered alike but
+costs one integer compare where `seq` costs a `strcmp`.
 
 `--no-renumber` reorders the file without touching the ids: the S block still
 comes out in sorted order and the L block still follows it, but every line

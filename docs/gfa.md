@@ -586,26 +586,40 @@ gfa_destroy(g);
 ### `gfa_toposort`
 
 ```c
-int gfa_toposort(const gfa_t *g, int32_t *order);
+enum { GFA_TIE_SEQ = 0, GFA_TIE_ID = 1 };
+
+int gfa_toposort(const gfa_t *g, int32_t *order, int tie);
 ```
 
-Kahn's algorithm over the links. Ties in the ready set are broken by node
-*sequence content*, alphabetically, so the result does not depend on the input's
-node numbering. Nodes left inside cycles are appended after the acyclic prefix,
-so `order` is always a full permutation of `0..n_seg-1`. Requires `GFA_LINKS`.
+Kahn's algorithm over the links. Nodes left inside cycles are appended after
+the acyclic prefix, so `order` is always a full permutation of `0..n_seg-1`.
+Requires `GFA_ARCS`; the in-degrees come from `GFA_DEGREES` when the graph has
+them and are counted from the links when it does not.
+
+`tie` decides what orders two nodes that come ready together, and the choice
+costs more than it looks. `GFA_TIE_SEQ` compares their *sequence content*
+alphabetically, which makes the order a property of the graph rather than of
+the file that carried it - two graphs identical in topology and bases sort the
+same way whatever their nodes were numbered, which is what lets a sort be
+compared against its own input. `GFA_TIE_ID` compares the ids the file gave instead, reproducible only across files
+numbered alike, but it reads nothing but the links - so a caller that wants an
+order and not a rewritten file can leave `GFA_SEQ` out entirely. Asked for
+`GFA_TIE_SEQ` on a graph with no bases loaded, it warns and uses the id, since
+every tie would otherwise compare equal and the order would be whatever the
+heap happened to leave.
 
 Returns the number of nodes placed before any cycle (`n_seg` when the graph is
 acyclic), or a negative `AK_E*` code.
 
 ```c
-gfa_t *g = gfa_read("graph.gfa", GFA_LINKS);   // required for the in-degrees
+gfa_t *g = gfa_read("graph.gfa", GFA_ARCS);
 if (!g) return 1;
 
 int32_t n = gfa_n_seg(g);
 int32_t *order = (int32_t *)malloc((size_t)(n > 0 ? n : 1) * sizeof(int32_t));
 if (!order) { gfa_destroy(g); return 1; }
 
-int32_t placed = gfa_toposort(g, order);       // order[] is caller-allocated
+int32_t placed = gfa_toposort(g, order, GFA_TIE_ID);
 if (placed < 0)      ak_log(AK_LOG_ERROR, NULL, "%s", ak_strerror(placed));
 else if (placed < n) ak_log(AK_LOG_WARN, NULL, "%d node(s) sit in cycles", n - placed);
 else                 printf("acyclic; order[0] is index %d\n", order[0]);

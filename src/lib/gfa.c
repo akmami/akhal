@@ -821,19 +821,20 @@ int gfa_add_path(gfa_t *g, const char *name, const uint32_t *segs, const char *o
  * @brief ordering by sequence content rather than id keeps the result independent of
  * the input's node numbering; a NULL/empty sequence sorts first
  */
-static int seq_lt(const gfa_t *g, int32_t a, int32_t b) {
+static int tie_lt(const gfa_t *g, int32_t a, int32_t b, int tie) {
+    if (tie == GFA_TIE_ID) return g->seg[a].id < g->seg[b].id;
     const char *sa = g->seg[a].seq ? g->seg[a].seq : "";
     const char *sb = g->seg[b].seq ? g->seg[b].seq : "";
     return strcmp(sa, sb) < 0;
 }
 
 // sift the last heap element up to restore the min-heap order
-static void heap_push(const gfa_t *g, int32_t *heap, int *hn, int32_t v) {
+static void heap_push(const gfa_t *g, int32_t *heap, int *hn, int32_t v, int tie) {
     int i = (*hn)++;
     heap[i] = v;
     while (i > 0) {
         int p = (i - 1) / 2;
-        if (!seq_lt(g, heap[i], heap[p])) break;
+        if (!tie_lt(g, heap[i], heap[p], tie)) break;
         int32_t t = heap[i];
         heap[i] = heap[p];
         heap[p] = t;
@@ -842,17 +843,17 @@ static void heap_push(const gfa_t *g, int32_t *heap, int *hn, int32_t v) {
 }
 
 // pop and return the alphabetically-smallest node from the heap
-static int32_t heap_pop(const gfa_t *g, int32_t *heap, int *hn) {
+static int32_t heap_pop(const gfa_t *g, int32_t *heap, int *hn, int tie) {
     int32_t top = heap[0];
     int n = --(*hn);
     heap[0] = heap[n];
     int i = 0;
     for (;;) {
         int l = 2 * i + 1, r = 2 * i + 2, m = i;
-        if (l < n && seq_lt(g, heap[l], heap[m])) {
+        if (l < n && tie_lt(g, heap[l], heap[m], tie)) {
             m = l;
         }
-        if (r < n && seq_lt(g, heap[r], heap[m])) {
+        if (r < n && tie_lt(g, heap[r], heap[m], tie)) {
             m = r;
         }
         if (m == i) break;
@@ -865,13 +866,20 @@ static int32_t heap_pop(const gfa_t *g, int32_t *heap, int *hn) {
 }
 
 // topological order with sequence content being tie-break; see akhal/gfa.h
-int gfa_toposort(const gfa_t *g, int32_t *order) {
+int gfa_toposort(const gfa_t *g, int32_t *order, int tie) {
     if (!g->arc_off) {
         ak_log(AK_LOG_ERROR, "gfa", "toposort needs the CSR adjacency; read with GFA_ARCS");
         return AK_EINVAL;
     }
     int32_t n = g->n_seg;
     if (n == 0) return 0;
+
+    // every sequence would compare equal, leaving whatever order the heap
+    // happened to produce - the id is at least a real tiebreaker
+    if (tie == GFA_TIE_SEQ && !(g->flags & GFA_SEQ)) {
+        ak_log(AK_LOG_WARN, "gfa", "no sequences loaded; breaking ties by segment id instead");
+        tie = GFA_TIE_ID;
+    }
 
     // The sort consumes the in-degrees as it goes, so it works on a copy
     // either way; a graph read without GFA_DEGREES is counted here instead,
@@ -893,20 +901,20 @@ int gfa_toposort(const gfa_t *g, int32_t *order) {
     int hn = 0;
     for (int32_t i = 0; i < n; i++) {
         if (indeg[i] == 0) {
-            heap_push(g, heap, &hn, i);
+            heap_push(g, heap, &hn, i, tie);
         }
     }
 
     int32_t placed = 0;
     while (hn > 0) {
-        int32_t u = heap_pop(g, heap, &hn);
+        int32_t u = heap_pop(g, heap, &hn, tie);
         order[placed++] = u;
         const uint32_t *arcs;
         int na = gfa_arcs(g, u, &arcs);
         for (int k = 0; k < na; k++) {
             uint32_t w = g->link[arcs[k]].w;
             if (--indeg[w] == 0) {
-                heap_push(g, heap, &hn, (int32_t)w);
+                heap_push(g, heap, &hn, (int32_t)w, tie);
             }
         }
     }
@@ -916,10 +924,10 @@ int gfa_toposort(const gfa_t *g, int32_t *order) {
         // remaining nodes are inside cycles; append them based in sequence content (to make deterministic)
         for (int32_t i = 0; i < n; i++) {
             if (indeg[i] > 0) {
-                heap_push(g, heap, &hn, i);
+                heap_push(g, heap, &hn, i, tie);
             }
         }
-        while (hn > 0) order[placed++] = heap_pop(g, heap, &hn);
+        while (hn > 0) order[placed++] = heap_pop(g, heap, &hn, tie);
     }
 
     free(indeg);

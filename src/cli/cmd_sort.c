@@ -28,19 +28,32 @@ static void sort_links(gfa_link_t *link, int32_t n_link, int32_t n_seg) {
 }
 
 static void usage(void) {
-    ak_log(AK_LOG_ERROR, NULL, "usage: akhal sort <in.gfa> [out.gfa] [--no-renumber] [--verbose] [--footprint]");
+    ak_log(AK_LOG_ERROR, NULL, "usage: akhal sort <in.gfa> [out.gfa] [--tie seq|id] [--no-renumber] [--verbose] [--footprint]");
 }
 
 // `sort` entry point; see cli.h
 int cmd_sort(int argc, char **argv) {
     const char *in = NULL, *out_fn = NULL;
-    int renumber = 1, report = 0;
+    int renumber = 1, report = 0, tie = GFA_TIE_SEQ;
 
     for (int i = 2; i < argc; i++) {
         if (!strcmp(argv[i], "--no-renumber")) {
             renumber = 0;
         } else if (!strcmp(argv[i], "--verbose")) {
             report |= GFA_VERBOSE;
+        } else if (!strcmp(argv[i], "--tie")) {
+            if (++i >= argc) {
+                usage();
+                return 1;
+            }
+            if (!strcmp(argv[i], "seq")) {
+                tie = GFA_TIE_SEQ;
+            } else if (!strcmp(argv[i], "id")) {
+                tie = GFA_TIE_ID;
+            } else {
+                ak_log(AK_LOG_ERROR, NULL, "--tie takes seq or id, not %s", argv[i]);
+                return 1;
+            }
         } else if (!strcmp(argv[i], "--footprint")) {
             report |= GFA_FOOTPRINT;
         } else if (argv[i][0] == '-') {
@@ -69,6 +82,10 @@ int cmd_sort(int argc, char **argv) {
         return 1;
     }
 
+    // No GFA_DEGREES: the sort counts the in-degrees into the one array it
+    // consumes anyway, so the graph's own pair would only be a second copy.
+    // GFA_SEQ is here for the S lines, which carry the bases whatever breaks
+    // a tie - so --tie id spends less time, not less memory
     gfa_t *g = gfa_read(in, GFA_SEGS | GFA_SEQ | GFA_LINKS | GFA_ARCS | GFA_PATHS | report);
     if (!g) return 1;
 
@@ -83,7 +100,7 @@ int cmd_sort(int argc, char **argv) {
         return 1;
     }
 
-    int32_t placed = gfa_toposort(g, order);
+    int32_t placed = gfa_toposort(g, order, tie);
     if (placed < 0) {
         free(order);
         gfa_destroy(g);
