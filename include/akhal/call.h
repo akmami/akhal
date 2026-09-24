@@ -2,6 +2,7 @@
 #define AKHAL_CALL_H
 
 #include <stdint.h>
+#include <stdio.h>
 #include "akhal/gfa.h"
 #include "akhal/fasta.h"
 
@@ -159,6 +160,31 @@ static inline const call_var_t *call_at(const call_t *c, int64_t i) {
  * @return AK_OK, or a negative AK_E* code
  */
 int call_write_vcf(const call_t *c, const call_ref_t *ref, const char *fn);
+
+/**
+ * Write the VCF 4.2 header for any number of contigs.
+ *
+ * The pieces call_write_vcf() is made of, for a file that covers several
+ * backbones: the header once, naming every contig up front as VCF requires,
+ * then call_vcf_records() for each backbone in the same order. Written that
+ * way only one backbone need exist at a time - which matters, since each
+ * holds a per-segment offset array the size of the graph
+ * @param fp Open output stream
+ * @param names Contig names, in the order their records will follow
+ * @param lens Their lengths
+ * @param n Number of contigs
+ * @return AK_OK, or AK_EIO if the stream reports an error
+ */
+int call_vcf_header(FILE *fp, const char *const *names, const int64_t *lens, int n);
+
+/**
+ * Write one backbone's records under its name, without a header
+ * @param fp Open output stream, after call_vcf_header()
+ * @param c Variant set to write
+ * @param ref Backbone the variants were called against; supplies CHROM
+ * @return AK_OK, or AK_EIO if the stream reports an error
+ */
+int call_vcf_records(FILE *fp, const call_t *c, const call_ref_t *ref);
 
 #ifdef __cplusplus
 }

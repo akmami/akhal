@@ -162,7 +162,7 @@ Extract information from the r/GFA file. The first argument picks what to pull o
 ```sh
 ./akhal extract fa   <r/GFA file> <OUTPUT .fa/.fasta file> [wrap length]
 ./akhal extract path <r/GFA file> <OUTPUT .fa/.fasta file> <path name> [path name ...] [wrap length]
-./akhal extract vcf  <r/GFA file> <OUTPUT .vcf file> [--ref <name>] [--fasta <FASTA file>]
+./akhal extract vcf  <r/GFA file> <OUTPUT .vcf file> [--ref <name>[,<name>...]] [--fasta <FASTA file>]
 ```
 
 `wrap length` sets how many bases each output FASTA line carries; it defaults to 80 when omitted. 
@@ -190,9 +190,13 @@ The result is VCF 4.2, with the backbone name as `CHROM`, `INFO` carrying `END` 
 Alleles with an empty side carry the preceding reference base on both sides, as VCF requires.
 Coordinates assume blunt joins (0 bp link overlaps), which is what graph builders produce; a backbone carrying real overlaps is reported.
 
+`--ref` also takes a comma-separated list - `--ref chr1,chr2,chrX` - and each name becomes a contig of the one VCF, in the order given. 
+Blanks around the names are ignored; an empty name, a name given twice, or a name the graph (or with `--fasta`, the FASTA) does not have is an error. 
+
 Example:
 ```sh
 $ ./akhal extract vcf graph.gfa out.vcf --ref chr22
+$ ./akhal extract vcf graph.gfa all.vcf --ref chr1,chr2,chr22
 $ grep -v '^##' out.vcf
 #CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO
 chr22	11	.	C	G,T	.	.	END=11;TYPE=SNP,SNP

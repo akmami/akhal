@@ -574,6 +574,28 @@ void call_destroy(call_t *c) {
 // file I/O
 
 // write a variant set as VCF 4.2; see akhal/call.h
+// the header for any number of contigs; see akhal/call.h
+int call_vcf_header(FILE *fp, const char *const *names, const int64_t *lens, int n) {
+    fprintf(fp, "##fileformat=VCFv4.2\n");
+    fprintf(fp, "##source=akhal %s\n", AKHAL_VERSION_STR);
+    for (int i = 0; i < n; i++) {
+        fprintf(fp, "##contig=<ID=%s,length=%lld>\n", names[i], (long long)lens[i]);
+    }
+    fprintf(fp, "##INFO=<ID=END,Number=1,Type=Integer,Description=\"End position of the REF allele\">\n");
+    fprintf(fp, "##INFO=<ID=TYPE,Number=A,Type=String,Description=\"Type of each ALT allele\">\n");
+    fprintf(fp, "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n");
+    return ferror(fp) ? AK_EIO : AK_OK;
+}
+
+// one backbone's records, no header; see akhal/call.h
+int call_vcf_records(FILE *fp, const call_t *c, const call_ref_t *ref) {
+    for (int64_t i = 0; i < c->n; i++) {
+        const call_var_t *v = &c->var[i];
+        fprintf(fp, "%s\t%lld\t.\t%s\t%s\t.\t.\tEND=%lld;TYPE=%s\n", ref->name, (long long)(v->pos + 1), v->ref, v->alt, (long long)v->end, v->type);
+    }
+    return ferror(fp) ? AK_EIO : AK_OK;
+}
+
 int call_write_vcf(const call_t *c, const call_ref_t *ref, const char *fn) {
     FILE *fp = fopen(fn, "w");
     if (!fp) {
@@ -581,17 +603,9 @@ int call_write_vcf(const call_t *c, const call_ref_t *ref, const char *fn) {
         return AK_EOPEN;
     }
 
-    fprintf(fp, "##fileformat=VCFv4.2\n");
-    fprintf(fp, "##source=akhal %s\n", AKHAL_VERSION_STR);
-    fprintf(fp, "##contig=<ID=%s,length=%lld>\n", ref->name, (long long)ref->len);
-    fprintf(fp, "##INFO=<ID=END,Number=1,Type=Integer,Description=\"End position of the REF allele\">\n");
-    fprintf(fp, "##INFO=<ID=TYPE,Number=A,Type=String,Description=\"Type of each ALT allele\">\n");
-    fprintf(fp, "#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\n");
-
-    for (int64_t i = 0; i < c->n; i++) {
-        const call_var_t *v = &c->var[i];
-        fprintf(fp, "%s\t%lld\t.\t%s\t%s\t.\t.\tEND=%lld;TYPE=%s\n", ref->name, (long long)(v->pos + 1), v->ref, v->alt, (long long)v->end, v->type);
-    }
+    const char *name = ref->name;
+    call_vcf_header(fp, &name, &ref->len, 1);
+    call_vcf_records(fp, c, ref);
 
     int ok = !ferror(fp);
     if (fclose(fp) != 0) {

@@ -57,6 +57,9 @@ KEEP=0
 DRY_RUN=0
 ONLY=""
 
+REF_P_ARGS=()
+for c in $REF; do REF_P_ARGS+=(-p "$c"); done
+
 # argument parsing
 
 usage() {
@@ -562,9 +565,9 @@ fi
 # 6. variants as VCF
 
 heading "== vcf: variation off the reference backbone ==" "vcf"
-if [ -f "$GFA" ] && [ -n "$REF" ]; then
-    measure "vcf" "akhal" "$AKHAL extract vcf '$GFA' '$WORK/akhal.vcf' --ref '$REF'" "backbone: $REF" "$WORK/akhal.vcf"
-    try "vcf" "vg" "vg deconstruct -p '$REF' -t $THREADS '$VGP' > '$WORK/vg.vcf'" "deconstruct against $REF" "$WORK/vg.vcf"
+if [ -f "$GFA" ] && [ -n "$REF" ] && [ -n "$REF_CSV" ]; then
+    measure "vcf" "akhal" "$AKHAL extract vcf '$GFA' '$WORK/akhal.vcf' --ref '$REF_CSV'" "backbone: $REF" "$WORK/akhal.vcf"
+    try "vcf" "vg" "vg deconstruct '$REF_P_ARGS' -t $THREADS '$VGP' > '$WORK/vg.vcf'" "deconstruct against $REF" "$WORK/vg.vcf"
     skip "vcf" "odgi" "no equivalent subcommand"
     skip "vcf" "gfatools" "no equivalent subcommand"
 else
@@ -587,7 +590,7 @@ fi
 heading "== gfa2rgfa: label a GFA with SN/SO/SR ==" "gfa2rgfa"
 if [ -f "$GFA" ]; then
     if [ -n "$REF" ]; then
-        measure "gfa2rgfa" "akhal" "$AKHAL gfa2rgfa '$GFA' '$WORK/akhal.rgfa' --ref '$REF'" "backbone: $REF" "$WORK/akhal.rgfa"
+        measure "gfa2rgfa" "akhal" "$AKHAL gfa2rgfa '$GFA' '$WORK/akhal.rgfa' --ref '$REF_CSV'" "backbone: $REF" "$WORK/akhal.rgfa"
     else
         measure "gfa2rgfa" "akhal" "$AKHAL gfa2rgfa '$GFA' '$WORK/akhal.rgfa'" "" "$WORK/akhal.rgfa"
     fi

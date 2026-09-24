@@ -27,7 +27,7 @@ the result is an ordered array that maps row for row onto a VCF.
 - [Search caps](#search-caps)
 - [The backbone](#the-backbone) - [`call_ref_path`](#call_ref_path), [`call_ref_fasta`](#call_ref_fasta), [`call_ref_destroy`](#call_ref_destroy)
 - [Variants](#variants) - [`call_variants`](#call_variants), [`call_destroy`](#call_destroy), [`call_n`](#call_n), [`call_at`](#call_at)
-- [Output](#output) - [`call_write_vcf`](#call_write_vcf)
+- [Output](#output) - [`call_write_vcf`](#call_write_vcf), [`call_vcf_header`](#call_vcf_header), [`call_vcf_records`](#call_vcf_records)
 
 ## Coordinates
 
@@ -351,6 +351,56 @@ if (rc != AK_OK)
 call_destroy(c);
 call_ref_destroy(r);
 gfa_destroy(g);
+```
+
+### `call_vcf_header`
+
+```c
+int call_vcf_header(FILE *fp, const char *const *names, const int64_t *lens, int n);
+```
+
+The two halves `call_write_vcf()` is made of, for a file that covers several
+backbones. VCF wants every contig named in the header before any record, but
+building every backbone first to learn its length would hold each one's
+per-segment offset array at once. The
+lengths are known without building anything: `gfa_path_len()` of the path, or
+the FASTA record's length, which are exactly the lengths the backbones will
+have. So the header goes first, then each backbone is built, written with
+[`call_vcf_records`](#call_vcf_records) and released in turn.
+
+Returns `AK_OK`, or `AK_EIO` if the stream has reported an error.
+
+### `call_vcf_records`
+
+```c
+int call_vcf_records(FILE *fp, const call_t *c, const call_ref_t *ref);
+```
+
+One backbone's records under its name, with no header. Call them in the order
+the header listed the contigs, which is the order `tabix` and `bcftools`
+expect.
+
+```c
+// every chromosome into one VCF, holding one backbone at a time
+const char *names[] = { "chr1", "chr2", "chrX" };
+int64_t lens[3];
+for (int i = 0; i < 3; i++) {
+    int32_t k = -1;
+    for (int32_t j = 0; j < gfa_n_path(g) && k < 0; j++)
+        if (!strcmp(gfa_path_name(g, j), names[i])) k = j;
+    lens[i] = (int64_t)gfa_path_len(g, k);
+}
+
+FILE *fp = fopen("all.vcf", "w");
+call_vcf_header(fp, names, lens, 3);
+for (int i = 0; i < 3; i++) {
+    call_ref_t *r = call_ref_path(g, names[i]);
+    call_t *c = call_variants(g, r);
+    call_vcf_records(fp, c, r);
+    call_destroy(c);
+    call_ref_destroy(r);
+}
+fclose(fp);
 ```
 
 ---
