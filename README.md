@@ -162,7 +162,7 @@ Extract information from the r/GFA file. The first argument picks what to pull o
 ```sh
 ./akhal extract fa   <r/GFA file> <OUTPUT .fa/.fasta file> [wrap length]
 ./akhal extract path <r/GFA file> <OUTPUT .fa/.fasta file> <path name> [path name ...] [wrap length]
-./akhal extract vcf  <r/GFA file> <OUTPUT .vcf file> [--ref <name>[,<name>...]] [--fasta <FASTA file>]
+./akhal extract vcf  <r/GFA file> <OUTPUT .vcf file> [--ref <name>[,<name>...] | --ref all] [--fasta <FASTA file>]
 ```
 
 `wrap length` sets how many bases each output FASTA line carries; it defaults to 80 when omitted. 
@@ -193,10 +193,15 @@ Coordinates assume blunt joins (0 bp link overlaps), which is what graph builder
 `--ref` also takes a comma-separated list - `--ref chr1,chr2,chrX` - and each name becomes a contig of the one VCF, in the order given. 
 Blanks around the names are ignored; an empty name, a name given twice, or a name the graph (or with `--fasta`, the FASTA) does not have is an error. 
 
+`--ref all` takes every `P` line as a backbone - or with `--fasta`, every record - in file order, so a graph that carries one path per chromosome gives the whole genome in one call. 
+It is never the default, because it is only right for graphs like that: where the `P` lines are haplotypes, each would become a reference and the same variation would be reported under all of them. 
+A name carried by more than one `P` line is an error, since that is what a path written as fragments looks like and only its first piece would be used; join the fragments first. 
+
 Example:
 ```sh
 $ ./akhal extract vcf graph.gfa out.vcf --ref chr22
-$ ./akhal extract vcf graph.gfa all.vcf --ref chr1,chr2,chr22
+$ ./akhal extract vcf graph.gfa some.vcf --ref chr1,chr2,chr22
+$ ./akhal extract vcf graph.gfa all.vcf --ref all
 $ grep -v '^##' out.vcf
 #CHROM	POS	ID	REF	ALT	QUAL	FILTER	INFO
 chr22	11	.	C	G,T	.	.	END=11;TYPE=SNP,SNP

@@ -566,7 +566,7 @@ fi
 
 heading "== vcf: variation off the reference backbone ==" "vcf"
 if [ -f "$GFA" ] && [ -n "$REF" ] && [ -n "$REF_CSV" ]; then
-    measure "vcf" "akhal" "$AKHAL extract vcf '$GFA' '$WORK/akhal.vcf' --ref '$REF_CSV'" "backbone: $REF" "$WORK/akhal.vcf"
+    measure "vcf" "akhal" "$AKHAL extract vcf '$GFA' '$WORK/akhal.vcf' --ref '$REF_ALL'" "backbone: $REF" "$WORK/akhal.vcf"
     try "vcf" "vg" "vg deconstruct '$REF_P_ARGS' -t $THREADS '$VGP' > '$WORK/vg.vcf'" "deconstruct against $REF" "$WORK/vg.vcf"
     skip "vcf" "odgi" "no equivalent subcommand"
     skip "vcf" "gfatools" "no equivalent subcommand"
