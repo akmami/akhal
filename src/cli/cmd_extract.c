@@ -211,149 +211,57 @@ static int extract_path(int argc, char **argv) {
     return ret;
 }
 
-// Split a --ref value on commas, in place: "chr1,chr2, chr3" is three names
-static int split_refs(char *list, char ***out, int *n_out) {
-    int n = 0, m = 8;
-    char **names = (char **)malloc((size_t)m * sizeof(*names));
-    if (!names) return AK_ENOMEM;
+// The backbones --ref selects, with the name and length of each: P lines, or
+// with --fasta the FASTA's records, picked by ak_select(). The lengths are the
+// ones the backbones will have - a path's resolved steps summed, or the
+// record's - so the VCF header can name every contig before any is built
+static int pick_refs(const gfa_t *g, const fasta_t *fa, const char *spec, const char *src, const char ***names_out, int64_t **lens_out, int32_t *n_out) {
+    int32_t n_cand = fa ? (int32_t)fasta_n(fa) : gfa_n_path(g);
+    size_t cap = (size_t)(n_cand > 0 ? n_cand : 1);
 
-    for (char *p = list;;) {
-        char *comma = strchr(p, ',');
-        if (comma) *comma = '\0';
-        while (*p == ' ' || *p == '\t') p++;
-        char *e = p + strlen(p);
-        while (e > p && (e[-1] == ' ' || e[-1] == '\t')) *--e = '\0';
+    // a graph already holds its path names as an array; a FASTA's are inside its records
+    const char **cand = fa ? (const char **)malloc(cap * sizeof(*cand)) : (const char **)g->path;
+    int32_t *pick = (int32_t *)malloc(cap * sizeof(*pick));
+    const char **names = (const char **)malloc(cap * sizeof(*names));
+    int64_t *lens = (int64_t *)malloc(cap * sizeof(*lens));
 
-        if (!*p) {
-            ak_log(AK_LOG_ERROR, NULL, "--ref has an empty name in its list");
-            free(names);
-            return AK_EINVAL;
+    int rc = (cand || n_cand == 0) && pick && names && lens ? AK_OK : AK_ENOMEM;
+    int32_t n = 0;
+    if (rc == AK_OK) {
+        if (fa) {
+            for (int32_t k = 0; k < n_cand; k++) cand[k] = fa->rec[k].name;
         }
-        for (int i = 0; i < n; i++) {
-            if (!strcmp(names[i], p)) {
-                ak_log(AK_LOG_ERROR, NULL, "--ref names '%s' more than once", p);
-                free(names);
-                return AK_EINVAL;
-            }
+        const char *what = "";
+        int what_len = 0;
+        int verdict = ak_select(cand, n_cand, spec, pick, &n, &what, &what_len);
+        if (verdict != AK_SELECT_OK) {
+            char msg[512];
+            ak_log(AK_LOG_ERROR, NULL, "--ref: %s in %s%s", ak_select_msg(msg, sizeof(msg), verdict, what, what_len, fa ? "record" : "P line"), src,
+                   verdict == AK_SELECT_SHARED && !fa ? " - a path written as fragments has to be joined first" : "");
+            rc = AK_EINVAL;
         }
-        if (n == m) {
-            m <<= 1;
-            char **r = (char **)realloc(names, (size_t)m * sizeof(*names));
-            if (!r) {
-                free(names);
-                return AK_ENOMEM;
-            }
-            names = r;
-        }
-        names[n++] = p;
-
-        if (!comma) break;
-        p = comma + 1;
-    }
-    *out = names;
-    *n_out = n;
-    return AK_OK;
-}
-
-// this is needed for qsort
-static inline int name_cmp(const void *a, const void *b) {
-    return strcmp(*(const char *const *)a, *(const char *const *)b);
-}
-
-// Every name --ref all stands for: each P line, or with --fasta each record, in file order
-static int all_names(const gfa_t *g, const fasta_t *fa, const char *src, char ***out, int *n_out) {
-    int n = fa ? (int)fasta_n(fa) : (int)gfa_n_path(g);
-    if (n == 0) {
-        ak_log(AK_LOG_ERROR, NULL, fa ? "--ref all: %s holds no sequence" : "--ref all: %s has no P lines", src);
-        return AK_EINVAL;
-    }
-
-    char **names  = (char **)malloc((size_t)n * sizeof(char *));
-    char **sorted = (char **)malloc((size_t)n * sizeof(char *));
-    if (!names || !sorted) {
-        free(names);
-        free(sorted);
+    } else {
         ak_log(AK_LOG_ERROR, NULL, "out of memory");
-        return AK_ENOMEM;
-    }
-    for (int i = 0; i < n; i++) {
-        names[i] = fa ? fa->rec[i].name : (char *)gfa_path_name(g, i);
     }
 
-    // check if there is any name duplicates in fasta or P
-    memcpy(sorted, names, (size_t)n * sizeof(char *));
-    qsort(sorted, (size_t)n, sizeof(char *), name_cmp);
-    int rc = AK_OK;
-    for (int i = 1; i < n && rc == AK_OK; i++) {
-        if (strcmp(sorted[i - 1], sorted[i]) != 0) continue;
-        int run = 2;
-        while (i + run - 1 < n && !strcmp(sorted[i - 1], sorted[i + run - 1])) run++;
-        ak_log(AK_LOG_ERROR, NULL, "--ref all: '%s' names %d %s in %s; each needs a name of its own - a path written as fragments has to be joined first", sorted[i], run, fa ? "records" : "P lines", src);
-        rc = AK_EINVAL;
+    for (int32_t i = 0; rc == AK_OK && i < n; i++) {
+        names[i] = cand[pick[i]];
+        lens[i] = fa ? (int64_t)fa->rec[pick[i]].len : (int64_t)gfa_path_len(g, pick[i]);
     }
-    free(sorted);
+
+    if (fa) free(cand);
+    free(pick);
     if (rc != AK_OK) {
         free(names);
+        free(lens);
         return rc;
     }
-
-    ak_log(AK_LOG_INFO, NULL, "--ref all: %d backbone(s)", n);
-    *out = names;
+    if (spec && !strcmp(spec, "all")) {
+        ak_log(AK_LOG_INFO, NULL, "--ref all: %d backbone(s)", n);
+    }
+    *names_out = names;
+    *lens_out = lens;
     *n_out = n;
-    return AK_OK;
-}
-
-// With no --ref, the one backbone is the library's own default: the graph's first P line, or the FASTA's first record
-static int default_name(const gfa_t *g, const fasta_t *fa, char ***out, int *n_out) {
-    if (fa ? fasta_n(fa) == 0 : gfa_n_path(g) == 0) {
-        ak_log(AK_LOG_ERROR, NULL, fa ? "the FASTA holds no sequence" : "graph has no P lines to use as a backbone");
-        return AK_EINVAL;
-    }
-    char **names = (char **)malloc(sizeof(char *));
-    if (!names) {
-        ak_log(AK_LOG_ERROR, NULL, "out of memory");
-        return AK_ENOMEM;
-    }
-    names[0] = fa ? fa->rec[0].name : (char *)gfa_path_name(g, 0);
-    *out = names;
-    *n_out = 1;
-    return AK_OK;
-}
-
-// the first P line carrying exactly this name, or -1 - the same one call_ref_path() takes when the name is there
-static int32_t path_named(const gfa_t *g, const char *name) {
-    for (int32_t k = 0; k < gfa_n_path(g); k++)
-        if (!strcmp(gfa_path_name(g, k), name)) return k;
-    return -1;
-}
-
-// Check every name and find each contig's length, before any backbone is built
-static int ref_lengths(const gfa_t *g, const fasta_t *fa, const char *src, char *const *names, int n, int64_t **out) {
-    int64_t *lens = (int64_t *)malloc((size_t)n * sizeof(int64_t));
-    if (!lens) {
-        ak_log(AK_LOG_ERROR, NULL, "out of memory");
-        return AK_ENOMEM;
-    }
-    for (int i = 0; i < n; i++) {
-        if (fa) {
-            const fasta_rec_t *fr = fasta_get(fa, names[i]);
-            if (!fr) {
-                ak_log(AK_LOG_ERROR, NULL, "no sequence named '%s' in %s", names[i], src);
-                free(lens);
-                return AK_EINVAL;
-            }
-            lens[i] = fr->len;
-        } else {
-            int32_t k = path_named(g, names[i]);
-            if (k < 0) {
-                ak_log(AK_LOG_ERROR, NULL, "no P line named '%s' in %s", names[i], src);
-                free(lens);
-                return AK_EINVAL;
-            }
-            lens[i] = (int64_t)gfa_path_len(g, k);
-        }
-    }
-    *out = lens;
     return AK_OK;
 }
 
@@ -376,7 +284,7 @@ static int write_contig(const gfa_t *g, const fasta_t *fa, const char *name, FIL
 }
 
 // the whole file: the header naming every contig, then each contig's records in the same order. 
-static int write_vcf(const gfa_t *g, const fasta_t *fa, char *const *names, const int64_t *lens, int n, const char *out_fn) {
+static int write_vcf(const gfa_t *g, const fasta_t *fa, const char *const *names, const int64_t *lens, int32_t n, const char *out_fn) {
     FILE *fp = fopen(out_fn, "w");
     if (!fp) {
         ak_log(AK_LOG_ERROR, NULL, "cannot open output %s", out_fn);
@@ -384,8 +292,8 @@ static int write_vcf(const gfa_t *g, const fasta_t *fa, char *const *names, cons
     }
 
     int64_t total = 0;
-    int rc = call_vcf_header(fp, (const char *const *)names, lens, n);
-    for (int i = 0; i < n && rc == AK_OK; i++) {
+    int rc = call_vcf_header(fp, names, lens, n);
+    for (int32_t i = 0; i < n && rc == AK_OK; i++) {
         rc = write_contig(g, fa, names[i], fp, &total);
     }
     if (fclose(fp) != 0 && rc == AK_OK) {
@@ -404,8 +312,7 @@ static int write_vcf(const gfa_t *g, const fasta_t *fa, char *const *names, cons
 // `extract vcf` - every detour off the reference backbone becomes a VCF row.
 // --ref takes one name, several comma-separated, or "all"; each becomes a contig, in the order given
 static int extract_vcf(int argc, char **argv) {
-    const char *in = NULL, *out_fn = NULL, *fa_fn = NULL;
-    char *ref_arg = NULL;
+    const char *in = NULL, *out_fn = NULL, *fa_fn = NULL, *ref_arg = NULL;
 
     for (int i = 3; i < argc; i++) {
         if (!strcmp(argv[i], "--ref") && i + 1 < argc) {
@@ -435,25 +342,29 @@ static int extract_vcf(int argc, char **argv) {
         return 1;
     }
 
-    // A list is checked for empty and repeated names now, before the graph is read; "all" stands for names only the input can supply
-    int want_all = ref_arg && !strcmp(ref_arg, "all");
-    char **names = NULL;
-    int n_names = 0;
-    if (ref_arg && !(want_all) && split_refs(ref_arg, &names, &n_names) != AK_OK) return 1;
+    // A list's own shape - no empty or repeated name - is checked before the
+    // graph is read; which names exist can only be checked once it has been
+    const char *what = "";
+    int what_len = 0;
+    int verdict = ak_select_check(ref_arg, &what, &what_len);
+    if (verdict != AK_SELECT_OK) {
+        char msg[512];
+        ak_log(AK_LOG_ERROR, NULL, "--ref: %s", ak_select_msg(msg, sizeof(msg), verdict, what, what_len, "name"));
+        return 1;
+    }
 
     gfa_t *g = gfa_read(in, GFA_ALL);
     fasta_t *fa = NULL;
+    const char **names = NULL;
     int64_t *lens = NULL;
+    int32_t n_names = 0;
 
     int rc = g ? AK_OK : AK_EOPEN;
     if (rc == AK_OK && fa_fn) {
         fa = fasta_read(fa_fn);
         if (!fa) rc = AK_EOPEN;
     }
-    if (rc == AK_OK && !names) {
-        rc = want_all ? all_names(g, fa, fa ? fa_fn : in, &names, &n_names) : default_name(g, fa, &names, &n_names);
-    }
-    if (rc == AK_OK) rc = ref_lengths(g, fa, fa ? fa_fn : in, names, n_names, &lens);
+    if (rc == AK_OK) rc = pick_refs(g, fa, ref_arg, fa ? fa_fn : in, &names, &lens, &n_names);
     if (rc == AK_OK) rc = write_vcf(g, fa, names, lens, n_names, out_fn);
 
     free(lens);

@@ -7,19 +7,21 @@ allocates, nothing here logs, and nothing here can fail: every function either
 returns a value or writes through a buffer you already own. That is deliberate,
 so these can be called from the middle of a parser without an error path.
 
-Four groups: a pair of DNA routines used wherever a reverse strand has to be
-materialized, two string helpers, number formatting with thousands separators,
-and the running-distribution accumulator both the graph and the alignment
-`stats` report with.
+The groups: a pair of DNA routines used wherever a reverse strand has to be
+materialized, two string helpers, the name selection behind every `--ref`,
+number formatting with thousands separators, process measurements, and the
+running-distribution accumulator both the graph and the alignment `stats`
+report with.
 
 ```c
-#include "akhal/util.h"   // ak_complement, ak_revcomp, ak_ends_with, ak_str2int, ak_format_*, ak_dist_t
+#include "akhal/util.h"   // ak_complement, ak_revcomp, ak_ends_with, ak_str2int, ak_select*, ak_format_*, ak_dist_t
 ```
 
 ## Contents
 
 - [Sequences](#sequences) - [`ak_complement`](#ak_complement), [`ak_revcomp`](#ak_revcomp)
 - [Strings](#strings) - [`ak_ends_with`](#ak_ends_with), [`ak_str2int`](#ak_str2int)
+- [Selections](#selections) - [`ak_select`](#ak_select), [`ak_select_check`](#ak_select_check), [`ak_select_msg`](#ak_select_msg)
 - [Number formatting](#number-formatting) - [`ak_format_u64`](#ak_format_u64), [`ak_format_i64`](#ak_format_i64), [`ak_format_f64`](#ak_format_f64), [`ak_format_bytes`](#ak_format_bytes)
 - [Process measurements](#process-measurements) - [`ak_realtime`](#ak_realtime), [`ak_peak_rss`](#ak_peak_rss), [`ak_rss`](#ak_rss)
 - [Summary statistics](#summary-statistics) - [`ak_dist_t`](#ak_dist_t), [`ak_dist_add`](#ak_dist_add), [`ak_dist_variance`](#ak_dist_variance), [`ak_dist_sd`](#ak_dist_sd)
@@ -130,6 +132,81 @@ if (ak_str2int("120x", &wrap_len)) return 1;
 if (ak_str2int("", &wrap_len))     return 1;
 if (ak_str2int("99999999999999999999", &wrap_len)) return 1;
 ```
+
+## Selections
+
+How every `--ref` picks its names, in one place so every command reads the
+same option the same way: nothing for the default, `all` for everything, or a
+comma-separated list - `chr1,chr2, chrX` - picked in the order written, blanks
+around each name ignored. Used by `extract vcf` and `gfa2rgfa`.
+
+It keeps this file's rules. The candidates are any array of names the caller
+already has - a graph's path names (`g->path`), a FASTA's records - so nothing
+here knows what a graph is; the picks go into an array the caller sized; and a
+selection that cannot stand is returned as a *verdict*, the way
+[`ak_str2int`](#ak_str2int) returns 0 for text that is not a number, with a
+pointer to the text that broke it. Wording the verdict is
+[`ak_select_msg`](#ak_select_msg)'s job, into a buffer the caller owns.
+
+| Verdict | Meaning |
+| --- | --- |
+| `AK_SELECT_OK` | the selection stands |
+| `AK_SELECT_NONE` | there are no candidates at all |
+| `AK_SELECT_EMPTY` | a list entry is empty - `a,,b`, or a trailing comma |
+| `AK_SELECT_TWICE` | a name is listed more than once |
+| `AK_SELECT_MISSING` | a listed name is not a candidate |
+| `AK_SELECT_SHARED` | under `all`, two candidates carry the same name |
+
+### `ak_select`
+
+```c
+int ak_select(const char *const *cand, int32_t n_cand, const char *spec,
+              int32_t *pick, int32_t *n_pick, const char **what, int *what_len);
+```
+
+`NULL` picks the first candidate. `all` picks every candidate in order - but
+refuses when two share a name, since for a graph's paths that is a path
+written as fragments, and a name would only ever reach its first piece. A list
+picks each name's first candidate, in the order listed, and must name only
+candidates, each once. Names match exactly: `chr` does not pick `chr1`.
+
+`pick` needs room for `n_cand` entries; `*n_pick` is 0 unless the verdict is
+`AK_SELECT_OK`. `spec` is not modified, and `what` points into it (or into the
+candidates) with `what_len` giving the length, since the text is not
+NUL-terminated there.
+
+```c
+int32_t *bb = malloc((size_t)gfa_n_path(g) * sizeof(*bb)), n_bb;
+const char *what;
+int what_len;
+int v = ak_select((const char *const *)g->path, gfa_n_path(g), "chr1,chrX", bb, &n_bb, &what, &what_len);
+if (v != AK_SELECT_OK) {
+    char msg[512];
+    ak_log(AK_LOG_ERROR, NULL, "--ref: %s", ak_select_msg(msg, sizeof(msg), v, what, what_len, "P line"));
+}
+```
+
+### `ak_select_check`
+
+```c
+int ak_select_check(const char *spec, const char **what, int *what_len);
+```
+
+The rules `ak_select` applies to the selection's own shape - no empty entry,
+none twice - with nothing to select from yet. It is for failing fast: a
+command reading a whole-genome graph can reject `chr1,,chr2` before spending
+twenty minutes on the read, since which names *exist* can only be checked
+afterwards.
+
+### `ak_select_msg`
+
+```c
+char *ak_select_msg(char *buf, size_t size, int verdict, const char *what, int what_len, const char *noun);
+```
+
+A verdict in words, `noun` naming what the candidates are: `no P line named
+'chrZ'`, `'chr22' names more than one P line`, `the list has an empty name`.
+Returns `buf`, so it can sit inside the `ak_log` call.
 
 ## Number formatting
 

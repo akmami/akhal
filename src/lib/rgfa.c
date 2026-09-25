@@ -4,15 +4,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-// the path to label rank 0: the one asked for by name, else the first
-static int32_t backbone_path(const gfa_t *g, const char *ref_name) {
-    if (!ref_name) return gfa_n_path(g) > 0 ? 0 : -1;
-    for (int32_t k = 0; k < gfa_n_path(g); k++) {
-        if (!strcmp(gfa_path_name(g, k), ref_name)) return k;
-    }
-    return -1;
-}
-
 // how many segments a path actually resolves; a P line whose ids the file
 // never defined spells nothing and cannot be a backbone
 static int64_t path_resolved(const gfa_t *g, int32_t k) {
@@ -143,34 +134,60 @@ static void tally(const gfa_t *g, rgfa_stat_t *st) {
 }
 
 // label a graph as rGFA; see akhal/rgfa.h
-int rgfa_build(gfa_t *g, const char *ref_name, rgfa_stat_t *st) {
+int rgfa_build(gfa_t *g, const int32_t *bb, int32_t n_bb, rgfa_stat_t *st) {
     if (!(g->flags & GFA_PATHS)) {
         ak_log(AK_LOG_ERROR, "rgfa", "labelling requires the graph to be read with GFA_PATHS");
         return AK_EINVAL;
     }
-    if (gfa_n_path(g) == 0) {
+    int32_t n_path = gfa_n_path(g);
+    if (n_path == 0) {
         ak_log(AK_LOG_ERROR, "rgfa", "graph has no P lines, so there is no backbone to label against");
         return AK_EINVAL;
     }
 
-    int32_t bb = backbone_path(g, ref_name);
-    if (bb < 0) {
-        ak_log(AK_LOG_ERROR, "rgfa", "no path named '%s' in the graph", ref_name ? ref_name : "");
-        return AK_EINVAL;
+    // no choice made: the graph's first path, as it always was
+    const int32_t first = 0;
+    if (!bb || n_bb <= 0) {
+        bb = &first;
+        n_bb = 1;
     }
-    if (path_resolved(g, bb) == 0) {
-        ak_log(AK_LOG_ERROR, "rgfa", "the backbone path resolves to no segments");
-        return AK_EINVAL;
+
+    // which paths are backbones, so each of the rest is walked exactly once;
+    // a flag per path rather than a search per path, since under --ref all
+    // every path is one
+    uint8_t *is_bb = (uint8_t *)calloc((size_t)n_path, 1);
+    if (!is_bb) {
+        ak_log(AK_LOG_ERROR, "rgfa", "out of memory");
+        return AK_ENOMEM;
     }
+
+    int rc = AK_OK;
+    for (int32_t i = 0; i < n_bb && rc == AK_OK; i++) {
+        if (bb[i] < 0 || bb[i] >= n_path) {
+            ak_log(AK_LOG_ERROR, "rgfa", "backbone %d is not one of the graph's %d path(s)", bb[i], n_path);
+            rc = AK_EINVAL;
+        } else if (path_resolved(g, bb[i]) == 0) {
+            ak_log(AK_LOG_ERROR, "rgfa", "backbone '%s' resolves to no segments", gfa_path_name(g, bb[i]));
+            rc = AK_EINVAL;
+        } else {
+            is_bb[bb[i]] = 1;
+        }
+    }
+    if (rc != AK_OK) {
+        free(is_bb);
+        return rc;
+    }
+
     if (g->has_sr) {
         ak_log(AK_LOG_WARN, "rgfa", "the file carries its own SR tags; they are replaced by what the paths say");
     }
 
     unlabel(g);
-    label_backbone(g, bb);
-    for (int32_t k = 0; k < gfa_n_path(g); k++) {
-        if (k != bb) label_path(g, k);
+    for (int32_t i = 0; i < n_bb; i++) label_backbone(g, bb[i]);
+    for (int32_t k = 0; k < n_path; k++) {
+        if (!is_bb[k]) label_path(g, k);
     }
+    free(is_bb);
 
     if (st) tally(g, st);
     return AK_OK;

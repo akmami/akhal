@@ -108,6 +108,142 @@ char *ak_format_f64(char *buf, double v, int prec) {
     return buf;
 }
 
+// selections
+
+static int is_blank(char c) {
+    return c == ' ' || c == '\t';
+}
+
+// the next field of a comma-separated list, trimmed of the blanks around it
+static int next_field(const char **cur, const char **s, int *len) {
+    const char *p = *cur;
+    if (!p) return 0;
+    const char *comma = strchr(p, ',');
+    const char *e = comma ? comma : p + strlen(p);
+    while (p < e && is_blank(*p)) p++;
+    while (e > p && is_blank(e[-1])) e--;
+    *s = p;
+    *len = (int)(e - p);
+    *cur = comma ? comma + 1 : NULL;
+    return 1;
+}
+
+// the first candidate named exactly by the text s[0 .. len), or -1
+static int32_t find_name(const char *const *cand, int32_t n_cand, const char *s, int len) {
+    for (int32_t k = 0; k < n_cand; k++)
+        if ((int)strlen(cand[k]) == len && !memcmp(cand[k], s, (size_t)len)) return k;
+    return -1;
+}
+
+// order pick[] by the names it points at: a shellsort
+static void sort_by_name(const char *const *cand, int32_t *pick, int32_t n) {
+    for (int32_t gap = n / 2; gap > 0; gap /= 2) {
+        for (int32_t i = gap; i < n; i++) {
+            int32_t v = pick[i], j = i;
+            for (; j >= gap && strcmp(cand[pick[j - gap]], cand[v]) > 0; j -= gap) pick[j] = pick[j - gap];
+            pick[j] = v;
+        }
+    }
+}
+
+int ak_select_check(const char *spec, const char **what, int *what_len) {
+    if (!spec || !strcmp(spec, "all")) return AK_SELECT_OK;
+
+    const char *cur = spec, *s;
+    int len;
+    while (next_field(&cur, &s, &len)) {
+        if (len == 0) {
+            *what = s;
+            *what_len = 0;
+            return AK_SELECT_EMPTY;
+        }
+        // against every field before this one
+        const char *prev = spec, *t;
+        int tlen;
+        while (next_field(&prev, &t, &tlen) && t < s) {
+            if (tlen == len && !memcmp(t, s, (size_t)len)) {
+                *what = s;
+                *what_len = len;
+                return AK_SELECT_TWICE;
+            }
+        }
+    }
+    return AK_SELECT_OK;
+}
+
+int ak_select(const char *const *cand, int32_t n_cand, const char *spec, int32_t *pick, int32_t *n_pick, const char **what, int *what_len) {
+    *n_pick = 0;
+    int verdict = ak_select_check(spec, what, what_len);
+    if (verdict != AK_SELECT_OK) return verdict;
+    if (n_cand <= 0) {
+        *what = "";
+        *what_len = 0;
+        return AK_SELECT_NONE;
+    }
+
+    if (!spec) {
+        pick[0] = 0;
+        *n_pick = 1;
+        return AK_SELECT_OK;
+    }
+
+    if (!strcmp(spec, "all")) {
+        // shared names show up side by side once the picks are ordered by name; the picks are then put back in file order
+        for (int32_t k = 0; k < n_cand; k++) pick[k] = k;
+        sort_by_name(cand, pick, n_cand);
+        for (int32_t i = 1; i < n_cand && verdict == AK_SELECT_OK; i++) {
+            if (!strcmp(cand[pick[i - 1]], cand[pick[i]])) {
+                *what = cand[pick[i]];
+                *what_len = (int)strlen(*what);
+                verdict = AK_SELECT_SHARED;
+            }
+        }
+        if (verdict != AK_SELECT_OK) return verdict;
+        for (int32_t k = 0; k < n_cand; k++) pick[k] = k;
+        *n_pick = n_cand;
+        return AK_SELECT_OK;
+    }
+
+    // a list of distinct names each picks a different candidate, so pick[] never needs more room than there are candidates
+    const char *cur = spec, *s;
+    int len;
+    while (next_field(&cur, &s, &len)) {
+        int32_t k = find_name(cand, n_cand, s, len);
+        if (k < 0) {
+            *n_pick = 0;
+            *what = s;
+            *what_len = len;
+            return AK_SELECT_MISSING;
+        }
+        pick[(*n_pick)++] = k;
+    }
+    return AK_SELECT_OK;
+}
+
+char *ak_select_msg(char *buf, size_t size, int verdict, const char *what, int what_len, const char *noun) {
+    switch (verdict) {
+    case AK_SELECT_NONE:
+        snprintf(buf, size, "there is no %s to choose from", noun);
+        break;
+    case AK_SELECT_EMPTY:
+        snprintf(buf, size, "the list has an empty name");
+        break;
+    case AK_SELECT_TWICE:
+        snprintf(buf, size, "'%.*s' is listed more than once", what_len, what);
+        break;
+    case AK_SELECT_MISSING:
+        snprintf(buf, size, "no %s named '%.*s'", noun, what_len, what);
+        break;
+    case AK_SELECT_SHARED:
+        snprintf(buf, size, "'%.*s' names more than one %s", what_len, what, noun);
+        break;
+    default:
+        snprintf(buf, size, "the selection stands");
+        break;
+    }
+    return buf;
+}
+
 char *ak_format_bytes(char *buf, uint64_t bytes) {
     static const char *unit[] = { "B", "KB", "MB", "GB", "TB", "PB" };
     double v = (double)bytes;

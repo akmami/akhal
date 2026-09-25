@@ -414,8 +414,10 @@ Note: If no output file is given, the GFA is written to standard output.
 Labels a plain GFA as an rGFA, giving every segment the three tags that say where it sits on a real sequence: `SN:Z:` the name of that sequence, `SO:i:` the offset on it, `SR:i:` how far it is from the linear reference. 
 A GFA carries none of them, but its `P` lines say everything needed to work them out.
 
-One `P` line is declared the backbone - `--ref <name>`, else the graph's first - and its segments become rank 0, named after it, with offsets running the length of the walk. 
-One `P` line is one path here too, so a reference the file splits over several of them contributes only the backbone line at rank 0; join it into a single `P` line first if that is not what you want.
+The backbone is `--ref <name>`, else the graph's first `P` line, and its segments become rank 0, named after it, with offsets running the length of the walk. 
+`--ref` takes the same forms as in `extract vcf`: a comma-separated list - `--ref chr1,chr2,chrX` - makes each named path a backbone, and `--ref all` makes every `P` line one, so a reference made of several chromosomes is labelled with each chromosome at rank 0 under its own name, counting from 0. 
+A segment two backbones share keeps the first one's name. 
+One `P` line is one path here too, so a single chromosome the file splits over several of them contributes only its first piece at rank 0 - and `--ref all` refuses such a file outright; join the pieces into one `P` line first.
 
 Every other path is walked in turn. 
 While it runs over ground that is already labelled it only follows along; where it leaves that ground, the segments it visits alone are one rank deeper, named after that path, and offset onward from the point it left - so a bubble carries the coordinate of the reference stretch it detours around, and the counting stops as soon as the path merges back down to a lower rank. 
@@ -431,7 +433,7 @@ An assembly graph, whose paths are unrelated contigs, will label badly - there i
 
 **Usage:**
 ```sh
-./akhal gfa2rgfa <input .gfa file> [output .rgfa file] [--ref <path name>]
+./akhal gfa2rgfa <input .gfa file> [output .rgfa file] [--ref <name>[,<name>...] | --ref all]
 ```
 
 Note: If no output file is given, the rGFA is written to standard output.

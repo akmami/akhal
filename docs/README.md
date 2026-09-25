@@ -169,7 +169,7 @@ diff_gaf_identical(d)           diff   the whole verdict, for an exit status
 
 ```text
 gfa_read(GFA_LINKS|GFA_PATHS)   gfa    load the graph
-rgfa_build(g, "chr22", &st)     rgfa   walk every P line, writing SN/SO/SR
+rgfa_build(g, bb, n_bb, &st)    rgfa   walk every P line, writing SN/SO/SR
                                        onto every segment
 gfa_write_rgfa(g, out)          gfa    emit the graph, tags and all
 ```

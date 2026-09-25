@@ -88,7 +88,7 @@ ambiguous.
 ### `rgfa_build`
 
 ```c
-int rgfa_build(gfa_t *g, const char *ref_name, rgfa_stat_t *st);
+int rgfa_build(gfa_t *g, const int32_t *bb, int32_t n_bb, rgfa_stat_t *st);
 ```
 
 Labels the graph in place and returns `AK_OK`, or a negative `AK_E*` code with
@@ -96,24 +96,39 @@ the reason logged. Requires `GFA_PATHS`, and a graph with no `P` lines is
 refused - there is nothing to label against. The path block is not rewritten:
 the `P` lines are labelled exactly as they were read.
 
-One `P` line is one path. A reference split over several `P` lines is therefore
-several paths, and only the one chosen as backbone is rank 0 - join such a
-reference into a single `P` line before labelling if that is not what you want.
+`bb` holds the backbones as path indices - the ones
+[`ak_select`](util.md#ak_select) picks from `g->path` - and each is labelled
+rank 0 under its own name, in the order given, before any other path is
+walked. So a reference made of several chromosomes is several backbones, one
+per chromosome path, each counting its offsets from 0; the walks then measure
+every detour against whichever backbone it leaves. A segment two backbones
+share keeps the first one's name and offset. `NULL` takes the graph's first
+`P` line alone.
 
-`ref_name` picks the backbone by exact path name; `NULL` takes the graph's
-first `P` line.
+One `P` line is still one path: a *single* chromosome split over several `P`
+lines is several paths, and naming it selects only the first piece - join it
+into one `P` line before labelling.
 
 ```c
 gfa_t *g = gfa_read("graph.gfa", GFA_LINKS | GFA_PATHS);
 if (!g) return 1;
 
-rgfa_stat_t st;
-if (rgfa_build(g, "chr22", &st) != AK_OK) {
+// every chromosome at rank 0, each under its own name
+int32_t bb[64], n_bb;
+const char *what;
+int what_len;
+if (ak_select((const char *const *)g->path, gfa_n_path(g), "all", bb, &n_bb, &what, &what_len) != AK_SELECT_OK) {
     gfa_destroy(g);
     return 1;
 }
 
-printf("%d on the backbone, %d placed, %d ambiguous, up to rank %d\n",
+rgfa_stat_t st;
+if (rgfa_build(g, bb, n_bb, &st) != AK_OK) {
+    gfa_destroy(g);
+    return 1;
+}
+
+printf("%d at rank 0, %d placed, %d ambiguous, up to rank %d\n",
        st.n_rank0, st.n_labelled, st.n_ambiguous, st.max_rank);
 
 // the tags only reach a file through the rGFA writer

@@ -40,7 +40,7 @@ extern "C" {
  */
 typedef struct {
     int32_t n_path;        // P lines the graph carries
-    int32_t n_rank0;       // segments on the backbone
+    int32_t n_rank0;       // segments on a backbone
     int32_t n_labelled;    // segments that came out with SN and SO
     int32_t n_ambiguous;   // segments a walk reached but could not place
     int32_t n_unreached;   // segments no path visits at all
@@ -50,10 +50,13 @@ typedef struct {
 /**
  * Label a graph as rGFA, in place.
  *
- * One P line is one path: the backbone is labelled rank 0 and every other path
- * walked as described above. A reference split over several P lines is
- * therefore several paths, only the first of which is backbone - join it into
- * one P line before labelling if that is not what you want.
+ * One P line is one path. Each backbone is labelled rank 0 under its own
+ * name, in the order given - a reference made of several chromosomes is
+ * several backbones, one per chromosome path - and every other path is then
+ * walked against all of them, as described above. A segment two backbones
+ * share keeps the first one's name and offset. A single chromosome split
+ * over several P lines is still several paths: join it into one P line
+ * before labelling if that is not what you want.
  *
  * Segments are labelled through the fields gfa_write_rgfa() emits: `rank` is
  * SR, `ref_name` is SN, and `start`/`end` are the SO offset and its end. A
@@ -61,12 +64,14 @@ typedef struct {
  * how an ambiguous or unvisited one is told from a placed one.
  *
  * Requires the graph to be read with GFA_PATHS
- * @param g Graph to label, modified in place
- * @param ref_name Path to use as the backbone, or NULL for the graph's first
- * @param st Filled in with what was labelled; may be NULL
- * @return AK_OK, or a negative AK_E* code
+ * @param g    Graph to label, modified in place
+ * @param bb   Indices of the paths to use as backbones, as ak_select() picks
+ *             them from g->path; NULL for the graph's first path alone
+ * @param n_bb How many
+ * @param st   Filled in with what was labelled; may be NULL
+ * @return     AK_OK, or a negative AK_E* code
  */
-int rgfa_build(gfa_t *g, const char *ref_name, rgfa_stat_t *st);
+int rgfa_build(gfa_t *g, const int32_t *bb, int32_t n_bb, rgfa_stat_t *st);
 
 #ifdef __cplusplus
 }

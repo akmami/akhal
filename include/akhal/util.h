@@ -42,6 +42,69 @@ int ak_ends_with(const char *str, const char *suffix);
  */
 int ak_str2int(const char *str, int *out);
 
+// Selections
+
+/**
+ * What ak_select() and ak_select_check() made of a selection. Anything but
+ * AK_SELECT_OK is a verdict rather than a failure: the selection cannot stand,
+ * and `what` points at the text that broke it
+ */
+enum {
+    AK_SELECT_OK = 0,
+    AK_SELECT_NONE,      // there are no candidates to pick from
+    AK_SELECT_EMPTY,     // a list entry is empty ("a,,b", a trailing comma)
+    AK_SELECT_TWICE,     // a name is listed more than once
+    AK_SELECT_MISSING,   // a listed name is not among the candidates
+    AK_SELECT_SHARED     // under "all", two candidates carry the same name
+};
+
+/**
+ * Check a selection's own shape, before there is anything to select from:
+ * that no list entry is empty and none is given twice. ak_select() applies
+ * the same rules, so this is for failing fast - a command can reject a bad
+ * list before spending the time to read its input
+ * @param spec NULL, "all", or a comma-separated list of names
+ * @param what Set to the offending text when the verdict is not AK_SELECT_OK
+ * @param what_len Its length; the text is not NUL-terminated
+ * @return AK_SELECT_OK, AK_SELECT_EMPTY or AK_SELECT_TWICE
+ */
+int ak_select_check(const char *spec, const char **what, int *what_len);
+
+/**
+ * Pick names out of a set of candidates, the way a --ref style option names
+ * them: NULL picks the first candidate, "all" picks every candidate in order,
+ * and anything else is a comma-separated list of names, blanks around each
+ * ignored, picked in the order listed.
+ *
+ * Every listed name must be a candidate - the first one carrying it is taken
+ * - and none may be listed twice. Under "all" no two candidates may share a
+ * name: for a graph's paths that is a path written as fragments, which a name
+ * would only ever select the first piece of. The candidates are any array of
+ * names, such as a graph's path names (g->path) or a FASTA's record names.
+ * `spec` is not modified
+ * @param cand Candidate names
+ * @param n_cand How many there are
+ * @param spec Selection, as above
+ * @param pick Receives indices into cand, in selection order; room for n_cand
+ * @param n_pick Set to how many were picked; 0 unless the verdict is AK_SELECT_OK
+ * @param what Set to the offending text when the verdict is not AK_SELECT_OK
+ * @param what_len Its length; the text is not NUL-terminated
+ * @return AK_SELECT_OK, or the rule the selection broke
+ */
+int ak_select(const char *const *cand, int32_t n_cand, const char *spec, int32_t *pick, int32_t *n_pick, const char **what, int *what_len);
+
+/**
+ * Word a selection verdict for a message: "no P line named 'chrZ'"
+ * @param buf Buffer to write into
+ * @param size Its size
+ * @param verdict What ak_select() or ak_select_check() returned
+ * @param what The offending text they pointed at
+ * @param what_len Its length
+ * @param noun What the candidates are, singular: "P line", "record"
+ * @return buf
+ */
+char *ak_select_msg(char *buf, size_t size, int verdict, const char *what, int what_len, const char *noun);
+
 /**
  * Number formatting with thousands separators, for readable output. Each
  * writes into a buffer the caller owns and returns it, so the call can sit
