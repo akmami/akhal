@@ -20,7 +20,10 @@
 #
 # Settings, all overridable in the config file:
 #
-#   AKHAL   GFA   VG_FILE   GAF   GAF_B   READS   REF   OUTDIR  THREADS  REPEATS  TIMEOUT  TOOLS
+#   AKHAL   GFA   VG_FILE   GAF   GAF_B   READS   REF   REF_CSV   REF_P   REF_ALL
+#   OUTDIR  THREADS  REPEATS  TIMEOUT  TOOLS
+#
+# Options given on the command line win over the config. --data only moves the inputs the config leaves unset.
 #
 # The defaults assume the layout described in the README:
 #
@@ -43,6 +46,9 @@ GAF=""
 GAF_B=""
 READS=""
 REF=""
+REF_CSV=""
+REF_P=""
+REF_ALL=""
 
 OUTDIR="out"
 THREADS=1
@@ -57,9 +63,6 @@ KEEP=0
 DRY_RUN=0
 ONLY=""
 
-REF_P_ARGS=()
-for c in $REF; do REF_P_ARGS+=(-p "$c"); done
-
 # argument parsing
 
 usage() {
@@ -68,9 +71,32 @@ usage() {
     exit "${1:-0}"
 }
 
+# the config is read before the options, so that the command line overrides it
+for ((i = 1; i < $#; i++)); do
+    j=$((i + 1))
+    [ "${!i}" = "--config" ] && CONFIG=${!j}
+done
+
+# the config file is optional: without one the defaults above stand
+if [ -z "$CONFIG" ] && [ -f "./benchmark.conf" ]; then
+    CONFIG="./benchmark.conf"
+fi
+if [ -n "$CONFIG" ]; then
+    if [ ! -f "$CONFIG" ]; then
+        echo "config file not found: $CONFIG" >&2
+        exit 2
+    fi
+    # shellcheck disable=SC1090
+    . "$CONFIG"
+fi
+
 while [ $# -gt 0 ]; do
     case "$1" in
-        --config)  CONFIG=$2; shift 2 ;;
+        --config|--data|--out|--threads|--repeats|--timeout|--only|--tools)
+            [ $# -ge 2 ] || { echo "$1 needs a value" >&2; usage 2; } ;;
+    esac
+    case "$1" in
+        --config)  shift 2 ;;
         --data)    DATA_DIR=$2; shift 2 ;;
         --out)     OUTDIR=$2; shift 2 ;;
         --threads) THREADS=$2; shift 2 ;;
@@ -86,17 +112,7 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-# the config file is optional: without one the defaults below stand
-if [ -z "$CONFIG" ] && [ -f "./benchmark.conf" ]; then
-    CONFIG="./benchmark.conf"
-fi
 if [ -n "$CONFIG" ]; then
-    if [ ! -f "$CONFIG" ]; then
-        echo "config file not found: $CONFIG" >&2
-        exit 2
-    fi
-    # shellcheck disable=SC1090
-    . "$CONFIG"
     echo "config: $CONFIG"
 else
     echo "config: none, using defaults"
@@ -283,6 +299,26 @@ if [ -z "$REF" ] && [ -f "$GFA" ]; then
     REF=$(awk '$1=="P"{print $2; exit}' "$GFA" 2>/dev/null)
 fi
 [ -n "$REF" ] && echo "reference path: $REF"
+
+# the backbones for vcf and gfa2rgfa, as the config set them: REF_CSV and REF_P (the same names as vg's -p list) fall back to REF, REF_ALL to REF_CSV
+if [ -z "$REF_CSV" ] && [ -n "$REF" ]; then
+    REF_CSV="$REF"
+    REF_P=" -p '$REF'"
+fi
+: "${REF_ALL:=$REF_CSV}"
+if [ -n "$REF_CSV" ] && [ -z "$REF_P" ]; then
+    echo "REF_CSV is set but REF_P is not: build REF_P from REF_CSV in the config (see benchmark.conf.example)" >&2
+    exit 2
+fi
+[ -n "$REF_CSV" ] && echo "backbones: $REF_CSV (akhal: $REF_ALL; vg:$REF_P)"
+
+ref_note() {  # a --ref value, short enough for the results table
+    case "$1" in
+        all) echo "backbone: every path" ;;
+        *,*) echo "backbone: ${1%%,*} and $(printf '%s' "$1" | tr -cd , | wc -c | tr -d ' ') more" ;;
+        *)   echo "backbone: $1" ;;
+    esac
+}
 
 # a second GAF is what makes `compare gaf` interesting; without one the comparison still runs, against a copy of the first
 GAF_B_NOTE=""
@@ -565,13 +601,13 @@ fi
 # 6. variants as VCF
 
 heading "== vcf: variation off the reference backbone ==" "vcf"
-if [ -f "$GFA" ] && [ -n "$REF" ] && [ -n "$REF_CSV" ]; then
-    measure "vcf" "akhal" "$AKHAL extract vcf '$GFA' '$WORK/akhal.vcf' --ref '$REF_ALL'" "backbone: $REF" "$WORK/akhal.vcf"
-    try "vcf" "vg" "vg deconstruct '$REF_P_ARGS' -t $THREADS '$VGP' > '$WORK/vg.vcf'" "deconstruct against $REF" "$WORK/vg.vcf"
+if [ -f "$GFA" ] && [ -n "$REF_CSV" ]; then
+    measure "vcf" "akhal" "$AKHAL extract vcf '$GFA' '$WORK/akhal.vcf' --ref '$REF_ALL'" "$(ref_note "$REF_ALL")" "$WORK/akhal.vcf"
+    try "vcf" "vg" "vg deconstruct $REF_P -t $THREADS '$VGP' > '$WORK/vg.vcf'" "$(ref_note "$REF_CSV")" "$WORK/vg.vcf"
     skip "vcf" "odgi" "no equivalent subcommand"
     skip "vcf" "gfatools" "no equivalent subcommand"
 else
-    skip "vcf" "all" "no GFA, or no reference path found (set REF in the config)"
+    skip "vcf" "all" "no GFA, or no P line to use as the backbone"
 fi
 
 # 7. vg -> GFA
@@ -589,8 +625,8 @@ fi
 
 heading "== gfa2rgfa: label a GFA with SN/SO/SR ==" "gfa2rgfa"
 if [ -f "$GFA" ]; then
-    if [ -n "$REF" ]; then
-        measure "gfa2rgfa" "akhal" "$AKHAL gfa2rgfa '$GFA' '$WORK/akhal.rgfa' --ref '$REF_CSV'" "backbone: $REF" "$WORK/akhal.rgfa"
+    if [ -n "$REF_CSV" ]; then
+        measure "gfa2rgfa" "akhal" "$AKHAL gfa2rgfa '$GFA' '$WORK/akhal.rgfa' --ref '$REF_CSV'" "$(ref_note "$REF_CSV")" "$WORK/akhal.rgfa"
     else
         measure "gfa2rgfa" "akhal" "$AKHAL gfa2rgfa '$GFA' '$WORK/akhal.rgfa'" "" "$WORK/akhal.rgfa"
     fi

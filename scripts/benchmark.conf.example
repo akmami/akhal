@@ -15,10 +15,17 @@ GAF="$DATA_DIR/human_v38.gaf"       # alignments against the graph
 GAF_B="$DATA_DIR/human_v38.2.gaf"   # a second, different alignment set
 READS="$DATA_DIR/hg002.fa"          # the reads those alignments came from
 
-# the backbone the VCF and rGFA tasks work against. 
-# Left empty, the first P line's name is used - which is what akhal itself defaults to
+# the backbones the VCF and rGFA tasks work against, comma separated, no spaces.
+# REF_CSV goes to akhal gfa2rgfa, REF_ALL to akhal extract vcf, and REF_P - the same names, one -p each - to vg deconstruct.
+# REF_P is pasted into the command as it stands, so each name keeps its single quotes.
+# "all" makes akhal use every P line, which vg cannot do, so the two vcf rows are only comparable when REF_CSV lists every P line.
+# Left empty, REF_ALL falls back to REF_CSV, and REF_CSV to the first P line's name - which is what akhal itself defaults to
 REF_CSV="$(printf 'chr%s,' {1..22} X Y)"
 REF_CSV="${REF_CSV%,}"
+REF_P=""
+IFS=, read -ra ref_names <<< "$REF_CSV"
+for n in "${ref_names[@]}"; do REF_P+=" -p '$n'"; done
+unset ref_names n
 REF_ALL="all"
 
 # where results, logs, scratch and any downloaded binaries go
