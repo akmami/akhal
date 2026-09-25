@@ -10,7 +10,7 @@
 
 // print the gfa2rgfa usage line
 static void usage(void) {
-    ak_log(AK_LOG_ERROR, NULL, "usage: akhal gfa2rgfa <in.gfa> [out.rgfa] [--ref <NAME>[,<NAME>...] | --ref all]");
+    ak_log(AK_LOG_ERROR, NULL, "usage: akhal gfa2rgfa <in.gfa> [out.rgfa] [--ref <NAME>[,<NAME>...] | --ref all] [--verbose] [--footprint]");
 }
 
 // 1 when the extension fits, else 0 and the reason is logged
@@ -66,6 +66,7 @@ static int write_rgfa(const gfa_t *g, const char *out_fn) {
 // `gfa2rgfa` entry point; see cli.h
 int cmd_gfa2rgfa(int argc, char **argv) {
     const char *in = NULL, *out_fn = NULL, *ref_arg = NULL;
+    int report = cli_take_report(&argc, argv, 2);
 
     for (int i = 2; i < argc; i++) {
         if (!strcmp(argv[i], "--ref") && i + 1 < argc) {
@@ -100,7 +101,7 @@ int cmd_gfa2rgfa(int argc, char **argv) {
         return 1;
     }
 
-    gfa_t *g = gfa_read(in, GFA_ALL);
+    gfa_t *g = gfa_read(in, GFA_ALL | report);
     if (!g) return 1;
 
     int32_t *bb = NULL, n_bb = 0;

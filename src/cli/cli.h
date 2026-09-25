@@ -1,6 +1,10 @@
 #ifndef AKHAL_CLI_H
 #define AKHAL_CLI_H
 
+#include "akhal/gfa.h"
+
+#include <string.h>
+
 /**
  * Subcommand entry points.
  *
@@ -8,7 +12,37 @@
  * argv[1] is the command name. A command returns 0 on success or non-zero on
  * failure; main() forwards that as the process exit status. Every command is
  * built on libakhal.
+ *
+ * Every command that reads a graph also takes the two reporting options,
+ * anywhere on its line: --verbose (GFA_VERBOSE) and --footprint
+ * (GFA_FOOTPRINT). cli_take_report() lifts them out before the command's own
+ * parsing runs.
  */
+
+/**
+ * Take the reporting options out of argv. The remaining arguments close up in
+ * order and argv stays NULL-terminated, so the command parses its own
+ * options exactly as if the reporting options had never been given
+ * @param argc In: the argument count; out: the count left
+ * @param argv Arguments, compacted in place
+ * @param from First index to look at; the command name(s) before it stay put
+ * @return GFA_VERBOSE and/or GFA_FOOTPRINT, for OR-ing into gfa_read()'s flags
+ */
+static inline int cli_take_report(int *argc, char **argv, int from) {
+    int report = 0, n = from;
+    for (int i = from; i < *argc; i++) {
+        if (!strcmp(argv[i], "--verbose")) {
+            report |= GFA_VERBOSE;
+        } else if (!strcmp(argv[i], "--footprint")) {
+            report |= GFA_FOOTPRINT;
+        } else {
+            argv[n++] = argv[i];
+        }
+    }
+    if (n < *argc) argv[n] = NULL;
+    *argc = n;
+    return report;
+}
 
 /**
  * `stats` - print summary statistics for an r/GFA graph or for a GAF alignment

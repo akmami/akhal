@@ -15,8 +15,9 @@ static int want_gfa(const char *fn) {
 
 // `compact` entry point; see cli.h
 int cmd_compact(int argc, char **argv) {
+    int report = cli_take_report(&argc, argv, 2);
     if (argc < 3 || argc > 4) {
-        ak_log(AK_LOG_ERROR, NULL, "usage: akhal compact <in.gfa> [out.gfa]");
+        ak_log(AK_LOG_ERROR, NULL, "usage: akhal compact <in.gfa> [out.gfa] [--verbose] [--footprint]");
         return 1;
     }
     const char *in = argv[2];
@@ -25,7 +26,7 @@ int cmd_compact(int argc, char **argv) {
     if (!want_gfa(in)) return 1;
     if (out_fn && !want_gfa(out_fn)) return 1;
 
-    gfa_t *g = gfa_read(in, GFA_LINKS | GFA_PATHS | GFA_SEQ)   /* no GFA_ARCS: compact scans link[] */;
+    gfa_t *g = gfa_read(in, GFA_LINKS | GFA_PATHS | GFA_SEQ | report);   // no GFA_ARCS: compact scans link[]
     if (!g) return 1;
 
     compact_t *c = compact_runs(g);

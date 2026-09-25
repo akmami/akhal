@@ -191,8 +191,8 @@ static int32_t sr_tag(const char *line) {
     return -1;
 }
 
-// summarize a file in one pass; see akhal/gfa.h
-int gfa_read_stats(const char *fn, gfa_stat_t *st, int flags) {
+// the pass itself; gfa_read_stats() adds the report around it
+static int summarize(const char *fn, gfa_stat_t *st, int flags) {
     ak_file *f = ak_open(fn);
     if (!f) return AK_EOPEN;
 
@@ -361,4 +361,26 @@ int gfa_read_stats(const char *fn, gfa_stat_t *st, int flags) {
     ids_free(&dst);
     ids_free(&steps);
     return AK_OK;
+}
+
+// report what the pass took; see GFA_VERBOSE in akhal/gfa.h
+static void log_cost(const char *fn, double secs) {
+    char b[AK_NUM_LEN], c[AK_NUM_LEN];
+    size_t rss = ak_rss(), peak = ak_peak_rss();
+    if (rss || peak) {
+        ak_log(AK_LOG_INFO, "gfa", "summarized %s in %.2f s, %s resident, %s peak", fn, secs, ak_format_bytes(b, rss), ak_format_bytes(c, peak));
+    } else {
+        ak_log(AK_LOG_INFO, "gfa", "summarized %s in %.2f s", fn, secs);
+    }
+}
+
+// summarize a file in one pass; see akhal/gfa.h
+int gfa_read_stats(const char *fn, gfa_stat_t *st, int flags) {
+    // there is no graph to break down, so a footprint is the one line
+    int verbose = (flags & (GFA_VERBOSE | GFA_FOOTPRINT)) != 0;
+    double t0 = verbose ? ak_realtime() : 0.0;
+
+    int rc = summarize(fn, st, flags);
+    if (rc == AK_OK && verbose) log_cost(fn, ak_realtime() - t0);
+    return rc;
 }

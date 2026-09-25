@@ -15,7 +15,7 @@ KHASHL_MAP_INIT(KH_LOCAL, rdmap_t, rdmap, const char *, uint32_t, kh_hash_str, k
 
 // print the stats usage line
 static void usage(void) {
-    ak_log(AK_LOG_ERROR, NULL, "usage: akhal stats <r/GFA|GAF> [--no-degrees] [--ranks] [--cigar]");
+    ak_log(AK_LOG_ERROR, NULL, "usage: akhal stats <r/GFA|GAF> [--no-degrees] [--ranks] [--cigar] [--verbose] [--footprint]");
 }
 
 // graph statistics
@@ -350,6 +350,7 @@ int cmd_stats(int argc, char **argv) {
     const char *fn = NULL;
     int want_cigar = 0;
     int gfa_flags = GFA_STAT_DEGREES;   // degrees by default; ranks on request
+    int report = cli_take_report(&argc, argv, 2);
 
     for (int i = 2; i < argc; i++) {
         if (!strcmp(argv[i], "--cigar")) {
@@ -375,13 +376,16 @@ int cmd_stats(int argc, char **argv) {
     }
 
     if (ak_ends_with(fn, ".gaf")) {
+        if (report) {
+            ak_log(AK_LOG_WARN, NULL, "--verbose and --footprint only apply to graph input; ignoring them");
+        }
         return stats_gaf(fn, want_cigar);
     }
     if (ak_ends_with(fn, ".gfa") || ak_ends_with(fn, ".rgfa")) {
         if (want_cigar) {
             ak_log(AK_LOG_WARN, NULL, "--cigar only applies to GAF input; ignoring it");
         }
-        return stats_gfa(fn, gfa_flags);
+        return stats_gfa(fn, gfa_flags | report);
     }
 
     ak_log(AK_LOG_ERROR, NULL, "expected a .gfa, .rgfa or .gaf file: %s", fn);

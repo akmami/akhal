@@ -9,13 +9,14 @@
 
 // print the gfa2dot usage line
 static void usage(void) {
-    ak_log(AK_LOG_ERROR, NULL, "usage: akhal gfa2dot <in.gfa> [out.dot] [--ids]");
+    ak_log(AK_LOG_ERROR, NULL, "usage: akhal gfa2dot <in.gfa> [out.dot] [--ids] [--verbose] [--footprint]");
 }
 
 // `gfa2dot` entry point; see cli.h
 int cmd_gfa2dot(int argc, char **argv) {
     const char *in = NULL, *out_fn = NULL;
     int flags = 0;
+    int report = cli_take_report(&argc, argv, 2);
 
     for (int i = 2; i < argc; i++) {
         if (!strcmp(argv[i], "--ids")) {
@@ -46,7 +47,7 @@ int cmd_gfa2dot(int argc, char **argv) {
         return 1;
     }
 
-    gfa_t *g = gfa_read(in, GFA_LINKS | GFA_SEQ);
+    gfa_t *g = gfa_read(in, GFA_LINKS | GFA_SEQ | report);
     if (!g) return 1;
 
     FILE *out = stdout;

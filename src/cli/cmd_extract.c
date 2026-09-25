@@ -29,9 +29,9 @@ static void emit_wrapped(FILE *out, const char *seq, size_t len, int *col, int w
 
 // print the extract usage lines
 static void usage(void) {
-    ak_log(AK_LOG_ERROR, NULL, "usage: akhal extract fa   <r/GFA> <out.fa|.fasta> [WRAP-LENGTH]");
-    ak_log(AK_LOG_ERROR, NULL, "       akhal extract path <r/GFA> <out.fa|.fasta> <PATH-NAME> [PATH-NAME ...] [WRAP-LENGTH]");
-    ak_log(AK_LOG_ERROR, NULL, "       akhal extract vcf  <r/GFA> <out.vcf> [--ref <NAME>[,<NAME>...] | --ref all] [--fasta <FILE>]");
+    ak_log(AK_LOG_ERROR, NULL, "usage: akhal extract fa   <r/GFA> <out.fa|.fasta> [WRAP-LENGTH] [--verbose] [--footprint]");
+    ak_log(AK_LOG_ERROR, NULL, "       akhal extract path <r/GFA> <out.fa|.fasta> <PATH-NAME> [PATH-NAME ...] [WRAP-LENGTH] [--verbose] [--footprint]");
+    ak_log(AK_LOG_ERROR, NULL, "       akhal extract vcf  <r/GFA> <out.vcf> [--ref <NAME>[,<NAME>...] | --ref all] [--fasta <FILE>] [--verbose] [--footprint]");
 }
 
 // 1 when the extension fits, else 0 and the reason is logged
@@ -108,7 +108,7 @@ static int64_t emit_paths(const gfa_t *g, FILE *out, const char *key, int wrap_l
 }
 
 // `extract fa` - every P line as one FASTA record
-static int extract_fa(int argc, char **argv) {
+static int extract_fa(int argc, char **argv, int report) {
     const char *in = NULL, *out_fn = NULL;
     int wrap_len = FASTA_WRAP, seen_wrap = 0;
 
@@ -136,7 +136,7 @@ static int extract_fa(int argc, char **argv) {
     if (!want_gfa(in) || !want_fasta(out_fn)) return 1;
 
     // writing the paths as they lie needs their steps and the bases, nothing else
-    gfa_t *g = gfa_read(in, GFA_PATHS | GFA_SEQ);
+    gfa_t *g = gfa_read(in, GFA_PATHS | GFA_SEQ | report);
     if (!g) return 1;
 
     if (gfa_n_path(g) == 0) {
@@ -164,7 +164,7 @@ static int extract_fa(int argc, char **argv) {
 }
 
 // `extract path` - the named paths, one FASTA record each. At least one name is required; `fa` is how to take them all
-static int extract_path(int argc, char **argv) {
+static int extract_path(int argc, char **argv, int report) {
     if (argc < 6) {
         usage();
         return 1;
@@ -180,7 +180,7 @@ static int extract_path(int argc, char **argv) {
     }
     if (!want_gfa(in) || !want_fasta(out_fn)) return 1;
 
-    gfa_t *g = gfa_read(in, GFA_PATHS | GFA_SEQ);
+    gfa_t *g = gfa_read(in, GFA_PATHS | GFA_SEQ | report);
     if (!g) return 1;
 
     FILE *out = fopen(out_fn, "w");
@@ -311,7 +311,7 @@ static int write_vcf(const gfa_t *g, const fasta_t *fa, const char *const *names
 
 // `extract vcf` - every detour off the reference backbone becomes a VCF row.
 // --ref takes one name, several comma-separated, or "all"; each becomes a contig, in the order given
-static int extract_vcf(int argc, char **argv) {
+static int extract_vcf(int argc, char **argv, int report) {
     const char *in = NULL, *out_fn = NULL, *fa_fn = NULL, *ref_arg = NULL;
 
     for (int i = 3; i < argc; i++) {
@@ -353,7 +353,7 @@ static int extract_vcf(int argc, char **argv) {
         return 1;
     }
 
-    gfa_t *g = gfa_read(in, GFA_ALL);
+    gfa_t *g = gfa_read(in, GFA_ALL | report);
     fasta_t *fa = NULL;
     const char **names = NULL;
     int64_t *lens = NULL;
@@ -380,10 +380,11 @@ int cmd_extract(int argc, char **argv) {
         usage();
         return 1;
     }
+    int report = cli_take_report(&argc, argv, 3);
 
-    if (!strcmp(argv[2], "fa"))   return extract_fa(argc, argv);
-    if (!strcmp(argv[2], "path")) return extract_path(argc, argv);
-    if (!strcmp(argv[2], "vcf"))  return extract_vcf(argc, argv);
+    if (!strcmp(argv[2], "fa"))   return extract_fa(argc, argv, report);
+    if (!strcmp(argv[2], "path")) return extract_path(argc, argv, report);
+    if (!strcmp(argv[2], "vcf"))  return extract_vcf(argc, argv, report);
 
     ak_log(AK_LOG_ERROR, NULL, "unknown extract target: %s", argv[2]);
     usage();

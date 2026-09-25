@@ -34,13 +34,12 @@ static void usage(void) {
 // `sort` entry point; see cli.h
 int cmd_sort(int argc, char **argv) {
     const char *in = NULL, *out_fn = NULL;
-    int renumber = 1, report = 0, tie = GFA_TIE_SEQ;
+    int renumber = 1, tie = GFA_TIE_SEQ;
+    int report = cli_take_report(&argc, argv, 2);
 
     for (int i = 2; i < argc; i++) {
         if (!strcmp(argv[i], "--no-renumber")) {
             renumber = 0;
-        } else if (!strcmp(argv[i], "--verbose")) {
-            report |= GFA_VERBOSE;
         } else if (!strcmp(argv[i], "--tie")) {
             if (++i >= argc) {
                 usage();
@@ -54,8 +53,6 @@ int cmd_sort(int argc, char **argv) {
                 ak_log(AK_LOG_ERROR, NULL, "--tie takes seq or id, not %s", argv[i]);
                 return 1;
             }
-        } else if (!strcmp(argv[i], "--footprint")) {
-            report |= GFA_FOOTPRINT;
         } else if (argv[i][0] == '-') {
             ak_log(AK_LOG_ERROR, NULL, "unknown option: %s", argv[i]);
             usage();

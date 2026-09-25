@@ -290,7 +290,10 @@ size_t ak_peak_rss(void);
 The high-water mark of this process's resident set, in bytes - not what is
 held right now, so it never falls, and so it answers "how much did this need"
 rather than "how much is left". `getrusage` reports it in kilobytes on Linux
-and bytes on the BSDs; this returns bytes on both.
+and bytes on the BSDs; this returns bytes on both. Linux raises that mark
+lazily, so a process still growing can briefly hold more than it reports;
+the larger of the two is returned, so the peak is never below
+[`ak_rss`](#ak_rss).
 
 ### `ak_rss`
 

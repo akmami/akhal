@@ -10,13 +10,14 @@
 
 // print the annotate usage line
 static void usage(void) {
-    ak_log(AK_LOG_ERROR, NULL, "usage: akhal annotate <r/GFA> <out.annot> [--vcf <FILE>] [--fasta <FILE>] [--ref <PATH-NAME>]");
+    ak_log(AK_LOG_ERROR, NULL, "usage: akhal annotate <r/GFA> <out.annot> [--vcf <FILE>] [--fasta <FILE>] [--ref <PATH-NAME>] [--verbose] [--footprint]");
 }
 
 // `annotate` entry point; see cli.h
 int cmd_annotate(int argc, char **argv) {
     const char *gfa_fn = NULL, *out_fn = NULL;
     const char *vcf_fn = NULL, *fa_fn = NULL, *ref_name = NULL;
+    int report = cli_take_report(&argc, argv, 2);
 
     for (int i = 2; i < argc; i++) {
         if (!strcmp(argv[i], "--vcf") && i + 1 < argc) {
@@ -47,7 +48,7 @@ int cmd_annotate(int argc, char **argv) {
         return 1;
     }
 
-    gfa_t *g = gfa_read(gfa_fn, GFA_ALL);
+    gfa_t *g = gfa_read(gfa_fn, GFA_ALL | report);
     if (!g) return 1;
 
     annot_t *an = annot_init();

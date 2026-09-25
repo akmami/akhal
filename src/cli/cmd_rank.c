@@ -11,7 +11,7 @@
 
 // print the rank usage line
 static void usage(void) {
-    ak_log(AK_LOG_ERROR, NULL, "usage: akhal rank <in.gfa> [out.gfa] [--fasta <FILE>] [--ref <NAME>]");
+    ak_log(AK_LOG_ERROR, NULL, "usage: akhal rank <in.gfa> [out.gfa] [--fasta <FILE>] [--ref <NAME>] [--verbose] [--footprint]");
 }
 
 // make an external reference the backbone: rank against its walk, then install
@@ -41,6 +41,7 @@ static int rank_from_fasta(gfa_t *g, const char *fa_fn, const char *ref_name, in
 // `rank` entry point; see cli.h
 int cmd_rank(int argc, char **argv) {
     const char *in = NULL, *out_fn = NULL, *fa_fn = NULL, *ref_name = NULL;
+    int report = cli_take_report(&argc, argv, 2);
 
     for (int i = 2; i < argc; i++) {
         if (!strcmp(argv[i], "--fasta") && i + 1 < argc) {
@@ -73,7 +74,7 @@ int cmd_rank(int argc, char **argv) {
         return 1;
     }
 
-    gfa_t *g = gfa_read(in, GFA_ALL);
+    gfa_t *g = gfa_read(in, GFA_ALL | report);
     if (!g) return 1;
 
     int rc = AK_OK;

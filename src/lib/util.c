@@ -269,10 +269,13 @@ size_t ak_peak_rss(void) {
     if (getrusage(RUSAGE_SELF, &ru) != 0) return 0;
     // ru_maxrss is kilobytes on Linux and bytes on the BSDs, macOS included
 #ifdef __APPLE__
-    return (size_t)ru.ru_maxrss;
+    size_t peak = (size_t)ru.ru_maxrss;
 #else
-    return (size_t)ru.ru_maxrss * 1024;
+    size_t peak = (size_t)ru.ru_maxrss * 1024;
 #endif
+    // Linux raises its mark lazily, so a process still growing can hold more than it reports as its peak
+    size_t now = ak_rss();
+    return now > peak ? now : peak;
 }
 
 size_t ak_rss(void) {

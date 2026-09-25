@@ -9,7 +9,7 @@
 
 // print the compare usage lines
 static void usage(void) {
-    ak_log(AK_LOG_ERROR, NULL, "usage: akhal compare gfa <A.gfa> <B.gfa> [--verbose]");
+    ak_log(AK_LOG_ERROR, NULL, "usage: akhal compare gfa <A.gfa> <B.gfa> [--verbose] [--footprint]");
     ak_log(AK_LOG_ERROR, NULL, "       akhal compare gaf <A.gaf> <B.gaf> [--verbose]");
 }
 
@@ -27,16 +27,14 @@ static int want_gaf(const char *fn) {
     return 0;
 }
 
-// the two inputs and an optional --verbose, which is all either target takes.
+// the two inputs and the reporting options, which is all either target takes
 // Returns 1 on success, else 0 and the usage is printed
-static int parse_args(int argc, char **argv, const char **a, const char **b, int *verbose) {
+static int parse_args(int argc, char **argv, const char **a, const char **b, int *report) {
     *a = *b = NULL;
-    *verbose = 0;
+    *report = cli_take_report(&argc, argv, 3);
 
     for (int i = 3; i < argc; i++) {
-        if (!strcmp(argv[i], "--verbose")) {
-            *verbose = 1;
-        } else if (argv[i][0] == '-') {
+        if (argv[i][0] == '-') {
             ak_log(AK_LOG_ERROR, NULL, "unknown option: %s", argv[i]);
             usage();
             return 0;
@@ -118,13 +116,13 @@ static void print_side(const diff_side_t *s, const char *tag) {
 // `compare gfa` - two graphs that need not agree on segment ids
 static int compare_gfa(int argc, char **argv) {
     const char *fn_a, *fn_b;
-    int verbose;
-    if (!parse_args(argc, argv, &fn_a, &fn_b, &verbose)) return 2;
+    int report;
+    if (!parse_args(argc, argv, &fn_a, &fn_b, &report)) return 2;
     if (!want_gfa(fn_a) || !want_gfa(fn_b)) return 2;
 
-    gfa_t *a = gfa_read(fn_a, GFA_ALL);
+    gfa_t *a = gfa_read(fn_a, GFA_ALL | report);
     if (!a) return 2;
-    gfa_t *b = gfa_read(fn_b, GFA_ALL);
+    gfa_t *b = gfa_read(fn_b, GFA_ALL | report);
     if (!b) {
         gfa_destroy(a);
         return 2;
@@ -136,7 +134,7 @@ static int compare_gfa(int argc, char **argv) {
     if (d) {
         print_counts(a, b, d);
         print_paths(d);
-        if (verbose) {
+        if (report & GFA_VERBOSE) {
             print_side(&d->a, "A");
             print_side(&d->b, "B");
         }
@@ -193,15 +191,15 @@ static void print_gaf_alns(const diff_gaf_t *d) {
 // `compare gaf` - two alignment sets over the same graph
 static int compare_gaf(int argc, char **argv) {
     const char *fn_a, *fn_b;
-    int verbose;
-    if (!parse_args(argc, argv, &fn_a, &fn_b, &verbose)) return 2;
+    int report;
+    if (!parse_args(argc, argv, &fn_a, &fn_b, &report)) return 2;
     if (!want_gaf(fn_a) || !want_gaf(fn_b)) return 2;
 
     diff_gaf_t *d = diff_gaf(fn_a, fn_b);
     if (!d) return 2;
 
     print_gaf_counts(d);
-    if (verbose) {
+    if (report & GFA_VERBOSE) {
         print_gaf_alns(d);
     }
 

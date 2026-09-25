@@ -205,12 +205,13 @@ static void convert_one(const gfa_t *g, const gaf_rec_t *rec, const char *read,
 
 // print the gaf2sam usage line
 static int usage(void) {
-    ak_log(AK_LOG_ERROR, NULL, "usage: akhal gaf2sam <r/GFA> <GAF> <reads.fa> <out.sam> [--simple]");
+    ak_log(AK_LOG_ERROR, NULL, "usage: akhal gaf2sam <r/GFA> <GAF> <reads.fa> <out.sam> [--simple] [--verbose] [--footprint]");
     return 1;
 }
 
 // `gaf2sam` entry point; see cli.h
 int cmd_gaf2sam(int argc, char **argv) {
+    int report = cli_take_report(&argc, argv, 2);
     if (argc < 6) return usage();
 
     const char *gfa_fn = argv[2], *gaf_fn = argv[3];
@@ -229,7 +230,7 @@ int cmd_gaf2sam(int argc, char **argv) {
         }
     }
 
-    gfa_t *g = gfa_read(gfa_fn, GFA_ALL);
+    gfa_t *g = gfa_read(gfa_fn, GFA_ALL | report);
     if (!g) return 1;
     for (int32_t k = 0; k < gfa_n_link(g); k++) {
         if (gfa_link_at(g, k)->overlap != 0) {

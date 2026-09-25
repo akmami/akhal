@@ -669,6 +669,7 @@ What each flag costs.
 `GFA_STAT_DEGREES` keeps three arrays - the `S` ids, the `L` sources and the `L` targets - about `4 * (n_seg + 2 * n_link)` bytes, so 8 GB on a graph of 700 million segments and links, and it is what fills the degree fields and `n_undefined`. 
 `GFA_STAT_RANKS` keeps the `S` ids and every `P` step, which on a file carrying all its haplotypes as `P` lines is far larger than the graph itself; a file that ranks itself with `SR` tags needs nothing and answers `n_rank0` with either setting, since those tags are authoritative and the `P` lines are then not consulted. 
 With `flags == 0` the pass holds nothing per line, and the fields the flags would fill are `-1`.
+`flags` also takes `GFA_VERBOSE`, which reports the pass's wall time and what the process holds after it, as [`gfa_read`](#gfa_read) does; with no graph to break down, `GFA_FOOTPRINT` reports that same line.
 
 Three things are worth knowing about the numbers. 
 The standard deviations are population figures, dividing by n. 

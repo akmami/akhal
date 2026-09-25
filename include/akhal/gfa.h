@@ -250,7 +250,11 @@ typedef struct {
  *
  * @param fn Path to the .gfa / .rgfa file
  * @param st Filled in on success
- * @param flags Bitwise OR of GFA_STAT_DEGREES and GFA_STAT_RANKS, or 0
+ * GFA_VERBOSE reports how long the pass took and what the process holds
+ * after it, as gfa_read() does. There is no graph to break down, so
+ * GFA_FOOTPRINT reports the same one line.
+ *
+ * @param flags Bitwise OR of GFA_STAT_DEGREES, GFA_STAT_RANKS, GFA_VERBOSE and GFA_FOOTPRINT, or 0
  * @return AK_OK, or a negative AK_E* code (unreadable file, OOM)
  */
 int gfa_read_stats(const char *fn, gfa_stat_t *st, int flags);

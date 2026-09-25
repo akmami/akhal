@@ -48,6 +48,14 @@ make install PREFIX=~/.local
 
 ### Commands
 
+Every command that reads a graph also takes two reporting options, anywhere on its line.
+They log to standard error, so the output itself is unchanged:
+
+- `--verbose` reports how long reading the graph took and what the process holds afterwards, resident and peak.
+- `--footprint` adds a breakdown of that by part - segments, sequences, links, adjacency, degrees, paths, steps, id index. That is the question a resident-size reading cannot answer, since the allocator keeps what it frees and a process's total says nothing about which structure it went to. A part the command did not ask for has no line, so the breakdown doubles as a check that the read is only doing what it means to.
+
+`stats` builds no graph, so for a graph both options report the one line for its pass. For a GAF they are ignored, with a warning.
+
 #### 1. `parse`
 Validates an r/GFA file. Four checks run by default, and each has a switch
 that drops it - along with whatever the reader would have had to hold for it,
@@ -55,7 +63,7 @@ so a whole-genome file can be checked for what fits in memory.
 
 **Usage:**
 ```sh
-./akhal parse <r/GFA file> [--basic] [--no-links] [--no-overlaps] [--no-paths] [--no-ranks]
+./akhal parse <r/GFA file> [--basic] [--no-links] [--no-overlaps] [--no-paths] [--no-ranks] [--verbose] [--footprint]
 ```
 
 - **links** (`--no-links`): every `L` line names two segments that an `S` line defines. Costs only the segment index.
@@ -76,7 +84,7 @@ The extension picks which: `.gfa`/`.rgfa` report on the graph, `.gaf` on the ali
 
 **Usage:**
 ```sh
-./akhal stats <r/GFA file> [--no-degrees] [--ranks]
+./akhal stats <r/GFA file> [--no-degrees] [--ranks] [--verbose] [--footprint]
 ./akhal stats <GAF file> [--cigar]
 ```
 
@@ -160,9 +168,9 @@ Extract information from the r/GFA file. The first argument picks what to pull o
 
 **Usage:**
 ```sh
-./akhal extract fa   <r/GFA file> <OUTPUT .fa/.fasta file> [wrap length]
-./akhal extract path <r/GFA file> <OUTPUT .fa/.fasta file> <path name> [path name ...] [wrap length]
-./akhal extract vcf  <r/GFA file> <OUTPUT .vcf file> [--ref <name>[,<name>...] | --ref all] [--fasta <FASTA file>]
+./akhal extract fa   <r/GFA file> <OUTPUT .fa/.fasta file> [wrap length] [--verbose] [--footprint]
+./akhal extract path <r/GFA file> <OUTPUT .fa/.fasta file> <path name> [path name ...] [wrap length] [--verbose] [--footprint]
+./akhal extract vcf  <r/GFA file> <OUTPUT .vcf file> [--ref <name>[,<name>...] | --ref all] [--fasta <FASTA file>] [--verbose] [--footprint]
 ```
 
 `wrap length` sets how many bases each output FASTA line carries; it defaults to 80 when omitted. 
@@ -214,7 +222,7 @@ Compares two files of the same kind and reports how much of one is present in th
 
 **Usage:**
 ```sh
-./akhal compare gfa <A .gfa file> <B .gfa file> [--verbose]
+./akhal compare gfa <A .gfa file> <B .gfa file> [--verbose] [--footprint]
 ./akhal compare gaf <A .gaf file> <B .gaf file> [--verbose]
 ```
 
@@ -244,7 +252,7 @@ Two caveats on paths.
 Pairing is on the `P` line's own name, so a reference carried whole in one file (`chr1`) but split in the other (`chr1:0-1000`, `chr1:1000-2000`, ...) shares no name at all and reports as unmatched rather than as one difference. 
 And the sequence comparison is byte-for-byte, hence case-sensitive.
 
-Note: `--verbose` additionally lists the ids of the segments and links that only one of the two graphs carries, in that graph's own numbering.
+Note: besides the read report, `--verbose` here lists the ids of the segments and links that only one of the two graphs carries, in that graph's own numbering.
 
 Example:
 ```sh
@@ -323,7 +331,7 @@ Run `compact` before `gfa2rgfa`, not after, and both come out saying what they m
 
 **Usage:**
 ```sh
-./akhal compact <input .gfa file> [output .gfa file]
+./akhal compact <input .gfa file> [output .gfa file] [--verbose] [--footprint]
 ```
 
 Note: If no output file is given, the compacted graph is written to standard output.
@@ -355,14 +363,6 @@ comes out in sorted order and the L block still follows it, but every line
 carries the id it came in with, so anything else that already refers to these
 nodes keeps working.
 
-`--verbose` reports how long reading the graph took and what the process holds
-afterwards. `--footprint` adds a breakdown of that by part - segments,
-sequences, links, adjacency, paths, steps, id index - which is the question a
-resident-size reading cannot answer, since the allocator keeps what it frees
-and a process's total says nothing about which structure it went to. A part
-the flags did not ask for has no line, so the breakdown doubles as a check
-that the read is only doing what it means to.
-
 Note: If no output file is given, the sorted GFA is written to standard output.
 
 #### 7. `rank`
@@ -379,7 +379,7 @@ This is how you re-root a graph on a different reference.
 
 **Usage:**
 ```sh
-./akhal rank <input .gfa file> [output .gfa file] [--fasta <FASTA file>] [--ref <sequence name>]
+./akhal rank <input .gfa file> [output .gfa file] [--fasta <FASTA file>] [--ref <sequence name>] [--verbose] [--footprint]
 ```
 
 Note: If no output file is given, the graph is written to standard output.
@@ -433,7 +433,7 @@ An assembly graph, whose paths are unrelated contigs, will label badly - there i
 
 **Usage:**
 ```sh
-./akhal gfa2rgfa <input .gfa file> [output .rgfa file] [--ref <name>[,<name>...] | --ref all]
+./akhal gfa2rgfa <input .gfa file> [output .rgfa file] [--ref <name>[,<name>...] | --ref all] [--verbose] [--footprint]
 ```
 
 Note: If no output file is given, the rGFA is written to standard output.
@@ -465,7 +465,7 @@ Graphviz will accept a graph of any size and spend a very long time on it, so a 
 
 **Usage:**
 ```sh
-./akhal gfa2dot <input r/GFA file> [output .dot/.gv file] [--ids]
+./akhal gfa2dot <input r/GFA file> [output .dot/.gv file] [--ids] [--verbose] [--footprint]
 ```
 
 Note: If no output file is given, the DOT is written to standard output.
@@ -481,7 +481,7 @@ Converts a GAF file to a SAM file.
 
 **Usage:**
 ```sh
-./akhal gaf2sam <r/GFA file> <GAF file>  <FASTA file> <OUTPUT file>  [--simple]
+./akhal gaf2sam <r/GFA file> <GAF file>  <FASTA file> <OUTPUT file>  [--simple] [--verbose] [--footprint]
 ```
 
 Note: The reads should be stored in FASTA format and provided to the program. 
@@ -512,7 +512,7 @@ A node explained more than once accumulates its annotations separated by `; `.
 
 **Usage:**
 ```sh
-./akhal annotate <r/GFA file> <OUTPUT .annot file> [--vcf <VCF file>] [--fasta <FASTA file>] [--ref <path name>]
+./akhal annotate <r/GFA file> <OUTPUT .annot file> [--vcf <VCF file>] [--fasta <FASTA file>] [--ref <path name>] [--verbose] [--footprint]
 ```
 
 #### 14. `annotget`

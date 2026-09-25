@@ -20,7 +20,7 @@
 KHASHL_MAP_INIT(KH_LOCAL, pathmap_t, pathmap, const char *, int32_t, kh_hash_str, kh_eq_str)
 
 static void usage(void) {
-    ak_log(AK_LOG_ERROR, NULL, "usage: akhal parse <r/GFA> [--basic] [--no-links] [--no-overlaps] [--no-paths] [--no-ranks]");
+    ak_log(AK_LOG_ERROR, NULL, "usage: akhal parse <r/GFA> [--basic] [--no-links] [--no-overlaps] [--no-paths] [--no-ranks] [--verbose] [--footprint]");
 }
 
 // P lines sharing a name
@@ -44,6 +44,7 @@ static void check_path_names(const gfa_t *g) {
 int cmd_parse(int argc, char **argv) {
     const char *fn = NULL;
     int checks = CHECK_ALL;
+    int report = cli_take_report(&argc, argv, 2);
 
     for (int i = 2; i < argc; i++) {
         if (!strcmp(argv[i], "--basic")) {
@@ -83,7 +84,7 @@ int cmd_parse(int argc, char **argv) {
     //  1) the link and overlap checks run inside gfa_read() under GFA_VALIDATE, the overlap one only once the sequences are loaded; 
     //  2) the path checks need the steps (in path) and the adjacency;
     //  3) the rank check needs the steps (in path)
-    int flags = GFA_SEGS;
+    int flags = GFA_SEGS | report;
     if (checks & CHECK_LINKS)    flags |= GFA_LINKS | GFA_VALIDATE;
     if (checks & CHECK_OVERLAPS) flags |= GFA_LINKS | GFA_VALIDATE | GFA_SEQ;
     if (checks & CHECK_PATHS)    flags |= GFA_PATHS | GFA_LINKS | GFA_ARCS;
