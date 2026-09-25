@@ -28,6 +28,10 @@ for n in "${ref_names[@]}"; do REF_P+=" -p '$n'"; done
 unset ref_names n
 REF_ALL="all"
 
+# gaftools gfa2rgfa takes a genome rather than paths: the reference sample named in the W lines (GRCh38, CHM13, ...).
+# Left empty, gaftools looks for it in the H lines
+GAFTOOLS_REF=""
+
 # where results, logs, scratch and any downloaded binaries go
 OUTDIR="out"
 

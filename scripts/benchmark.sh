@@ -20,7 +20,7 @@
 #
 # Settings, all overridable in the config file:
 #
-#   AKHAL   GFA   VG_FILE   GAF   GAF_B   READS   REF   REF_CSV   REF_P   REF_ALL
+#   AKHAL   GFA   VG_FILE   GAF   GAF_B   READS   REF_CSV   REF_P   REF_ALL   GAFTOOLS_REF
 #   OUTDIR  THREADS  REPEATS  TIMEOUT  TOOLS
 #
 # Options given on the command line win over the config. --data only moves the inputs the config leaves unset.
@@ -45,10 +45,10 @@ VG_FILE=""
 GAF=""
 GAF_B=""
 READS=""
-REF=""
 REF_CSV=""
 REF_P=""
 REF_ALL=""
+GAFTOOLS_REF=""
 
 OUTDIR="out"
 THREADS=1
@@ -294,16 +294,11 @@ for f in "$GFA" "$VG_FILE" "$GAF"; do
 done
 [ -n "$missing" ] && echo "note: missing input(s):$missing (their tasks will be skipped)"
 
-# the reference path for the VCF tasks: whatever the config named, else the first P line's name, which is what akhal itself defaults to
-if [ -z "$REF" ] && [ -f "$GFA" ]; then
-    REF=$(awk '$1=="P"{print $2; exit}' "$GFA" 2>/dev/null)
-fi
-[ -n "$REF" ] && echo "reference path: $REF"
-
-# the backbones for vcf and gfa2rgfa, as the config set them: REF_CSV and REF_P (the same names as vg's -p list) fall back to REF, REF_ALL to REF_CSV
-if [ -z "$REF_CSV" ] && [ -n "$REF" ]; then
-    REF_CSV="$REF"
-    REF_P=" -p '$REF'"
+# the backbones for vcf and gfa2rgfa, as the config set them: REF_CSV and REF_P (the same names as vg's -p list) fall back to
+# the first P line's name, which is what akhal itself defaults to, and REF_ALL to REF_CSV
+if [ -z "$REF_CSV" ] && [ -f "$GFA" ]; then
+    REF_CSV=$(awk '$1=="P"{print $2; exit}' "$GFA" 2>/dev/null)
+    [ -n "$REF_CSV" ] && REF_P=" -p '$REF_CSV'"
 fi
 : "${REF_ALL:=$REF_CSV}"
 if [ -n "$REF_CSV" ] && [ -z "$REF_P" ]; then
@@ -630,10 +625,11 @@ if [ -f "$GFA" ]; then
     else
         measure "gfa2rgfa" "akhal" "$AKHAL gfa2rgfa '$GFA' '$WORK/akhal.rgfa'" "" "$WORK/akhal.rgfa"
     fi
-    if [ -n "$REF" ]; then
-        try "gfa2rgfa" "gaftools" "gaftools gfa2rgfa '$GFA' --reference-name '$REF' --output '$WORK/gaftools.rgfa'" "backbone: $REF" "$WORK/gaftools.rgfa"
+    # gaftools names a genome, not paths: the sample its W lines carry, else whatever the H lines say
+    if [ -n "$GAFTOOLS_REF" ]; then
+        try "gfa2rgfa" "gaftools" "gaftools gfa2rgfa '$GFA' --reference-name '$GAFTOOLS_REF' --output '$WORK/gaftools.rgfa'" "backbone: genome $GAFTOOLS_REF" "$WORK/gaftools.rgfa"
     else
-        try "gfa2rgfa" "gaftools" "gaftools gfa2rgfa '$GFA' --output '$WORK/gaftools.rgfa'" "" "$WORK/gaftools.rgfa"
+        try "gfa2rgfa" "gaftools" "gaftools gfa2rgfa '$GFA' --output '$WORK/gaftools.rgfa'" "backbone: genome named in the H lines" "$WORK/gaftools.rgfa"
     fi
 else
     skip "gfa2rgfa" "all" "no GFA at $GFA"
@@ -729,11 +725,8 @@ if want akhal; then
     fi
 
     if [ -f "$GFA" ]; then
-        if [ -n "$REF" ]; then
-            measure "rank" "akhal" "$AKHAL rank '$GFA' '$WORK/akhal.ranked.gfa' --ref '$REF'" "backbone: $REF" "$WORK/akhal.ranked.gfa"
-        else
-            measure "rank" "akhal" "$AKHAL rank '$GFA' '$WORK/akhal.ranked.gfa'" "" "$WORK/akhal.ranked.gfa"
-        fi
+        # without --fasta, rank takes every P line as backbone; --ref would only name a record in that FASTA
+        measure "rank" "akhal" "$AKHAL rank '$GFA' '$WORK/akhal.ranked.gfa'" "backbone: every path" "$WORK/akhal.ranked.gfa"
         measure "annotate" "akhal" "$AKHAL annotate '$GFA' '$WORK/akhal.annot'" "" "$WORK/akhal.annot"
         [ -s "$WORK/akhal.annot" ] && measure "annotget" "akhal" "$AKHAL annotget '$WORK/akhal.annot' > /dev/null" "dump every node's annotation" ""
     fi
