@@ -548,9 +548,9 @@ fi
 heading "== validate: is the graph well formed ==" "validate"
 if [ -f "$GFA" ]; then
     measure "validate" "akhal" "$AKHAL parse '$GFA'"
+    skip "validate" "gfatools" "no equivalent subcommand"
     try "validate" "odgi" "odgi validate -i '$OG' -t $THREADS" "on the prebuilt .og"
     try "validate" "vg"   "vg validate '$VGP'" "on the converted graph"
-    skip "validate" "gfatools" "no equivalent subcommand"
 else
     skip "validate" "all" "no GFA at $GFA"
 fi
@@ -562,9 +562,9 @@ SORTED="$WORK/akhal.sorted.gfa"
 heading "== sort: topological order, ids renumbered ==" "sort"
 if [ -f "$GFA" ]; then
     measure "sort" "akhal" "$AKHAL sort '$GFA' '$SORTED'" "" "$SORTED"
+    skip "sort" "gfatools" "no equivalent subcommand"
     try "sort" "odgi" "odgi sort -i '$OG' -o '$WORK/odgi.sorted.og' -z -t $THREADS" "depth-first topological sort" "$WORK/odgi.sorted.og"
     try "sort" "vg"   "vg ids -s '$VGP' > '$WORK/vg.sorted.vg'" "generalized topological order" "$WORK/vg.sorted.vg"
-    skip "sort" "gfatools" "no equivalent subcommand"
 else
     skip "sort" "all" "no GFA at $GFA"
 fi
@@ -574,9 +574,9 @@ fi
 heading "== compact: fold non-branching runs into one node ==" "compact"
 if [ -f "$GFA" ]; then
     measure "compact" "akhal" "$AKHAL compact '$GFA' '$WORK/akhal.compact.gfa'" "" "$WORK/akhal.compact.gfa"
+    skip "compact" "gfatools" "asm -u builds unitigs, which is a different operation"
     try "compact" "odgi" "odgi unchop -i '$OG' -o '$WORK/odgi.unchop.og' -t $THREADS" "unchop" "$WORK/odgi.unchop.og"
     try "compact" "vg"   "vg mod -u '$VGP' > '$WORK/vg.unchop.vg'" "mod -u" "$WORK/vg.unchop.vg"
-    skip "compact" "gfatools" "asm -u builds unitigs, which is a different operation"
 else
     skip "compact" "all" "no GFA at $GFA"
 fi
@@ -598,9 +598,9 @@ fi
 heading "== vcf: variation off the reference backbone ==" "vcf"
 if [ -f "$GFA" ] && [ -n "$REF_CSV" ]; then
     measure "vcf" "akhal" "$AKHAL extract vcf '$GFA' '$WORK/akhal.vcf' --ref '$REF_ALL'" "$(ref_note "$REF_ALL")" "$WORK/akhal.vcf"
-    try "vcf" "vg" "vg deconstruct $REF_P -t $THREADS '$VGP' > '$WORK/vg.vcf'" "$(ref_note "$REF_CSV")" "$WORK/vg.vcf"
-    skip "vcf" "odgi" "no equivalent subcommand"
     skip "vcf" "gfatools" "no equivalent subcommand"
+    skip "vcf" "odgi" "no equivalent subcommand"
+    try "vcf" "vg" "vg deconstruct $REF_P -t $THREADS '$VGP' > '$WORK/vg.vcf'" "$(ref_note "$REF_CSV")" "$WORK/vg.vcf"
 else
     skip "vcf" "all" "no GFA, or no P line to use as the backbone"
 fi
@@ -610,8 +610,8 @@ fi
 heading "== vg2gfa: vg's native format to GFA ==" "vg2gfa"
 if [ -f "$VG_FILE" ]; then
     measure "vg2gfa" "akhal" "$AKHAL vg2gfa '$VG_FILE' '$WORK/akhal.fromvg.gfa'" "" "$WORK/akhal.fromvg.gfa"
-    try "vg2gfa" "vg" "vg convert -f '$VG_FILE' > '$WORK/vg.fromvg.gfa'" "" "$WORK/vg.fromvg.gfa"
     try "vg2gfa" "odgi" "odgi view -i '$OG' -g > '$WORK/odgi.view.gfa'" "og -> GFA; odgi cannot read vg's protobuf, so this is the nearest operation" "$WORK/odgi.view.gfa"
+    try "vg2gfa" "vg" "vg convert -f '$VG_FILE' > '$WORK/vg.fromvg.gfa'" "" "$WORK/vg.fromvg.gfa"
 else
     skip "vg2gfa" "all" "no .vg at $VG_FILE"
 fi
@@ -650,7 +650,7 @@ fi
 heading "== gaf2sam: alignments as SAM ==" "gaf2sam"
 if [ -f "$GFA" ] && [ -f "$GAF" ] && [ -f "$READS" ]; then
     measure "gaf2sam" "akhal" "$AKHAL gaf2sam '$GFA' '$GAF' '$READS' '$WORK/akhal.sam'" "" "$WORK/akhal.sam"
-    try "gaf2sam" "vg" "vg surject -x '$VGP' -G -s --read-length long -t $THREADS '$GAF' > '$WORK/vg.sam'" "surject onto reference paths - related, not identical" "$WORK/vg.sam"
+    try "gaf2sam" "vg" "vg surject -x '$VGP' -G -s -t $THREADS '$GAF' > '$WORK/vg.sam'" "surject onto reference paths - related, not identical" "$WORK/vg.sam"
 else
     skip "gaf2sam" "all" "needs the graph, the GAF and the reads FASTA ($READS)"
 fi
