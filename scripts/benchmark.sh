@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 #
-# akhal benchmark - head to head against gfatools, odgi, vg and gaftools.
-#
 # Usage:
 #   ./benchmark.sh [options]
 #
@@ -18,13 +16,6 @@
 #   --dry-run         print what would be run, measure nothing
 #   -h, --help        this text
 #
-# Settings, all overridable in the config file:
-#
-#   AKHAL   GFA   VG_FILE   GAF   GAF_B   READS   REF_CSV   REF_P   REF_ALL   GAFTOOLS_REF
-#   OUTDIR  THREADS  REPEATS  TIMEOUT  TOOLS
-#
-# Options given on the command line win over the config. --data only moves the inputs the config leaves unset.
-#
 # The defaults assume the layout described in the README:
 #
 #   data/human_v38.gfa    the graph
@@ -33,8 +24,9 @@
 #   data/human_v38.2.gaf  a second, different set of alignments
 #   data/human_v38.fa     the reads those alignments came from (gaf2sam only)
 #
-# Results land in <out>/results.tsv
-# Per-run output and errors go to <out>/logs/<task>.<tool>.log, and <out>/logs/<task>.<tool>.time
+
+# the helpers every benchmark script shares: timing, rows, the summary
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/utils.sh"
 
 # defaults
 
@@ -148,6 +140,12 @@ BINDIR="$OUTDIR/bin"
 RESULTS="$OUTDIR/results.tsv"
 ENVFILE="$OUTDIR/env.txt"
 
+OG="$WORK/graph.og"
+VGP="$WORK/graph.packed.vg"
+SORTED="$WORK/akhal.sorted.gfa"
+ANNOT="$WORK/akhal.annot"
+REUSED=" $OG $VGP $SORTED $ANNOT "
+
 STARTED=$(date +%s)
 mkdir -p "$WORK" "$LOGS" "$BINDIR"
 PATH="$(cd "$BINDIR" && pwd):$PATH"
@@ -155,49 +153,8 @@ export PATH
 
 # how to measure
 
-# GNU time reports peak RSS, BSD time reports it differently, and a shell
-# builtin reports none at all - so the mode is settled once, here
-TIME_BIN=""
-TIME_MODE="none"
-if command -v gtime >/dev/null 2>&1 && gtime -v true 2>/dev/null >/dev/null; then
-    TIME_BIN="$(command -v gtime)"; TIME_MODE="gnu"
-elif [ -x /usr/bin/time ] && /usr/bin/time -v true 2>/dev/null >/dev/null; then
-    TIME_BIN="/usr/bin/time"; TIME_MODE="gnu"
-elif [ -x /usr/bin/time ] && /usr/bin/time -l true 2>/dev/null >/dev/null; then
-    TIME_BIN="/usr/bin/time"; TIME_MODE="bsd"
-fi
-
-case "$TIME_MODE" in
-    gnu) echo "timer:  $TIME_BIN -v (wall clock and peak RSS)" ;;
-    bsd) echo "timer:  $TIME_BIN -l (wall clock and peak RSS)" ;;
-    none) echo "timer:  shell only - install GNU time for peak RSS (apt install time / brew install gnu-time)" ;;
-esac
-
-have() { 
-    command -v "$1" >/dev/null 2>&1; 
-}
-
-# a run that outlives the budget is killed - the whole process group, so a
-# pipeline goes with it - and its row says "timeout". GNU timeout is
-# coreutils on linux and gtimeout from brew's coreutils on a mac
-TIMEOUT_BIN=""
-if [ "${TIMEOUT:-0}" -gt 0 ] 2>/dev/null; then
-    if have timeout; then TIMEOUT_BIN="timeout"
-    elif have gtimeout; then TIMEOUT_BIN="gtimeout"
-    fi
-    if [ -n "$TIMEOUT_BIN" ]; then
-        echo "budget: $TIMEOUT s per run ($TIMEOUT_BIN)"
-    else
-        echo "budget: none - no timeout binary found (coreutils); runs are not limited"
-    fi
-fi
-
-# was this tool asked for? 
-want() {
-    case "$1" in all) return 0 ;; esac
-    case " $TOOLS " in *" ${1%-prep} "*) return 0 ;; esac
-    return 1
-}
+find_timer
+find_timeout
 
 # is it actually runnable here? akhal is a path out of the config rather than a name on PATH, so it answers differently from the rest
 present() {
@@ -205,14 +162,6 @@ present() {
         akhal) [ -x "$AKHAL" ] || have "$AKHAL" ;;
         *)     have "$1" ;;
     esac
-}
-
-# is this tool's subcommand actually there? versions differ, and a missing one should read as "unsupported", not as a failed benchmark
-has_sub() {
-    local tool=$1 sub=$2
-    have "$tool" || return 1
-    "$tool" --help 2>&1 | grep -qw -- "$sub" && return 0
-    "$tool" 2>&1 | grep -qw -- "$sub"
 }
 
 # installing the competitors
@@ -356,154 +305,7 @@ echo
     done
 } > "$ENVFILE" 2>/dev/null
 
-printf 'task\ttool\tstatus\texit\twall_s\tmax_rss_mb\tout_bytes\tnote\tcommand\n' > "$RESULTS"
-
-# measuring
-
-# median of the numbers on stdin
-median() {
-    sort -g | awk '{v[NR]=$1} END{ if(NR==0){print "NA"} else if(NR%2){printf "%.3f\n", v[(NR+1)/2]} else {printf "%.3f\n", (v[NR/2]+v[NR/2+1])/2} }'
-}
-
-# GNU time writes h:mm:ss or m:ss.ss; seconds is what a table wants
-to_seconds() {
-    awk -F: '{ if (NF==3) printf "%.3f\n", $1*3600+$2*60+$3; else if (NF==2) printf "%.3f\n", $1*60+$2; else printf "%.3f\n", $1 }'
-}
-
-row() {  # task tool status exit wall rss bytes note command
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$@" >> "$RESULTS"
-}
-
-skip() {  # task tool reason
-    want "$2" || return 0
-    [ -n "$ONLY" ] && ! printf '%s' "$1" | grep -Eq "$ONLY" && return 0
-    row "$1" "$2" "skipped" "NA" "NA" "NA" "NA" "$3" ""
-    printf '  %-10s %-9s %s\n' "$1" "$2" "skipped: $3"
-}
-
-# seconds with a fraction where the platform offers one
-now() {
-    local t
-    t=$(date +%s.%N 2>/dev/null)
-    case "$t" in *N*|"") date +%s ;; *) printf '%s' "$t" ;; esac
-}
-
-# measure <task> <tool> <command> [note] [output file] [accepted exit codes]
-#
-# `accepted exit codes` defaults to 0. 
-# The compare commands answer 1 for "the two files differ", which is a result rather than a failure, so those rows pass "0 1" and the real code is kept in its own column
-measure() {
-    local task=$1 tool=$2 cmd=$3 note=${4:-} out=${5:-} accept=${6:-0}
-
-    want "$tool" || return 0
-    if [ -n "$ONLY" ] && ! printf '%s' "$task" | grep -Eq "$ONLY"; then
-        return 0
-    fi
-    if [ "$DRY_RUN" = 1 ]; then
-        printf '  %-10s %-9s %s\n' "$task" "$tool" "$cmd"
-        return 0
-    fi
-
-    local log="$LOGS/$task.$tool.log"
-    local timelog="$LOGS/$task.$tool.time"
-    local tf="$WORK/.time.$$"
-    local walls="" rsss="" status="ok" rc=0
-    : > "$log"
-    : > "$timelog"
-
-    # what actually runs: the command under the budget, if there is one.
-    # -k gives a stubborn process a minute after TERM before it gets KILL
-    local -a run
-    if [ -n "$TIMEOUT_BIN" ]; then
-        run=("$TIMEOUT_BIN" -k 60 "$TIMEOUT" bash -c "$cmd")
-    else
-        run=(bash -c "$cmd")
-    fi
-
-    local i w r
-    for i in $(seq 1 "$REPEATS"); do
-        printf '== run %s of %s: %s\n' "$i" "$REPEATS" "$cmd" >> "$timelog"
-        w="" r="NA"
-        case "$TIME_MODE" in
-            gnu)
-                "$TIME_BIN" -v -o "$tf" "${run[@]}" >>"$log" 2>>"$log"
-                rc=$?
-                cat "$tf" >> "$timelog"
-                w=$(awk -F': ' '/Elapsed \(wall clock\)/{print $NF}' "$tf" | to_seconds | awk '{printf "%.4f\n", $1/60}')
-                r=$(awk '/Maximum resident set size/{printf "%.4f\n", $NF/1024/1024}' "$tf")
-                ;;
-            bsd)
-                "$TIME_BIN" -l "${run[@]}" >>"$log" 2>"$tf"
-                rc=$?
-                cat "$tf" >> "$log"
-                cat "$tf" >> "$timelog"
-                w=$(awk '/^ *real/{print $1}' "$tf" | tail -1 | awk '{printf "%.4f\n", $1/60}')
-                r=$(awk '/maximum resident set size/{printf "%.4f\n", $1/1073741824}' "$tf")
-                ;;
-            *)
-                local t0 t1
-                t0=$(now)
-                "${run[@]}" >>"$log" 2>>"$log"
-                rc=$?
-                t1=$(now)
-                w=$(awk -v a="$t0" -v b="$t1" 'BEGIN{printf "%.4f\n", (b-a)/60}')
-                printf 'no timer installed; wall clock taken from the shell: %s min\n' "$w" >> "$timelog"
-                ;;
-        esac
-        printf 'exit status: %s\n\n' "$rc" >> "$timelog"
-        walls="$walls$w"
-        rsss="$rsss$r"
-        # 124 is timeout's own code for a run it had to stop (137 if it
-        # needed KILL); whatever the run wrote by then is not a result
-        if [ -n "$TIMEOUT_BIN" ] && { [ "$rc" = 124 ] || [ "$rc" = 137 ]; }; then
-            status="timeout"
-            printf 'killed after %s s\n\n' "$TIMEOUT" >> "$timelog"
-            [ -n "$out" ] && rm -f "$out"
-            break
-        fi
-        if ! printf '%s' " $accept " | grep -q " $rc "; then
-            status="failed"
-            break
-        fi
-    done
-    rm -f "$tf"
-
-    local wall rss bytes
-    wall=$(printf '%s' "$walls" | grep -v '^$' | median)
-    rss=$(printf '%s' "$rsss" | grep -v '^$' | grep -v NA | median)
-    [ -z "$rss" ] && rss="NA"
-    if [ -n "$out" ] && [ -f "$out" ]; then
-        bytes=$(wc -c < "$out" | tr -d ' ')
-    else
-        bytes="NA"
-    fi
-
-    row "$task" "$tool" "$status" "$rc" "$wall" "$rss" "$bytes" "$note" "$cmd"
-    if [ "$status" = "timeout" ]; then
-        local timeout_min
-        timeout_min=$(awk -v t="$TIMEOUT" 'BEGIN{printf "%.2f", t/60}')
-        printf '  %-10s %-9s %8s   %8s GB  timeout: killed after %s m\n' "$task" "$tool" ">${timeout_min}m" "$rss" "$timeout_min"
-    else
-        printf '  %-10s %-9s %8sm %8sGB  %s\n' "$task" "$tool" "$wall" "$rss" "$status(exit $rc)"
-    fi
-    [ "$status" != "ok" ] && printf '             see %s\n' "$log"
-    return 0
-}
-
-# measure a competitor's row
-try() {  # task tool cmd [note] [out] [accept]
-    want "$2" || return 0
-    if ! present "$2"; then
-        skip "$1" "$2" "not installed"
-        return 0
-    fi
-    measure "$@"
-}
-
-heading() {
-    [ -n "$ONLY" ] && ! printf '%s' "$2" | grep -Eq "$ONLY" && return 0
-    printf '\n%s\n' "$1"
-}
+results_init
 
 # preparation
 #
@@ -511,16 +313,22 @@ heading() {
 # hidden: it is the price of every odgi/vg row that follows, and it is measured
 # like everything else
 
-OG="$WORK/graph.og"
-VGP="$WORK/graph.packed.vg"
-
 # the only rows here belong to odgi and vg, so with neither asked for the
-# section does not exist at all
+# section does not exist at all. A conversion an earlier run left behind is used as it is, as long as the GFA has not
+# changed since; one that fails is removed, so a later run builds it again rather than picking up a broken file
 if want odgi || want vg; then
     heading "== prep: the formats the other tools want ==" "prep"
     if [ -f "$GFA" ]; then
-        try "prep" "odgi" "odgi build -g '$GFA' -o '$OG' -t $THREADS" "GFA -> .og, needed by every odgi row" "$OG"
-        try "prep" "vg"   "vg convert -g -p '$GFA' > '$VGP'" "GFA -> packed graph, needed by every vg row" "$VGP"
+        if fresh "$OG" "$GFA"; then
+            skip "prep" "odgi" "reusing $OG from an earlier run"
+        else
+            try "prep" "odgi" "odgi build -g '$GFA' -o '$OG' -t $THREADS" "GFA -> .og, needed by every odgi row" "$OG" || done_with 0 "$OG"
+        fi
+        if fresh "$VGP" "$GFA"; then
+            skip "prep" "vg" "reusing $VGP from an earlier run"
+        else
+            try "prep" "vg" "vg convert -g -p '$GFA' > '$VGP'" "GFA -> packed graph, needed by every vg row" "$VGP" || done_with 0 "$VGP"
+        fi
     else
         skip "prep" "all" "no GFA at $GFA"
     fi
@@ -528,8 +336,8 @@ fi
 
 # odgi and vg read a GFA directly too, just slower; if the conversion failed,
 # fall back to that rather than dropping the tool from the whole benchmark
-[ -s "$OG" ]  || OG="$GFA"
-[ -s "$VGP" ] || VGP="$GFA"
+[ -s "$OG" ]  || { done_with 0 "$OG";  OG="$GFA"; }
+[ -s "$VGP" ] || { done_with 0 "$VGP"; VGP="$GFA"; }
 
 # 1. stats
 
@@ -556,8 +364,6 @@ else
 fi
 
 # 3. sort
-
-SORTED="$WORK/akhal.sorted.gfa"
 
 heading "== sort: topological order, ids renumbered ==" "sort"
 if [ -f "$GFA" ]; then
@@ -615,6 +421,7 @@ if [ -f "$VG_FILE" ]; then
 else
     skip "vg2gfa" "all" "no .vg at $VG_FILE"
 fi
+done_with 1 "$OG"   # odgi's last row
 
 # 8. GFA -> rGFA
 
@@ -654,6 +461,7 @@ if [ -f "$GFA" ] && [ -f "$GAF" ] && [ -f "$READS" ]; then
 else
     skip "gaf2sam" "all" "needs the graph, the GAF and the reads FASTA ($READS)"
 fi
+done_with 1 "$VGP"  # vg's last row
 
 # 11. sorting a GAF
 #
@@ -673,6 +481,7 @@ if [ -f "$GAF" ]; then
         else
             skip "gafsort" "gaftools" "order_gfa produced no GFA to sort against"
         fi
+        done_with "$KEEP" "$ORDERED"
         try "gafstat" "gaftools" "gaftools stat '$GAF' -o '$WORK/gaftools.stat.txt'" "GAF parsing reference point; akhal has no gaf stats command" "$WORK/gaftools.stat.txt"
     else
         skip "gafsort" "gaftools" "not installed"
@@ -709,6 +518,7 @@ if want akhal; then
             1) echo "             correctness: FAIL - the sorted graph differs from the original, see $LOGS/compare.akhal.log" ;;
             *) echo "             correctness: could not be established (exit $st)" ;;
         esac
+        done_with "$KEEP" "$SORTED"
     else
         skip "compare" "akhal" "needs the GFA and a successful sort"
     fi
@@ -727,8 +537,9 @@ if want akhal; then
     if [ -f "$GFA" ]; then
         # without --fasta, rank takes every P line as backbone; --ref would only name a record in that FASTA
         measure "rank" "akhal" "$AKHAL rank '$GFA' '$WORK/akhal.ranked.gfa'" "backbone: every path" "$WORK/akhal.ranked.gfa"
-        measure "annotate" "akhal" "$AKHAL annotate '$GFA' '$WORK/akhal.annot'" "" "$WORK/akhal.annot"
-        [ -s "$WORK/akhal.annot" ] && measure "annotget" "akhal" "$AKHAL annotget '$WORK/akhal.annot' > /dev/null" "dump every node's annotation" ""
+        measure "annotate" "akhal" "$AKHAL annotate '$GFA' '$ANNOT'" "" "$ANNOT"
+        [ -s "$ANNOT" ] && measure "annotget" "akhal" "$AKHAL annotget '$ANNOT' > /dev/null" "dump every node's annotation" ""
+        done_with "$KEEP" "$ANNOT"
     fi
 fi
 
@@ -743,59 +554,11 @@ fi
 echo
 echo "== summary =="
 echo
-awk -F'\t' '
-NR == 1 { next }
-{
-    task=$1; tool=$2; status=$3; wall=$5; rss=$6; note=$8
-    if (!(task in seen)) { order[++n]=task; seen[task]=1 }
-    key=task SUBSEP tool
-    st[key]=status; w[key]=wall; r[key]=rss; nt[key]=note
-    tools[task]=tools[task] " " tool
-    if (tool=="akhal" && status=="ok") base[task]=wall
-}
-END {
-    fmt = "%-11s %-13s %10s %11s  %-9s %s\n"
-    printf fmt, "task", "tool", "wall (s)", "peak (MB)", "vs akhal", "note"
-    printf fmt, "-----------", "-------------", "----------", "-----------", "---------", "----"
-    for (i=1; i<=n; i++) {
-        task=order[i]
-        c=split(tools[task], tl, " ")
-        for (j=1; j<=c; j++) {
-            tool=tl[j]; if (tool=="") continue
-            key=task SUBSEP tool
-            # a prep row is what a tool needs before it can start, not a
-            # competitor for the same work, so it gets no ratio
-            ratio="-"
-            if (tool!="akhal" && tool !~ /-prep$/ && st[key]=="ok" && (task in base) && base[task]+0 > 0)
-                ratio=sprintf("%.2fx", w[key]/base[task])
-            note=nt[key]
-            if (length(note) > 52) note=substr(note, 1, 49) "..."
-            if (st[key]=="skipped") {
-                printf fmt, task, tool, "-", "-", "skipped", note
-            } else if (st[key]!="ok") {
-                printf fmt, task, tool, w[key], r[key], st[key], note
-            } else {
-                printf fmt, task, tool, w[key], r[key], ratio, note
-            }
-        }
-        printf "\n"
-    }
-}' "$RESULTS"
-
-# /usr/bin/time counts in hundredths of a second, so anything this quick is being reported by the clock rather than measured by it
-if awk -F'\t' 'NR>1 && $3=="ok" && $5+0 < 0.02 {found=1} END{exit !found}' "$RESULTS"; then
-    echo "note: some rows finished under 0.02 s, which is the timer's own resolution -"
-    echo "      those numbers say \"too fast to measure here\", not what they literally read."
-    echo
-fi
+summary "akhal"
 
 printf 'total: %d s of benchmarking\n\n' "$(( $(date +%s) - STARTED ))"
 echo "results: $RESULTS"
 echo "logs:    $LOGS/ (*.log is each run's output, *.time the timer's own report)"
 echo "machine: $ENVFILE"
 
-if [ "$KEEP" = 0 ]; then
-    rm -rf "$WORK"
-else
-    echo "scratch: $WORK/"
-fi
+clean_work
