@@ -474,14 +474,22 @@ if [ -f "$GAF" ]; then
     measure "gafsort" "akhal" "$AKHAL compare gaf '$GAF' '$GAF'" "sorts both files, then compares them" "" "0 1"
     if want gaftools && have gaftools; then
         ORDERED="$WORK/ordered"
-        try "gafsort" "gaftools-prep" "gaftools order_gfa --outdir '$ORDERED' '$GFA'" "adds the BO/NO tags gaftools sort requires" ""
+        PREP_RGFA="$WORK/gaftools.prep.rgfa"
+        if grep -m1 '^S' "$GFA" 2>/dev/null | grep -q 'SN:Z:'; then
+            PREP_CMD="gaftools order_gfa --outdir '$ORDERED' '$GFA'"
+            PREP_NOTE="order_gfa: adds the BO/NO tags gaftools sort requires"
+        else
+            PREP_CMD="gaftools gfa2rgfa '$GFA'${GAFTOOLS_REF:+ --reference-name '$GAFTOOLS_REF'} --output '$PREP_RGFA' && gaftools order_gfa --outdir '$ORDERED' '$PREP_RGFA'"
+            PREP_NOTE="gfa2rgfa + order_gfa: the rGFA with BO/NO tags gaftools sort requires"
+        fi
+        try "gafsort" "gaftools-prep" "$PREP_CMD" "$PREP_NOTE" ""
         ORDERED_GFA=$(ls "$ORDERED"/*.gfa 2>/dev/null | head -1)
         if [ -n "${ORDERED_GFA:-}" ]; then
             try "gafsort" "gaftools" "gaftools sort '$GAF' '$ORDERED_GFA' --outgaf '$WORK/gaftools.sorted.gaf'" "needs the ordered GFA above" "$WORK/gaftools.sorted.gaf"
         else
             skip "gafsort" "gaftools" "order_gfa produced no GFA to sort against"
         fi
-        done_with "$KEEP" "$ORDERED"
+        done_with "$KEEP" "$ORDERED" "$PREP_RGFA"
         try "gafstat" "gaftools" "gaftools stat '$GAF' -o '$WORK/gaftools.stat.txt'" "GAF parsing reference point; akhal has no gaf stats command" "$WORK/gaftools.stat.txt"
     else
         skip "gafsort" "gaftools" "not installed"
