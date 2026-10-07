@@ -492,7 +492,7 @@ if [ -f "$GAF" ]; then
         done_with "$KEEP" "$ORDERED" "$PREP_RGFA"
         try "gafstat" "gaftools" "gaftools stat '$GAF' -o '$WORK/gaftools.stat.txt'" "GAF parsing reference point; akhal has no gaf stats command" "$WORK/gaftools.stat.txt"
     else
-        skip "gafsort" "gaftools" "not installed"
+        skip "gafsort" "gaftools" "gaftools is not installed"
     fi
 else
     skip "gafsort" "all" "no GAF at $GAF"

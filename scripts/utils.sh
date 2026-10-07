@@ -267,7 +267,7 @@ fresh() {
 # measure a competitor's row
 try() {  # task tool cmd [note] [out] [accept] [keep]
     want "$2" || return 0
-    if ! present "$2"; then
+    if ! present "${2%-prep}"; then
         skip "$1" "$2" "not installed"
         return 0
     fi
